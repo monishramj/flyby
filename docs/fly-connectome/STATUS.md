@@ -54,6 +54,12 @@ disc approaching at 3 m/s from 3 m, filling the frame at approach frame 45):
    the carport scene are likely until 8.2 calibrates θ on real episodes.
 4. A 50 Hz live stream has little CPU headroom (p95 ≈ 20 ms). Mac is unmeasured.
 
+Demo: a private claude.ai page, "FlyBy Reflex Bench", replays recorded
+pretrained output (camera, R1–R6, T4/T5 maps, S/θ trace) for a head-on approach,
+a left-offset approach and a sliding texture. It was generated from session
+scratch scripts, not repo code. The head-on S trace matched the live-server
+run exactly. It is not the carport scene.
+
 Validation: `uv run --extra fly pytest -m "slow or not slow"` — 48 passed
 (includes brake-before-fill on the real model, latch, reflex-off, swerve
 direction on synthetic energies, and θ file loading).
