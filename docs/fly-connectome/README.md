@@ -2,6 +2,7 @@
 
 This is the handoff folder for **our fly-connectome branch**, `fly/connectome`.
 Another agent can continue from this folder without access to the original chat.
+**Push only to `fly/connectome`; the user explicitly prohibited further main changes.**
 
 | Read in order | Purpose |
 | --- | --- |

@@ -33,4 +33,7 @@ The user accepted the collaborator invitation for `wikzAM` on 2026-09-26 and
 write access is confirmed. The shared scaffold is published on main. Our working
 branch is `fly/connectome`; `ground/triage` is only a local starting branch for
 Monish, who can create his own branch from the latest origin/main.
-Fetch before integration and never overwrite Monish's work.
+The user corrected the initial scaffold push to main: it was not requested.
+All further work and pushes from this task must stay on `fly/connectome`.
+Do not push/merge to remote main. Fetch before integration and never overwrite
+Monish's work.

@@ -16,8 +16,10 @@ acceptance gates and a replacement-agent prompt.
   the helper found the existing sign-in; Git needed a command-scoped safe.directory
   for this exact repository because sandbox and host users differ. No global
   Git trust or credential settings were changed.
-- Our branch is `fly/connectome`. The shared plan belongs to the foundation;
-  subsequent model and reflex implementation belongs to our branch. Fetch before
+- User correction: pushing scaffold commit `3812336` to main was an agent error.
+  All further work and pushes must stay on `fly/connectome`. Do not push/merge to
+  main or delete the remote main branch without explicit user direction.
+  Plan/handoff changes are being published only on our branch. Fetch before
   integration and never force-push.
 - No long-running services or model downloads are active.
 

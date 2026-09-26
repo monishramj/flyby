@@ -6,6 +6,9 @@ README.md is the full build specification. Read its referenced sections before e
 Read docs/fly-connectome/STATUS.md and docs/TEAM.md for the current step and ownership.
 Update docs/fly-connectome/STATUS.md with validation and next steps at every handoff.
 
+- User explicitly requires a separate branch: work and push ONLY to
+  `fly/connectome`. Do not push to, merge into, or otherwise change remote main.
+
 - Implement only the current agreed step. No extra features or abstractions.
 - Keep reflex/ independent of server/, databases, and outbound network calls.
 - The decision path must never wait on Grok, MongoDB, or the network.

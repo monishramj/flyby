@@ -62,9 +62,12 @@ committed; the decisions needed to continue are captured here.
 - `origin` is configured. The user accepted the collaborator invitation for
   `wikzAM`; write access is confirmed and the shared scaffold is published on main.
   The initial HTTP 403 is resolved. Our development branch is `fly/connectome`.
+- Correction from the user: the initial scaffold push to main was an agent
+  mistake. **All further work and pushes must stay on fly/connectome.** Do not
+  merge or push to main, or delete its remote branch without explicit direction.
 - Fetch and inspect remote state before pushing; Monish may also be working.
   Reconcile concurrent changes without force-push.
-- Only publish our branch and an agreed shared baseline; do not publish or alter
+- Only publish our branch; do not publish or alter
   Monish's branch on his behalf. The existing `ground/triage` branch is local only.
 
 Implemented: Python 3.12 project and lockfile; two health-only FastAPI processes;
