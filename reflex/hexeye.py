@@ -107,6 +107,7 @@ class FlyEye:
         self.rest: np.ndarray | None = None
         self.activity: np.ndarray | None = None
         self.last_ms = 0.0
+        self._warm = None
 
     def _step(self, image: np.ndarray) -> np.ndarray:
         torch = self.torch
@@ -122,11 +123,18 @@ class FlyEye:
         return activity
 
     def reset(self) -> np.ndarray:
-        """New network state, WARMUP_S of gray; rest = mean over the last REST_WINDOW_S."""
-        self.state = None
-        gray = np.full((cfg.FRAME_R, cfg.FRAME_R), 0.5, np.float32)
-        steps = [self._step(gray) for _ in range(round(cfg.WARMUP_S / cfg.DT_S))]
-        self.rest = np.mean(steps[-round(cfg.REST_WINDOW_S / cfg.DT_S):], axis=0)
+        """New network state, WARMUP_S of gray; rest = mean over the last REST_WINDOW_S.
+
+        The warm-up is deterministic, so it runs once and later resets reuse its end
+        state. Safe because flyvis builds a new state each step and never mutates one.
+        """
+        if self._warm is None:
+            self.state = None
+            gray = np.full((cfg.FRAME_R, cfg.FRAME_R), 0.5, np.float32)
+            steps = [self._step(gray) for _ in range(round(cfg.WARMUP_S / cfg.DT_S))]
+            rest = np.mean(steps[-round(cfg.REST_WINDOW_S / cfg.DT_S):], axis=0)
+            self._warm = (self.state, rest, self.activity)
+        self.state, self.rest, self.activity = self._warm
         return self.rest
 
     def step(self, frame: np.ndarray) -> tuple[dict[str, dict[str, float]], np.ndarray]:

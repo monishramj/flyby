@@ -21,8 +21,10 @@ Files: `reflex/looming.py`, `reflex/controller.py` (new), `reflex/server.py`,
 - θ: `bench/thresholds.json` `{"theta": x}` if present, else
   `THETA_UNCALIBRATED = 0.2`. `/health` reports `theta` and `theta_calibrated`.
 - The server loads FlyEye once at startup. `/health` reports `model_ready`, or
-  the load error if the fly extra or weights are missing. Each episode resets
-  the eye (about 1.6 s, off the event loop). Live and bench_closed frames run the
+  the load error if the fly extra or weights are missing. The 2 s gray warm-up
+  runs once at startup; each episode resets to that saved state (<10 ms,
+  bit-identical to a fresh warm-up per `test_cached_reset_matches_a_fresh_warm_up`).
+  Live first-frame time fell from ~1.6 s to 13–36 ms. Live and bench_closed frames run the
   eye and report real S/dLR even with reflex_on=0; bench_record skips the model.
   Without a model, those frames return an error instead of fake values.
 
@@ -52,7 +54,8 @@ disc approaching at 3 m/s from 3 m, filling the frame at approach frame 45):
 3. **Sideways texture motion raises S to about 0.15**, near θ. Forward flight
    through a cluttered scene makes global expansion flow, so false brakes on
    the carport scene are likely until 8.2 calibrates θ on real episodes.
-4. A 50 Hz live stream has little CPU headroom (p95 ≈ 20 ms). Mac is unmeasured.
+4. (Fixed) Per-episode warm-up delay; see above.
+5. A 50 Hz live stream has little CPU headroom (p95 ≈ 20 ms). Mac is unmeasured.
 
 Demo: a private claude.ai page, "FlyBy Reflex Bench", replays recorded
 pretrained output (camera, R1–R6, T4/T5 maps, S/θ trace) for a head-on approach,

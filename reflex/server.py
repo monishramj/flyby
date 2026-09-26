@@ -1,6 +1,7 @@
 """Onboard reflex process: /ws/reflex frames → fly eye → looming readout → command.
 
-README Steps 6.1 and 6.4. The eye loads once at startup; each episode resets it.
+README Steps 6.1 and 6.4. The eye loads and warms up once at startup; each
+episode resets it to that warmed state.
 """
 
 from runtime import set_threads
@@ -37,7 +38,9 @@ async def lifespan(app: FastAPI):
     app.state.eye, app.state.eye_error = None, None
     try:
         from reflex.hexeye import FlyEye
-        app.state.eye = await asyncio.to_thread(FlyEye, REFLEX_DEVICE)
+        eye = await asyncio.to_thread(FlyEye, REFLEX_DEVICE)
+        await asyncio.to_thread(eye.reset)  # one gray warm-up; episodes reuse it
+        app.state.eye = eye
     except Exception as exc:  # optional fly extra or weights may be absent
         app.state.eye_error = f"{type(exc).__name__}: {exc}"
         log.error("Fly eye not loaded: %s", app.state.eye_error)

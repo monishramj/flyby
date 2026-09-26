@@ -120,3 +120,20 @@ def test_five_seconds_of_gray_stays_finite_near_rest(pretrained_eye):
     for _ in range(round(5.0 / cfg.DT_S)):
         pretrained_eye.step(gray)
     assert np.abs(pretrained_eye.deviation()).max() < cfg.SMOKE_GRAY_TOLERANCE
+
+
+@pytest.mark.slow
+def test_cached_reset_matches_a_fresh_warm_up(pretrained_eye):
+    import time
+    frames = EXPANDING[:20]
+    pretrained_eye.reset()
+    cached = [pretrained_eye.step(f)[1] for f in frames]
+    start = time.perf_counter()
+    pretrained_eye.reset()
+    assert time.perf_counter() - start < 0.01
+    again = [pretrained_eye.step(f)[1] for f in frames]
+    pretrained_eye._warm = None  # force a full gray warm-up
+    pretrained_eye.reset()
+    fresh = [pretrained_eye.step(f)[1] for f in frames]
+    np.testing.assert_array_equal(np.stack(cached), np.stack(fresh))
+    np.testing.assert_array_equal(np.stack(again), np.stack(fresh))
