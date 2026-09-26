@@ -13,7 +13,8 @@ Another agent can continue from this folder without access to the original chat.
 | [Team agreement](../TEAM.md) | Our files versus Monish's ground-station lane |
 | [Setup](../SETUP.md) | Reproducible local commands, including this Windows workspace |
 
-**Next checkpoint:** Step 6.2 inspection scene (shared) or 7.1 viz stream.
+**Next checkpoint:** Step 6.2 carport scene (shared), then θ calibration (8.2).
+The live readout is now the two-pathway LPLC2-style design; see STATUS.md.
 Steps 0.4, 6.1, 6.3 and 6.4 passed: `/ws/reflex` runs the pretrained eye and
 brakes with an **uncalibrated** θ. Read the limitations in STATUS.md.
 

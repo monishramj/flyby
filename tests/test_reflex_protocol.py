@@ -41,18 +41,20 @@ def test_malformed_frames_are_rejected(data, match):
 
 
 class StubEye:
-    """Test double for FlyEye: fixed regional energies; counts resets."""
+    """Test double for FlyEye: outward motion from the image centre scaled by q; counts resets."""
 
     def __init__(self, q=0.0):
         self.q, self.resets, self.steps = q, 0, 0
+        x, y = reflex_server.COL_X, reflex_server.COL_Y
+        horiz = np.abs(x) >= np.abs(y)
+        self.pattern = np.stack([horiz & (x < 0), horiz & (x > 0), ~horiz & (y > 0), ~horiz & (y < 0)]).astype(float)
 
     def reset(self):
         self.resets += 1
 
     def step(self, frame):
         self.steps += 1
-        e = {r: {"out": max(self.q, 0.0), "in": max(-self.q, 0.0)} for r in "LRUD"}
-        return e, None
+        return self.q * self.pattern, None
 
 
 @pytest.fixture

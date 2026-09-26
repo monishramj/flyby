@@ -2,9 +2,10 @@
 
 Mirrors the path verified in tools/flyvis_smoke.py: BoxEye sampling, persistent
 network state, dt = DT_S, gray warm-up and a rest vector from the last
-REST_WINDOW_S. Regional energies follow README §4.8 using col_x/col_y, except
-that T4/T5 activity is rectified after subtracting rest: raw rectified activity
-has a resting out-in offset (see docs/fly-connectome/measurements/readout-baseline.json).
+REST_WINDOW_S. step() returns the T4/T5 motion drive per column: relu(activity −
+rest) summed over T4 and T5 for each preferred direction (raw rectified activity
+has a resting out-in offset; see measurements/readout-baseline.json). The looming
+readout is in reflex/looming.py. `energies()` keeps the §4.8 half-field view for tests.
 """
 
 import hashlib
@@ -51,9 +52,13 @@ class RegionIndex:
         self.directions = tuple(OUTWARD.values())
         self.index = np.stack([np.stack(by_dir[d]) for d in self.directions])
 
+    def drive(self, deviation: np.ndarray) -> np.ndarray:
+        """(4 directions left/right/up/down, columns): relu(T4) + relu(T5) of deviation from rest."""
+        return np.maximum(deviation[self.index], 0).sum(axis=1)
+
     def energies(self, activity: np.ndarray) -> dict[str, dict[str, float]]:
         """Per region: column mean of relu(T4) + relu(T5) preferring out/in; pass activity - rest."""
-        per_col = np.maximum(activity[self.index], 0).sum(axis=1)  # (direction, column)
+        per_col = self.drive(activity)
         result = {}
         for region in REGIONS:
             mean = per_col[:, self.region_cols[region]].mean(axis=1)
@@ -137,8 +142,8 @@ class FlyEye:
         self.state, self.rest, self.activity = self._warm
         return self.rest
 
-    def step(self, frame: np.ndarray) -> tuple[dict[str, dict[str, float]], np.ndarray]:
-        """frame: (FRAME_R, FRAME_R) uint8, row 0 = image top. Returns (energies, activity)."""
+    def step(self, frame: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """frame: (FRAME_R, FRAME_R) uint8, row 0 = image top. Returns (drive, activity)."""
         if self.rest is None:
             raise RuntimeError("Call reset() before step()")
         if frame.shape != (cfg.FRAME_R, cfg.FRAME_R):
@@ -147,9 +152,9 @@ class FlyEye:
         if self.device.type == "cuda":
             self.torch.cuda.synchronize(self.device)
         activity = self._step(np.asarray(frame, dtype=np.float32) / 255.0)
-        energies = self.readout.energies(activity - self.rest)
+        drive = self.readout.drive(activity - self.rest)
         self.last_ms = (time.perf_counter() - start) * 1000
-        return energies, activity
+        return drive, activity
 
     def deviation(self) -> np.ndarray:
         return self.activity - self.rest

@@ -1,13 +1,42 @@
 # Implementation status
 
-Completed: 0.1 scaffold, 0.4 flyvis smoke, 6.1 frame protocol, 6.3 fly eye,
-**6.4 looming readout and controller (with an uncalibrated θ)**.
-Next: **6.2 inspection scene** (shared with Monish) or **7.1 viz stream** (ours).
-Step 8.2 must calibrate θ before any avoidance claim.
+Completed: 0.1, 0.4, 6.1, 6.3, 6.4, plus the **two-pathway LPLC2-style readout**
+(now live in the server) and a cached warm-up. θ is still uncalibrated.
+Next: **Step 6.2 carport scene** (user wants it soon; shared with Monish), then
+calibrate θ from seeded carport episodes (Step 8.2).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
-## Readout prototype: LPLC2-style units (in progress, not wired into the server)
+## Two-pathway looming readout (live, 2026-09-26)
+
+User decision: adopt the LPLC2-style readout, both pathways, with 1.5 m/s as the
+planned inspection speed (`INSPECT_SPEED_PLANNED_MPS`; warning needed 0.415 s).
+
+- `reflex/looming.py`: 7 units (`LPLC2_RINGS=1`, `LPLC2_SPACING=0.55`). The 2d
+  and horiz pathways are each scaled by their obstacle-free maximum from the
+  1.5 m/s, 90° corridor run (`LPLC2_NORM_2D=0.0475`, `LPLC2_NORM_HORIZ=0.1596`).
+  S = larger scaled pathway; dLR from the same pathway.
+  `THETA_UNCALIBRATED = 1.2`.
+- `FlyEye.step` now returns `(drive, activity)`; drive is (4, 721) rectified
+  T4+T5 deviation per direction. `RegionIndex.energies` keeps the §4.8 view for tests.
+- Tests: 52 passed with `-m "slow or not slow"` (synthetic radial, bar and
+  translation drives; swerve sign; protocol with a stub eye; real-model brake
+  before an approaching disc fills the frame).
+- Production readout reproduces the prototype scale on real model output
+  (1.5 m/s, 90°): empty corridor S max 0.79, passing post 1.00.
+
+**Open problems found while wiring:**
+
+1. **Episode-start false brake.** The gray→scene onset keeps S above θ past
+   0.4 s on several obstacle clips (brake at the first scored frame). Proposed
+   fix in the scene: start each inspection with ~1 s of hover while streaming,
+   then fly forward. A brake while hovering is harmless.
+2. **Swerve is unreliable.** Debris on the left produced `brake_swerve_left`.
+   Recommend brake-only until swerve is calibrated in the carport scene.
+3. The first-crossing warning numbers from synthetic clips are not trustworthy
+   (see the prototype notes below). Real calibration needs the carport scene.
+
+## Readout prototype: LPLC2-style units (evidence behind the live readout)
 
 Tools: `tools/looming_stimuli.py` (disc, texture and forward-flight corridor
 clips with floor, posts, boxes and debris, plus collision truth) and

@@ -5,32 +5,63 @@ import pytest
 
 from reflex import config as cfg
 from reflex.controller import Controller, load_theta
-from reflex.looming import Readout
+from reflex.hexeye import load_layout
+from reflex.looming import DIRECTIONS, Readout
 
-THETA = 0.2
-
-
-def energies(L=0.0, R=0.0, U=0.0, D=0.0):
-    return {r: {"out": max(q, 0.0), "in": max(-q, 0.0)} for r, q in zip("LRUD", (L, R, U, D))}
-
-
-def test_readout_is_ema_of_summed_q_and_left_minus_right():
-    ro = Readout(alpha=0.5)
-    assert ro.update(energies(L=1.0, R=0.2, U=-0.4)) == pytest.approx((0.4, 0.4))
-    assert ro.update(energies()) == pytest.approx((0.2, 0.2))
+THETA = cfg.THETA_UNCALIBRATED
+LAYOUT = load_layout()
+COL_X, COL_Y = np.array(LAYOUT["col_x"]), np.array(LAYOUT["col_y"])
 
 
-def test_left_dominant_expansion_swerves_right():
-    ro, ctl = Readout(), Controller(THETA)
-    for k in range(10):
-        S, dLR = ro.update(energies(L=0.4, R=0.05, U=0.05, D=0.05))
-        cmd = ctl.step(k, S, dLR, reflex_on=True)
-    assert dLR > 0.5 * THETA and cmd == "brake_swerve_right"
-    ro, ctl = Readout(), Controller(THETA)
-    for k in range(10):
-        S, dLR = ro.update(energies(R=0.4, L=0.05, U=0.05, D=0.05))
-        cmd = ctl.step(k, S, dLR, reflex_on=True)
-    assert cmd == "brake_swerve_left"
+def radial_drive(cx=0.0, cy=0.0, radius=0.5, gain=0.2, vertical=True):
+    """Synthetic T4/T5 drive: outward motion from (cx, cy) within radius."""
+    drive = np.zeros((4, len(COL_X)))
+    dx, dy = COL_X - cx, COL_Y - cy
+    near = np.hypot(dx, dy) <= radius
+    horiz = np.abs(dx) >= np.abs(dy) if vertical else np.ones_like(near)
+    for name, mask in (("left", dx < 0), ("right", dx > 0)):
+        drive[DIRECTIONS.index(name)] = gain * (near & horiz & mask)
+    if vertical:
+        for name, mask in (("up", dy > 0), ("down", dy < 0)):
+            drive[DIRECTIONS.index(name)] = gain * (near & ~horiz & mask)
+    return drive
+
+
+def settle(drive, n=20):
+    ro = Readout(COL_X, COL_Y)
+    for _ in range(n):
+        S, dLR = ro.update(drive)
+    return ro, S, dLR
+
+
+def test_no_motion_gives_zero():
+    _, S, dLR = settle(np.zeros((4, len(COL_X))))
+    assert S == 0 and dLR == 0
+
+
+def test_uniform_translation_is_rejected_by_both_pathways():
+    drive = np.zeros((4, len(COL_X)))
+    drive[DIRECTIONS.index("right")] = 1.0
+    _, S, _ = settle(drive)
+    assert S == 0
+
+
+def test_compact_expansion_drives_the_2d_pathway_and_brakes():
+    ro, S, dLR = settle(radial_drive())
+    assert ro.pathway == "2d" and S > THETA
+    assert Controller(THETA).step(0, S, dLR, True) == "brake"
+
+
+def test_tall_bar_expansion_drives_the_horizontal_pathway():
+    ro, S, _ = settle(radial_drive(vertical=False, radius=0.6))
+    assert ro.pathway == "horiz" and S > THETA
+
+
+def test_left_expansion_swerves_right_and_right_expansion_swerves_left():
+    for cx, expected in ((-0.55, "brake_swerve_right"), (0.55, "brake_swerve_left")):
+        ro, S, dLR = settle(radial_drive(cx=cx))
+        assert S > THETA and np.sign(dLR) == -np.sign(cx)
+        assert Controller(THETA).step(0, S, dLR, True) == expected
 
 
 def test_brake_latch_holds_for_brake_latch_s():
@@ -73,7 +104,7 @@ def test_brake_fires_before_expanding_disc_fills_frame():
         pytest.skip("pretrained weights not prepared")
     from reflex.hexeye import FlyEye
 
-    eye, ro, ctl = FlyEye("cpu"), Readout(), Controller(cfg.THETA_UNCALIBRATED)
+    eye, ro, ctl = FlyEye("cpu"), Readout(COL_X, COL_Y), Controller(cfg.THETA_UNCALIBRATED)
     eye.reset()
     frames = approach()
     cmds = [ctl.step(k, *ro.update(eye.step(f)[0]), True) for k, f in enumerate(frames)]

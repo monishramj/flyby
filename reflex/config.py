@@ -16,6 +16,7 @@ SUBTYPE_DIR = {
 }  # Measured with camera-space drifting gratings; see saved smoke report.
 DRONE_RADIUS_M = 0.25
 INSPECT_SPEED_MPS = (1.0, 3.0)
+INSPECT_SPEED_PLANNED_MPS = 1.5  # needs 1.5/4 + 0.04 = 0.415 s warning; 3 m/s needs 0.79 s
 A_BRAKE_MPS2 = 4.0
 SWERVE_MPS = 1.0
 BRAKE_LATCH_S = 0.5
@@ -28,9 +29,16 @@ BENCH_FRAMES_DIR = ROOT / "bench" / "frames"
 CLOSED_LOOP_PATH = ROOT / "bench" / "closed_loop.jsonl"
 LAYOUT_PATH = ROOT / "data" / "flyvis_layout.json"
 THETA: float | None = None  # No calibrated brake threshold yet.
-# Hand-set, NOT calibrated: just above the max S (0.177) seen on non-looming test
-# stimuli (onsets, translation, contraction). Step 8.2 replaces it via THRESHOLDS_PATH.
-THETA_UNCALIBRATED = 0.2
+# LPLC2-style looming units (reflex/looming.py): 7 units, one hex ring.
+LPLC2_RINGS = 1
+LPLC2_SPACING = 0.55  # unit spacing and radius, in col_x/col_y units
+# Largest pathway response on obstacle-free 1.5 m/s corridor clips (90° FOV),
+# results/readout_comparison_fov90_v1.5.json. Scales both pathways to one S.
+LPLC2_NORM_2D = 0.0475
+LPLC2_NORM_HORIZ = 0.1596
+# Hand-set, NOT calibrated: 20% above the scaled obstacle-free maximum (1.0).
+# Step 8.2 replaces it via THRESHOLDS_PATH.
+THETA_UNCALIBRATED = 1.2
 EXPECTED_NODES = 45_669
 EXPECTED_TYPES = 65
 EXPECTED_COLUMNS = 721

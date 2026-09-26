@@ -60,7 +60,10 @@ def texture(shift_px):
 
 def run(eye, frames):
     eye.reset()
-    rows = [eye.step(f)[0] for f in frames]
+    rows = []
+    for f in frames:
+        eye.step(f)
+        rows.append(eye.readout.energies(eye.deviation()))
     return {r: {s: float(np.mean([row[r][s] for row in rows])) for s in ("out", "in")} for r in REGIONS}
 
 
@@ -87,8 +90,8 @@ def test_untrained_network_plumbing_only():
     eye = FlyEye("cpu", network=flyvis.Network())
     rest = eye.reset()
     assert rest.shape == (cfg.EXPECTED_NODES,) and np.isfinite(rest).all()
-    energies, activity = eye.step(disc(0.3))
-    assert activity.shape == rest.shape and set(energies) == set(REGIONS)
+    drive, activity = eye.step(disc(0.3))
+    assert activity.shape == rest.shape and drive.shape == (4, cfg.EXPECTED_COLUMNS)
     np.testing.assert_array_equal(eye.deviation(), activity - rest)
     state_before = eye.state
     eye.step(disc(0.35))

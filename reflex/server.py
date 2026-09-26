@@ -22,9 +22,12 @@ import numpy as np
 
 from reflex.controller import Controller, load_theta
 from reflex.frames import Frame, FrameError, Mode, decode_frame
+from reflex.hexeye import load_layout
 from reflex.looming import Readout
 
 BENCH_MODES = (Mode.BENCH_RECORD, Mode.BENCH_CLOSED)
+_LAYOUT = load_layout()
+COL_X, COL_Y = np.asarray(_LAYOUT["col_x"]), np.asarray(_LAYOUT["col_y"])
 THETA, THETA_CALIBRATED = load_theta()
 log = logging.getLogger("reflex")
 
@@ -88,7 +91,7 @@ class Session:
         self.current: Episode | None = None
 
     def _new_episode(self, episode: int, bracketed: bool, params: dict | None = None) -> Episode:
-        return Episode(episode, bracketed, Readout(), Controller(self.theta), params or {})
+        return Episode(episode, bracketed, Readout(COL_X, COL_Y), Controller(self.theta), params or {})
 
     async def on_frame(self, frame: Frame) -> dict:
         ep = self._validate(frame)
@@ -102,8 +105,8 @@ class Session:
             if _eye_owner[0] is not ep:
                 await asyncio.to_thread(self.eye.reset)
                 _eye_owner[0] = ep
-            energies, _ = await asyncio.to_thread(self.eye.step, frame.pixels)
-        S, dLR = ep.readout.update(energies)
+            drive, _ = await asyncio.to_thread(self.eye.step, frame.pixels)
+        S, dLR = ep.readout.update(drive)
         cmd = ep.controller.step(frame.k, S, dLR, frame.reflex_on)
         return {"k": frame.k, "cmd": cmd, "S": S, "dLR": dLR}
 
