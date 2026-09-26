@@ -1,7 +1,7 @@
 # FlyBy
 
-Local starter repository for our hackathon project. **Step 0.1 is implemented;
-the fly model and mission pipeline are not implemented yet.**
+Local repository for our hackathon project. **Steps 0.1 and 0.4 are implemented:
+the real fly-eye smoke test passes. The live reflex and mission pipeline are pending.**
 
 - **[Start here: fly-connectome agent handoff](docs/fly-connectome/README.md)**
 - [Build status and next checkpoint](docs/fly-connectome/STATUS.md)

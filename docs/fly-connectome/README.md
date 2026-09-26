@@ -13,9 +13,9 @@ Another agent can continue from this folder without access to the original chat.
 | [Team agreement](../TEAM.md) | Our files versus Monish's ground-station lane |
 | [Setup](../SETUP.md) | Reproducible local commands, including this Windows workspace |
 
-**Next checkpoint:** README Step 0.4 — install/inspect flyvis, load the real
-pretrained model, measure directions and orientation, export the layout, and
-report latency. The starter does not yet perform model inference.
+**Next checkpoint:** README Step 6.1 — isolated frame protocol and episode state.
+Step 0.4 passed: real model inference, measured directions/orientation, exported
+layout and CPU timings are saved. The server still has no frame socket/controller.
 
 ## Paste this into the next agent
 

@@ -1,0 +1,27 @@
+{
+  "0.5": {
+    "max_deviation_after_5s": 0.2411147952079773,
+    "mean": 0.020118748769164085,
+    "worst_type": "TmY4"
+  },
+  "1.0": {
+    "max_deviation_after_5s": 0.049218177795410156,
+    "mean": 0.0019695155788213015,
+    "worst_type": "TmY4"
+  },
+  "2.0": {
+    "max_deviation_after_5s": 0.000253140926361084,
+    "mean": 1.6588674043305218e-05,
+    "worst_type": "Lawf1"
+  },
+  "3.0": {
+    "max_deviation_after_5s": 3.516674041748047e-06,
+    "mean": 2.219950516746394e-07,
+    "worst_type": "Lawf1"
+  },
+  "5.0": {
+    "max_deviation_after_5s": 9.5367431640625e-07,
+    "mean": 6.165634403032527e-08,
+    "worst_type": "Mi4"
+  }
+}

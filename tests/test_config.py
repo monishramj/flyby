@@ -11,9 +11,9 @@ def test_independent_service_configuration():
     assert 3 / reflex.A_BRAKE_MPS2 + 0.04 == pytest.approx(0.79)
 
 
-def test_model_measurements_are_not_fabricated():
-    assert reflex.FRAME_R is None
-    assert reflex.SUBTYPE_DIR == {}
+def test_camera_settings_are_measured_but_brake_is_uncalibrated():
+    assert reflex.FRAME_R == 96
+    assert len(reflex.SUBTYPE_DIR) == 8
     assert reflex.THETA is None
 
 

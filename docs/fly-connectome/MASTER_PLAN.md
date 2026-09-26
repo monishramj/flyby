@@ -14,9 +14,10 @@ It preserves the current scope and decisions without requiring the original chat
 4. Work on `fly/connectome`. Complete the next unfinished checkpoint and its
    acceptance checks. Update `docs/fly-connectome/STATUS.md` before handing off.
 
-**Next engineering task: Step 0.4 — real flyvis smoke test and layout export.**
-No real neural model is currently loaded. The scaffold must never be presented
-as an avoidance demonstration.
+**Step 0.4 passed. Next engineering task: Step 6.1 — isolated frame protocol.**
+The real pretrained model now runs on Windows CPU and the layout is exported.
+The service still exposes only health; there is no avoidance demonstration yet.
+Read STATUS.md for current measurements and the warm-up deviation from the README.
 
 ## Product and ownership
 
@@ -75,9 +76,11 @@ configuration; thread helper; Vite/TypeScript starter; Three.js/Chart.js depende
 tests; full original build specification. Validation: seven Python tests passed,
 web production build passed, and all three local services returned HTTP 200.
 
-Not implemented: flyvis installation/weights; smoke script; layout; frame socket;
-readout/controller; inspection simulator; neural views; benchmarks. `FRAME_R`,
-`SUBTYPE_DIR`, and `THETA` intentionally remain unset.
+Step 0.4 is implemented: optional flyvis dependencies, verified setup download,
+real persistent-state smoke script and complete exported layout. FRAME_R=96 and
+all eight directions are measured. WARMUP_S is 2.0 s after a gray-settling study.
+Not implemented: frame socket, readout/controller, inspection simulator, neural
+views and avoidance benchmarks. THETA intentionally remains unset.
 
 ## Hardware and compute
 

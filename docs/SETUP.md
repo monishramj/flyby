@@ -50,3 +50,38 @@ $env:npm_config_cache = (Resolve-Path ../../work/npm-cache).Path
 The setup does not need Python registry entries or a change to the system PATH.
 On the Mac, install/use uv normally and run the platform-independent commands
 above. Mac validation and model benchmarks are still pending.
+
+## Fly model setup and measurement
+
+The fly dependencies are optional so Monish can install the ground station
+without PyTorch. From the repository root:
+
+```sh
+uv sync --extra fly
+uv run --extra fly python -m tools.prepare_flyvis
+uv run --extra fly python -m tools.flyvis_smoke --device cpu
+```
+
+In this restricted Windows workspace, replace `uv` with
+`& ../../work/bootstrap/bin/uv.exe` after setting the environment variables above.
+Keep `--extra fly` in subsequent uv commands that need the installed model.
+
+The setup downloads the official 3.4 MB archive, checks its published SHA256,
+and extracts only `flow/0000/000` into ignored `data/checkpoints/flyvis/`.
+The smoke command is offline after setup. It exports `data/flyvis_layout.json`
+only when direction, orientation and gray-stability checks pass, and writes a
+detailed report to `results/flyvis_smoke.json`.
+
+`--device cuda` requires a CUDA-enabled PyTorch install. The validated Windows
+installation currently uses CPU PyTorch; no GPU performance is claimed.
+To reproduce the warm-up study:
+
+```sh
+uv run --extra fly python -m tools.check_flyvis_warmup
+```
+
+Flyvis 1.2.0 currently depends on datamate 1.0.0, whose cache writer fails on
+Windows by deleting an open HDF5 file. `reflex/compat.py` temporarily replaces
+that writer during model loading and restores it afterward. No installed
+package files are edited. This workaround is disabled on other operating systems
+or datamate versions. See the handoff for measured limitations and deviations.
