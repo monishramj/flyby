@@ -25,7 +25,7 @@ OUTWARD = {"L": "left", "R": "right", "U": "up", "D": "down"}
 INWARD = {"L": "right", "R": "left", "U": "down", "D": "up"}
 
 
-class Readout:
+class RegionIndex:
     """Index tables for the §4.8 regional T4/T5 energies, built from the layout."""
 
     def __init__(self, layout: dict, subtype_dir: dict[str, str]):
@@ -102,7 +102,7 @@ class FlyEye:
         native = self.network.connectome.nodes.type[:].astype(str)
         if not np.array_equal(native, types[np.asarray(layout["node_type"])]):
             raise ValueError("Network node order differs from data/flyvis_layout.json")
-        self.readout = Readout(layout, cfg.SUBTYPE_DIR)
+        self.readout = RegionIndex(layout, cfg.SUBTYPE_DIR)
         self.state = None
         self.rest: np.ndarray | None = None
         self.activity: np.ndarray | None = None

@@ -2,14 +2,14 @@ import numpy as np
 import pytest
 
 from reflex import config as cfg
-from reflex.hexeye import REGIONS, Readout, load_layout
+from reflex.hexeye import REGIONS, RegionIndex, load_layout
 
 LAYOUT = load_layout()
 HAS_WEIGHTS = (cfg.FLYVIS_ROOT / "results" / cfg.FLYVIS_MODEL / "_meta.yaml").is_file()
 
 
 def test_regions_use_image_position_and_one_node_per_column():
-    readout = Readout(LAYOUT, cfg.SUBTYPE_DIR)
+    readout = RegionIndex(LAYOUT, cfg.SUBTYPE_DIR)
     col_x, col_y = np.array(LAYOUT["col_x"]), np.array(LAYOUT["col_y"])
     assert (col_x[readout.region_cols["L"]] < 0).all() and (col_x[readout.region_cols["R"]] > 0).all()
     assert (col_y[readout.region_cols["U"]] > 0).all() and (col_y[readout.region_cols["D"]] < 0).all()
@@ -18,7 +18,7 @@ def test_regions_use_image_position_and_one_node_per_column():
 
 
 def test_energies_rectify_and_average_named_subtypes_over_region_columns():
-    readout = Readout(LAYOUT, cfg.SUBTYPE_DIR)
+    readout = RegionIndex(LAYOUT, cfg.SUBTYPE_DIR)
     types, node_type = LAYOUT["types"], np.array(LAYOUT["node_type"])
     node_col, col_x = np.array(LAYOUT["node_col"]), np.array(LAYOUT["col_x"])
     activity = np.full(cfg.EXPECTED_NODES, -5.0)  # negative values must rectify to zero
@@ -35,7 +35,7 @@ def test_energies_rectify_and_average_named_subtypes_over_region_columns():
 def test_readout_rejects_incomplete_direction_map():
     partial = {k: v for k, v in cfg.SUBTYPE_DIR.items() if v != "down"}
     with pytest.raises(ValueError, match="left/right/up/down"):
-        Readout(LAYOUT, partial)
+        RegionIndex(LAYOUT, partial)
 
 
 # ---- synthetic stimuli at FRAME_R, x right / y up, row 0 = top -------------

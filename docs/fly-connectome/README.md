@@ -13,10 +13,9 @@ Another agent can continue from this folder without access to the original chat.
 | [Team agreement](../TEAM.md) | Our files versus Monish's ground-station lane |
 | [Setup](../SETUP.md) | Reproducible local commands, including this Windows workspace |
 
-**Next checkpoint:** README Step 6.4 — looming readout and controller.
-Steps 0.4, 6.1 and 6.3 passed: `/ws/reflex` validates frames, and `FlyEye` runs
-the pretrained model per frame. Commands stay `none` until 6.4 wires them up.
-Note the §4.8 rest-subtraction deviation in STATUS.md.
+**Next checkpoint:** Step 6.2 inspection scene (shared) or 7.1 viz stream.
+Steps 0.4, 6.1, 6.3 and 6.4 passed: `/ws/reflex` runs the pretrained eye and
+brakes with an **uncalibrated** θ. Read the limitations in STATUS.md.
 
 ## Paste this into the next agent
 

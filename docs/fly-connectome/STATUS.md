@@ -1,11 +1,62 @@
 # Implementation status
 
-Completed: 0.1 scaffold, 0.4 flyvis smoke, 6.1 reflex frame protocol,
-**6.3 fly eye**. Next active step: **6.4 looming readout and controller**.
-Step 6.2 (inspection scene) is shared with Monish and can proceed against the
-6.1 socket in parallel.
+Completed: 0.1 scaffold, 0.4 flyvis smoke, 6.1 frame protocol, 6.3 fly eye,
+**6.4 looming readout and controller (with an uncalibrated θ)**.
+Next: **6.2 inspection scene** (shared with Monish) or **7.1 viz stream** (ours).
+Step 8.2 must calibrate θ before any avoidance claim.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
+
+## Step 6.4 — looming readout and avoidance (2026-09-26, Linux CPU)
+
+Files: `reflex/looming.py`, `reflex/controller.py` (new), `reflex/server.py`,
+`reflex/config.py` (`THETA_UNCALIBRATED`, `REFLEX_DEVICE`), `reflex/hexeye.py`
+(index class renamed `RegionIndex`), `tests/test_controller.py` (new),
+`tests/test_reflex_protocol.py`.
+
+- `Readout(alpha)`: S = EMA(Σ q), dLR = EMA(q_L − q_R), starting from 0.
+- `Controller(theta)`: S > θ latches a brake for `BRAKE_LATCH_S` (25 frames,
+  counted in k). While braking, |dLR| > 0.5θ swerves away from the more-looming
+  side. reflex_on=0 always returns none.
+- θ: `bench/thresholds.json` `{"theta": x}` if present, else
+  `THETA_UNCALIBRATED = 0.2`. `/health` reports `theta` and `theta_calibrated`.
+- The server loads FlyEye once at startup. `/health` reports `model_ready`, or
+  the load error if the fly extra or weights are missing. Each episode resets
+  the eye (about 1.6 s, off the event loop). Live and bench_closed frames run the
+  eye and report real S/dLR even with reflex_on=0; bench_record skips the model.
+  Without a model, those frames return an error instead of fake values.
+
+How θ = 0.2 was chosen (hand-set, **not calibrated**): the maximum S seen on
+non-approaching synthetic stimuli was 0.177. That covers a large disc appearing
+suddenly (0.168), a texture sliding sideways (0.164) and a contracting disc
+(0.177). Onset spikes settle within about 0.2–0.4 s.
+
+End-to-end (real server, real WebSocket, pretrained model, 1 s hold then a
+disc approaching at 3 m/s from 3 m, filling the frame at approach frame 45):
+
+| reflex | first command | S max | ms/frame p50 / p95 (after reset) |
+| --- | --- | --- | --- |
+| on | brake at approach frame 40 (≈0.2 s before contact) | 0.403 | 16.6 / 20.2 |
+| off | none | 0.403 | 16.3 / 18.6 |
+
+**Known limitations (important for 8.2 and the demo):**
+
+1. **Warning time is short.** The brake fires about 0.2 s before contact at
+   3 m/s; the README target is ≥ 0.79 s. θ is uncalibrated, and the region-averaged
+   looming signal only grows large late in the approach.
+2. **Swerve does not discriminate side.** §4.8 defines out/in relative to the
+   image centre. For an object entirely in the left half, its outward and inward
+   edges both sit in region L and cancel. A left-offset approach gave dLR ≤ 0.044,
+   about the same as head-on, so no swerve fired. Swerve is also first in the
+   plan's cut order.
+3. **Sideways texture motion raises S to about 0.15**, near θ. Forward flight
+   through a cluttered scene makes global expansion flow, so false brakes on
+   the carport scene are likely until 8.2 calibrates θ on real episodes.
+4. A 50 Hz live stream has little CPU headroom (p95 ≈ 20 ms). Mac is unmeasured.
+
+Validation: `uv run --extra fly pytest -m "slow or not slow"` — 48 passed
+(includes brake-before-fill on the real model, latch, reflex-off, swerve
+direction on synthetic energies, and θ file loading).
 
 ## Step 6.3 — fly eye (2026-09-26, Linux cloud container, CPU)
 
@@ -59,15 +110,6 @@ Validation:
   with little headroom. Mac timing is still unmeasured.
 - `reset()` takes about 2 s (100 warm-up steps). Step 6.4 must not block the
   WebSocket event loop with it, and the live scene should allow for it.
-
-## Step 6.4 — next action
-
-Implement `reflex/looming.py` (`Readout(alpha)`: q_i = out−in, S = EMA Σq,
-dLR = EMA(q_L − q_R)) and `reflex/controller.py` (brake if S > θ, latched
-BRAKE_LATCH_S; swerve away if |dLR| > 0.5θ). Wire FlyEye into `server.py`:
-reset per episode, run steps off the event loop, and keep reflex_on=0 and
-bench_record returning none. θ comes from `bench/thresholds.json` if present,
-otherwise a clearly labeled uncalibrated default. Tests per README Step 6.4.
 
 ## Step 6.1 — reflex process and protocol (2026-09-26)
 

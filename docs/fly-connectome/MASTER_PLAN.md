@@ -14,7 +14,7 @@ It preserves the current scope and decisions without requiring the original chat
 4. Work on `fly/connectome`. Complete the next unfinished checkpoint and its
    acceptance checks. Update `docs/fly-connectome/STATUS.md` before handing off.
 
-**Steps 0.4, 6.1 and 6.3 passed. Next engineering task: Step 6.4 — readout/controller.**
+**Steps 0.4, 6.1, 6.3, 6.4 passed (θ uncalibrated). Next: Step 6.2 scene or 7.1 viz.**
 The real pretrained model runs on Windows CPU and the layout is exported.
 `/ws/reflex` accepts frames but returns `none`; there is no avoidance demonstration yet.
 Read STATUS.md for current measurements and the warm-up deviation from the README.

@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PORT = 8001
 CPU_THREADS = 4
+REFLEX_DEVICE = "cpu"  # Only CPU timings are measured so far.
 FRAME_HZ = 50
 DT_S = 1 / FRAME_HZ
 FRAME_R = 96  # Step 0.4: accepted by BoxEye; resized internally to 391x391.
@@ -27,6 +28,9 @@ BENCH_FRAMES_DIR = ROOT / "bench" / "frames"
 CLOSED_LOOP_PATH = ROOT / "bench" / "closed_loop.jsonl"
 LAYOUT_PATH = ROOT / "data" / "flyvis_layout.json"
 THETA: float | None = None  # No calibrated brake threshold yet.
+# Hand-set, NOT calibrated: just above the max S (0.177) seen on non-looming test
+# stimuli (onsets, translation, contraction). Step 8.2 replaces it via THRESHOLDS_PATH.
+THETA_UNCALIBRATED = 0.2
 EXPECTED_NODES = 45_669
 EXPECTED_TYPES = 65
 EXPECTED_COLUMNS = 721

@@ -40,8 +40,30 @@ def test_malformed_frames_are_rejected(data, match):
         decode_frame(data)
 
 
+class StubEye:
+    """Test double for FlyEye: fixed regional energies; counts resets."""
+
+    def __init__(self, q=0.0):
+        self.q, self.resets, self.steps = q, 0, 0
+
+    def reset(self):
+        self.resets += 1
+
+    def step(self, frame):
+        self.steps += 1
+        e = {r: {"out": max(self.q, 0.0), "in": max(-self.q, 0.0)} for r in "LRUD"}
+        return e, None
+
+
 @pytest.fixture
-def ws(tmp_path, monkeypatch):
+def eye(monkeypatch):
+    stub = StubEye()
+    monkeypatch.setattr(reflex_server.app.state, "eye", stub, raising=False)
+    return stub
+
+
+@pytest.fixture
+def ws(tmp_path, monkeypatch, eye):
     monkeypatch.setattr(reflex_server, "BENCH_FRAMES_DIR", tmp_path / "frames")
     monkeypatch.setattr(reflex_server, "CLOSED_LOOP_PATH", tmp_path / "closed_loop.jsonl")
     with TestClient(reflex_server.app).websocket_connect("/ws/reflex") as socket:
@@ -59,13 +81,31 @@ def send_msg(ws, **msg):
 
 
 @pytest.mark.parametrize("reflex_on", [False, True])
-def test_live_frames_return_commands_without_fabricated_scores(ws, reflex_on):
-    for k in range(3):
-        reply = send_frame(ws, 5, k, reflex_on, Mode.LIVE)
-        assert set(reply) == {"k", "cmd", "S", "dLR", "ms"}
-        assert reply["k"] == k and reply["cmd"] == "none"
-        assert reply["S"] is None and reply["dLR"] is None
+def test_live_frames_return_scores_and_commands(ws, eye, reflex_on):
+    eye.q = 1.0  # S rises well above theta within a few frames
+    replies = [send_frame(ws, 5, k, reflex_on, Mode.LIVE) for k in range(3)]
+    for k, reply in enumerate(replies):
+        assert set(reply) == {"k", "cmd", "S", "dLR", "ms"} and reply["k"] == k
         assert reply["ms"] >= 0
+    assert replies[-1]["S"] > reflex_server.THETA
+    assert replies[-1]["cmd"] == ("brake" if reflex_on else "none")
+    assert eye.resets == 1 and eye.steps == 3
+
+
+def test_each_episode_resets_the_eye(ws, eye):
+    send_frame(ws, 1, 0, True, Mode.LIVE)
+    send_frame(ws, 1, 1, True, Mode.LIVE)
+    send_frame(ws, 2, 0, True, Mode.LIVE)
+    assert eye.resets == 2
+
+
+def test_frames_needing_the_model_report_an_error_without_it(ws, monkeypatch):
+    monkeypatch.setattr(reflex_server.app.state, "eye", None)
+    with TestClient(reflex_server.app).websocket_connect("/ws/reflex") as socket:
+        assert "model not loaded" in send_frame(socket, 1, 0, True, Mode.LIVE)["error"]
+        socket.send_text(json.dumps({"type": "episode.begin", "episode": 2, "params": {}}))
+        socket.receive_json()
+        assert send_frame(socket, 2, 0, True, Mode.BENCH_RECORD)["cmd"] == "none"
 
 
 def test_sequence_and_episode_consistency(ws):
@@ -101,10 +141,10 @@ def test_malformed_text_messages_keep_connection_open(ws, text, match):
     assert send_frame(ws, 1, 0, False, Mode.LIVE)["cmd"] == "none"
 
 
-def test_bench_record_stores_frames_and_metadata(ws, tmp_path):
+def test_bench_record_stores_frames_and_metadata(ws, eye, tmp_path):
     send_msg(ws, type="episode.begin", episode=12, params={"seed": 42, "obstacle": "post"})
     for k in range(4):
-        assert send_frame(ws, 12, k, True, Mode.BENCH_RECORD, seed=k)["cmd"] == "none"
+        assert send_frame(ws, 12, k, True, Mode.BENCH_RECORD, seed=k) == {"k": k, "cmd": "none", "S": None, "dLR": None, "ms": pytest.approx(0, abs=1e3)}
     assert send_msg(ws, type="episode.end", episode=12, result={"collided": True}) == {"ack": "episode.end", "episode": 12}
     with np.load(tmp_path / "frames" / "12.npz") as saved:
         assert saved["frames"].shape == (4, FRAME_R, FRAME_R) and saved["frames"].dtype == np.uint8
@@ -114,6 +154,7 @@ def test_bench_record_stores_frames_and_metadata(ws, tmp_path):
         assert json.loads(str(saved["params"])) == {"seed": 42, "obstacle": "post"}
         assert json.loads(str(saved["result"])) == {"collided": True}
     assert not (tmp_path / "closed_loop.jsonl").exists()
+    assert eye.steps == 0  # recording does not run the model
 
 
 def test_bench_closed_appends_episode_results(ws, tmp_path):
@@ -123,8 +164,8 @@ def test_bench_closed_appends_episode_results(ws, tmp_path):
         send_msg(ws, type="episode.end", episode=episode, result={"collided": not reflex_on})
     lines = [json.loads(line) for line in (tmp_path / "closed_loop.jsonl").read_text().splitlines()]
     assert lines == [
-        {"episode": 1, "reflex_on": False, "params": {"seed": 7}, "result": {"collided": True}},
-        {"episode": 2, "reflex_on": True, "params": {"seed": 7}, "result": {"collided": False}},
+        {"episode": 1, "reflex_on": False, "theta": reflex_server.THETA, "params": {"seed": 7}, "result": {"collided": True}},
+        {"episode": 2, "reflex_on": True, "theta": reflex_server.THETA, "params": {"seed": 7}, "result": {"collided": False}},
     ]
     assert not (tmp_path / "frames").exists()
 
