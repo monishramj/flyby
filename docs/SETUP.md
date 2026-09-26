@@ -25,7 +25,9 @@ uv run python -m reflex.server --port 8001
 ```
 
 `http://127.0.0.1:8000/health` and `http://127.0.0.1:8001/health` report scaffold
-status. There are no mission or reflex WebSocket routes yet. Do not connect a
+status. The reflex serves `ws://127.0.0.1:8001/ws/reflex` (frame protocol only;
+commands are always `none` until the eye and controller land). There is no
+mission WebSocket yet. Do not connect a
 flight controller to these placeholders.
 
 Cloud credentials are optional for the scaffold. When Monish adds the services,

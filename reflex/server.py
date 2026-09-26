@@ -1,18 +1,150 @@
-"""Independent process scaffold. No model or fake reflex is served yet."""
+"""Onboard reflex process: /ws/reflex frame and command protocol (README Step 6.1).
+
+No eye model or controller is wired in yet (Steps 6.3-6.4), so every command is
+`none` and S/dLR are null rather than invented values.
+"""
 
 from runtime import set_threads
-from reflex.config import CPU_THREADS, PORT
+from reflex.config import BENCH_FRAMES_DIR, CLOSED_LOOP_PATH, CPU_THREADS, PORT
 
 set_threads(CPU_THREADS)
 
-from fastapi import FastAPI
+from dataclasses import dataclass, field
+import json
+from pathlib import Path
+import time
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import numpy as np
+
+from reflex.frames import Frame, FrameError, Mode, decode_frame
+
+BENCH_MODES = (Mode.BENCH_RECORD, Mode.BENCH_CLOSED)
 
 app = FastAPI(title="FlyBy reflex")
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"service": "reflex", "status": "scaffold", "model_ready": False}
+    return {"service": "reflex", "status": "protocol", "model_ready": False}
+
+
+class ProtocolError(ValueError):
+    pass
+
+
+@dataclass
+class Episode:
+    episode: int
+    bracketed: bool
+    params: dict = field(default_factory=dict)
+    mode: Mode | None = None
+    reflex_on: bool | None = None
+    last_k: int | None = None
+    ks: list[int] = field(default_factory=list)
+    frames: list[np.ndarray] = field(default_factory=list)
+
+
+class Session:
+    """Per-connection state. At most one episode is active at a time."""
+
+    def __init__(self, frames_dir: Path, closed_loop_path: Path):
+        self.frames_dir = frames_dir
+        self.closed_loop_path = closed_loop_path
+        self.current: Episode | None = None
+
+    def on_frame(self, frame: Frame) -> dict:
+        ep = self.current
+        if frame.mode in BENCH_MODES:
+            if ep is None or not ep.bracketed or ep.episode != frame.episode:
+                raise ProtocolError(f"bench frame for episode {frame.episode} outside episode.begin/end")
+        elif ep is None or ep.episode != frame.episode:
+            if ep is not None and ep.bracketed:
+                raise ProtocolError(f"episode {ep.episode} is still open")
+            ep = self.current = Episode(frame.episode, bracketed=False)
+        if ep.mode is None:
+            ep.mode, ep.reflex_on = frame.mode, frame.reflex_on
+        elif (frame.mode, frame.reflex_on) != (ep.mode, ep.reflex_on):
+            raise ProtocolError("mode and reflex_on cannot change within an episode")
+        if ep.last_k is not None and frame.k <= ep.last_k:
+            raise ProtocolError(f"k must increase: got {frame.k} after {ep.last_k}")
+        ep.last_k = frame.k
+        if frame.mode == Mode.BENCH_RECORD:
+            ep.ks.append(frame.k)
+            ep.frames.append(frame.pixels.copy())
+        return {"k": frame.k, "cmd": "none", "S": None, "dLR": None}
+
+    def on_text(self, msg: dict) -> dict:
+        kind, episode = msg.get("type"), msg.get("episode")
+        if kind not in ("episode.begin", "episode.end"):
+            raise ProtocolError(f"unknown message type {kind!r}")
+        if isinstance(episode, bool) or not isinstance(episode, int) or not 0 <= episode < 2**32:
+            raise ProtocolError("episode must be a u32 integer")
+        if kind == "episode.begin":
+            params = msg.get("params", {})
+            if not isinstance(params, dict):
+                raise ProtocolError("params must be an object")
+            if self.current is not None and self.current.bracketed:
+                raise ProtocolError(f"episode {self.current.episode} is still open")
+            self.current = Episode(episode, bracketed=True, params=params)
+        else:
+            ep = self.current
+            if ep is None or not ep.bracketed or ep.episode != episode:
+                raise ProtocolError(f"episode.end for episode {episode} that is not open")
+            result = msg.get("result", {})
+            if not isinstance(result, dict):
+                raise ProtocolError("result must be an object")
+            self.current = None
+            self._finish(ep, result)
+        return {"ack": kind, "episode": episode}
+
+    def _finish(self, ep: Episode, result: dict) -> None:
+        if ep.mode == Mode.BENCH_RECORD:
+            self.frames_dir.mkdir(parents=True, exist_ok=True)
+            np.savez_compressed(
+                self.frames_dir / f"{ep.episode}.npz",
+                frames=np.stack(ep.frames),
+                k=np.asarray(ep.ks, dtype=np.uint32),
+                reflex_on=np.bool_(ep.reflex_on),
+                params=json.dumps(ep.params),
+                result=json.dumps(result),
+            )
+        elif ep.mode == Mode.BENCH_CLOSED:
+            self.closed_loop_path.parent.mkdir(parents=True, exist_ok=True)
+            line = {"episode": ep.episode, "reflex_on": ep.reflex_on, "params": ep.params, "result": result}
+            with self.closed_loop_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(line) + "\n")
+        elif ep.mode is None:
+            raise ProtocolError(f"episode {ep.episode} ended without frames")
+
+
+@app.websocket("/ws/reflex")
+async def ws_reflex(websocket: WebSocket) -> None:
+    await websocket.accept()
+    session = Session(BENCH_FRAMES_DIR, CLOSED_LOOP_PATH)
+    try:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                return
+            t0 = time.perf_counter()
+            try:
+                if message.get("bytes") is not None:
+                    reply = session.on_frame(decode_frame(message["bytes"]))
+                    reply["ms"] = (time.perf_counter() - t0) * 1000
+                else:
+                    try:
+                        msg = json.loads(message.get("text") or "")
+                    except json.JSONDecodeError as exc:
+                        raise ProtocolError(f"invalid JSON: {exc.msg}") from None
+                    if not isinstance(msg, dict):
+                        raise ProtocolError("message must be a JSON object")
+                    reply = session.on_text(msg)
+            except (FrameError, ProtocolError) as exc:
+                reply = {"error": str(exc)}
+            await websocket.send_json(reply)
+    except WebSocketDisconnect:
+        return
 
 
 if __name__ == "__main__":

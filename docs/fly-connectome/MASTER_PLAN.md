@@ -14,9 +14,9 @@ It preserves the current scope and decisions without requiring the original chat
 4. Work on `fly/connectome`. Complete the next unfinished checkpoint and its
    acceptance checks. Update `docs/fly-connectome/STATUS.md` before handing off.
 
-**Step 0.4 passed. Next engineering task: Step 6.1 — isolated frame protocol.**
-The real pretrained model now runs on Windows CPU and the layout is exported.
-The service still exposes only health; there is no avoidance demonstration yet.
+**Steps 0.4 and 6.1 passed. Next engineering task: Step 6.3 — fly eye.**
+The real pretrained model runs on Windows CPU and the layout is exported.
+`/ws/reflex` accepts frames but returns `none`; there is no avoidance demonstration yet.
 Read STATUS.md for current measurements and the warm-up deviation from the README.
 
 ## Product and ownership
@@ -79,7 +79,8 @@ web production build passed, and all three local services returned HTTP 200.
 Step 0.4 is implemented: optional flyvis dependencies, verified setup download,
 real persistent-state smoke script and complete exported layout. FRAME_R=96 and
 all eight directions are measured. WARMUP_S is 2.0 s after a gray-settling study.
-Not implemented: frame socket, readout/controller, inspection simulator, neural
+Step 6.1 is implemented: `/ws/reflex` frame/episode protocol with local bench
+recording (see STATUS.md). Not implemented: readout/controller, inspection simulator, neural
 views and avoidance benchmarks. THETA intentionally remains unset.
 
 ## Hardware and compute

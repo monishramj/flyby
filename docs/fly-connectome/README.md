@@ -13,9 +13,9 @@ Another agent can continue from this folder without access to the original chat.
 | [Team agreement](../TEAM.md) | Our files versus Monish's ground-station lane |
 | [Setup](../SETUP.md) | Reproducible local commands, including this Windows workspace |
 
-**Next checkpoint:** README Step 6.1 — isolated frame protocol and episode state.
-Step 0.4 passed: real model inference, measured directions/orientation, exported
-layout and CPU timings are saved. The server still has no frame socket/controller.
+**Next checkpoint:** README Step 6.3 — fly eye (`reflex/hexeye.py`).
+Steps 0.4 and 6.1 passed: real model smoke/layout are saved, and `/ws/reflex`
+validates frames and episodes. Commands are always `none` until Steps 6.3–6.4.
 
 ## Paste this into the next agent
 
