@@ -1,0 +1,22 @@
+[project]
+name = "flyby"
+version = "0.1.0"
+description = "SAR triage with a connectome-constrained fly visual reflex"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi", "uvicorn[standard]", "pydantic", "pydantic-settings",
+  "numpy", "pandas", "pyarrow", "matplotlib", "pymongo", "python-dotenv",
+  "httpx", "pytest", "pytest-asyncio",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+markers = [
+  "slow: model loading or long-running simulation",
+  "network: requires an external service or download",
+]
