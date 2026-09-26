@@ -1,53 +1,87 @@
-"""Ground-station constants from README section 3; no clients on import."""
-
+"""Simulation assumptions and operating constants. Secrets never enter run logs."""
 from pathlib import Path
-from pydantic import SecretStr
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
-PORT = 8000
-CPU_THREADS = 4
-AREA_M = 300
-SECTOR_GRID = 3
-ALT_M = 40
-FOV_DEG = 60
-LANE_SPACING_M = 40
-CAPTURE_SPACING_M = 40
-SWEEP_SPEED_MPS = 8
-LIVE_TIME_SCALE = 4.0
-N_SUBJECTS = (5, 8)
-N_DECOYS = (10, 15)
-SMALL_BOX_PX = 20
-OBJECT_SIZE_M = {"subject": 1.7, "person_shaped_junk": 1.5, "animal": 0.8, "warm_spot": 1.0, "debris": 2.0}
-NOISE = {
-    "visible": (0.90, 0.75), "partial": (0.60, 0.55),
-    "under_structure": (0.30, 0.40), "person_shaped_junk": (0.50, 0.45),
-    "animal": (0.40, 0.45), "warm_spot": (0.30, 0.45), "debris": (0.15, 0.45),
-}
-CONFIDENCE_STD = 0.15
-T_REIMAGE_S = 60
-REIMAGE_BOX_MULT = 3.0
-REIMAGE_CONF_SHIFT = {"subject": 0.20, "decoy": -0.10}
-T_INSPECT_S = 90
-TAU_ROUTE = 0.60
-LAYA_TIMEOUT_MS = 500  # Replace after Monish measures local latency.
-RHO = 0.9
-INTEL_COUNT = (12, 15)
-GROK_PARSE_TIMEOUT_S = 10
-GROK_BRIEF_TIMEOUT_S = 8
-GROK_ASK_TIMEOUT_S = 20
-ASK_MAX_TOOL_ROUNDS = 4
-SIM_HUMAN_ROUTED_S = 20
-SIM_HUMAN_APPROVE_S = 5
-HANDOFF_S = 60
-REVIEW_S = (120, 10)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
-    XAI_API_KEY: SecretStr = SecretStr("")
+
+    AREA_M: int = 300
+    SECTOR_GRID: int = 3
+    ALT_M: float = 40
+    FOV_DEG: float = 60
+    LANE_SPACING_M: float = 40
+    CAPTURE_SPACING_M: float = 40
+    SWEEP_SPEED_MPS: float = 8
+    LIVE_TIME_SCALE: float = 4.0
+    N_SUBJECTS: tuple[int, int] = (5, 8)
+    N_DECOYS: tuple[int, int] = (10, 15)
+    OBJECT_SIZE_M: dict[str, float] = {"subject": 1.7, "person_shaped_junk": 1.5, "animal": 0.8, "warm_spot": 1.0, "debris": 2.0}
+    NOISE: dict[str, tuple[float, float]] = {"visible": (0.90, 0.75), "partial": (0.60, 0.55), "under_structure": (0.30, 0.40), "person_shaped_junk": (0.50, 0.45), "animal": (0.40, 0.45), "warm_spot": (0.30, 0.45), "debris": (0.15, 0.45)}
+    CONF_STD: float = 0.15
+    IMAGE_WIDTH_PX: int = 640
+    COVERAGE_CELL_M: float = 5
+    STRUCTURE_NEAR_M: float = 10
+    HOUSE_SIZE_M: tuple[float, float] = (18, 14)
+    CARPORT_SIZE_M: tuple[float, float] = (24, 18)
+    TREE_RADIUS_M: float = 4
+    SCENE_MARGIN_M: float = 5
+    SMALL_BOX_PX: float = 20
+    LARGE_BOX_PX: float = 60
+    DETECTOR_LOW: float = 0.45
+    DETECTOR_HIGH: float = 0.75
+    NEAR_LKP_M: float = 100
+    HAZARD_RADIUS_M: float = 50
+    MAX_PASSES: int = 2
+    T_REIMAGE_S: float = 60
+    REIMAGE_BOX_MULT: float = 3.0
+    REIMAGE_CONF_SHIFT: dict[str, float] = {"subject": 0.20, "decoy": -0.10}
+    T_INSPECT_S: float = 90
+    TAU_ROUTE: float = 0.60
+    # Three times the p95 measured inside a mission by tools/laya_check.py (494 ms on CPU).
+    LAYA_TIMEOUT_MS: float = 1500
+    RHO: float = 0.9
+    INTEL_COUNT: tuple[int, int] = (12, 15)
+    GROK_PARSE_TIMEOUT_S: float = 10
+    GROK_BRIEF_TIMEOUT_S: float = 8
+    GROK_ASK_TIMEOUT_S: float = 20
+    ASK_MAX_TOOL_ROUNDS: int = 4
+    SIM_HUMAN_ROUTED_S: float = 20
+    SIM_HUMAN_APPROVE_S: float = 5
+    HANDOFF_S: float = 60
+    SIM_HUMAN_ACC: float = 0.9
+    REVIEW_S: tuple[int, int] = (120, 10)
+    WS_HZ: float = 10
+    MONGO_TIMEOUT_MS: int = 1000
+    MONGO_RETRY_S: float = 5
+    ASK_MAX_LEADS: int = 100
+    ASK_MAX_QUESTION_CHARS: int = 2000
+    GROK_PROMPT_VERSION: str = "triage-v1"
+    XAI_API_KEY: str = ""
     XAI_MODEL: str = ""
-    MONGODB_URI: SecretStr = SecretStr("")
+    MONGODB_URI: str = ""
+    MONGODB_DATABASE: str = "flyby_triage"
+    LAYA_MODEL_DIR: Path = ROOT / "models/laya"
+    LAYA_MODEL_ID: str = "convaiinnovations/laya"
+    LAYA_REVISION: str = "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
+    LAYA_DEVICE: str = "cpu"
+    # GATE T0.2: Laya scored 0.25 on the twenty hand cases across all four criteria
+    # rewordings, so the live policy is the rule. See docs/GATES.md.
+    LIVE_POLICY: Literal["laya", "rule"] = "rule"
+    PARSE_MODE: Literal["oracle", "grok"] = "grok"
+    # T7: tools/demo_check.py --find-seed showed seed 7 routes leads to a human,
+    # re-ranks the queue at t+99 s, and reaches three dispatches.
+    DEMO_SEED: int = 7
+    LOG_DIR: Path = ROOT / "logs"
+    RESULTS_DIR: Path = ROOT / "results"
+    WEB_DIST: Path = ROOT / "web/dist"
+
+    def public_dict(self) -> dict:
+        return self.model_dump(mode="json", exclude={"XAI_API_KEY", "MONGODB_URI"})
 
 
 settings = Settings()

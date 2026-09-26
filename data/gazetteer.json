@@ -1,0 +1,13 @@
+{
+  "elm_school": {"name": "Elm School", "x": 45, "y": 55, "sector": "S1"},
+  "oak_clinic": {"name": "Oak Clinic", "x": 155, "y": 50, "sector": "S2"},
+  "river_bridge": {"name": "River Bridge", "x": 255, "y": 55, "sector": "S3"},
+  "cedar_church": {"name": "Cedar Church", "x": 50, "y": 150, "sector": "S4"},
+  "central_market": {"name": "Central Market", "x": 150, "y": 145, "sector": "S5"},
+  "pine_station": {"name": "Pine Station", "x": 250, "y": 150, "sector": "S6"},
+  "willow_park": {"name": "Willow Park", "x": 50, "y": 250, "sector": "S7"},
+  "hill_shelter": {"name": "Hill Shelter", "x": 150, "y": 250, "sector": "S8"},
+  "maple_tower": {"name": "Maple Tower", "x": 250, "y": 250, "sector": "S9"},
+  "south_pump": {"name": "South Pump", "x": 80, "y": 25, "sector": "S1"},
+  "north_depot": {"name": "North Depot", "x": 210, "y": 280, "sector": "S9"}
+}

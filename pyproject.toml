@@ -1,12 +1,24 @@
 [project]
-name = "flyby"
+name = "flyby-triage"
 version = "0.1.0"
-description = "SAR triage with a connectome-constrained fly visual reflex"
+description = "Local drone search-and-rescue triage simulator"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi", "uvicorn[standard]", "pydantic", "pydantic-settings",
-  "numpy", "pandas", "pyarrow", "matplotlib", "pymongo", "python-dotenv",
-  "httpx", "pytest", "pytest-asyncio",
+  "fastapi",
+  "uvicorn[standard]",
+  "pydantic",
+  "pydantic-settings",
+  "numpy",
+  "pandas",
+  "pyarrow",
+  "matplotlib",
+  "pymongo",
+  "python-dotenv",
+  "httpx",
+  "pytest",
+  "pytest-asyncio",
+  "xai-sdk",
+  "laya==0.3.20",
 ]
 
 [tool.uv]
@@ -16,7 +28,4 @@ package = false
 testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
-markers = [
-  "slow: model loading or long-running simulation",
-  "network: requires an external service or download",
-]
+markers = ["slow: loads the local model", "network: requires external services"]

@@ -1,0 +1,17 @@
+[
+  {"raw":"Command, volunteer at {landmark_name}: I can see one person waving. Need help, high priority. Over.","reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"high","hazards":[],"source":"firsthand","is_retraction":false}]},
+  {"raw":"txt from resident: neighbor says two stranded in {sector}. Haven't seen em myself, moderate urgency.","reports":[{"sector":"{sector}","subject_count":2,"urgency":"moderate","hazards":[],"source":"secondhand","is_retraction":false}]},
+  {"raw":"At {landmark_name}, water coming up FAST. One person here, this is critical. I'm looking at them.","reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"critical","hazards":["rising_water"],"source":"firsthand","is_retraction":false}]},
+  {"raw":"Possible person near {landmark_name}, unconfirmed. Low urgency for now. Copy?", "reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"low","hazards":[],"source":"unverified","is_retraction":false}]},
+  {"raw":"Crew reports downed power line at {landmark_name}. Secondhand relay, high priority, count unknown.","reports":[{"landmark":"{landmark}","urgency":"high","hazards":["downed_line"],"source":"secondhand","is_retraction":false}]},
+  {"raw":"I see one sheltered under a damaged roof at {landmark_name}. Collapse risk, critical. Repeat critical.","reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"critical","hazards":["collapse_risk"],"source":"firsthand","is_retraction":false}]},
+  {"raw":"Radio relay: family reports three people in {sector}. They need a welfare check, moderate priority.","reports":[{"sector":"{sector}","subject_count":3,"urgency":"moderate","hazards":[],"source":"secondhand","is_retraction":false}]},
+  {"raw":"Unverified post says smoke/fire by {landmark_name}. High urgency; no reliable head count.","reports":[{"landmark":"{landmark}","urgency":"high","hazards":["fire"],"source":"unverified","is_retraction":false}]},
+  {"raw":"On scene at {landmark_name}, gas smell and one person waiting. High urgency. This is a firsthand report.","reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"high","hazards":["gas"],"source":"firsthand","is_retraction":false}]},
+  {"raw":"{sector} update via shelter desk: one still missing; low urgency, no immediate hazard reported.","reports":[{"sector":"{sector}","subject_count":1,"urgency":"low","hazards":[],"source":"secondhand","is_retraction":false}]},
+  {"raw":"I'm at {landmark_name}. One survivor on dry ground, moderate urgency, no hazards I can see.","reports":[{"landmark":"{landmark}","subject_count":1,"urgency":"moderate","hazards":[],"source":"firsthand","is_retraction":false}]},
+  {"raw":"Resident relays: water rising around {landmark_name}, two people stuck. Critical priority.","reports":[{"landmark":"{landmark}","subject_count":2,"urgency":"critical","hazards":["rising_water"],"source":"secondhand","is_retraction":false}]},
+  {"raw":"{sector}, unconfirmed head count of two. Possible collapse risk. High priority, please verify.","reports":[{"sector":"{sector}","subject_count":2,"urgency":"high","hazards":["collapse_risk"],"source":"unverified","is_retraction":false}]},
+  {"raw":"Correction command: retract the last report for {landmark_name} / {sector}. Bad location, cancel that report. Low urgency.","reports":[{"sector":"{sector}","landmark":"{landmark}","urgency":"low","hazards":[],"source":"unverified","is_retraction":true}]},
+  {"raw":"...static... somebody over there by the thing, can't copy location... radio check?","reports":[],"unparseable":true}
+]

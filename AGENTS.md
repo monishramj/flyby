@@ -1,17 +1,15 @@
-# FlyBy implementation rules
+You are implementing FlyBy Triage. README.md is the source of truth; read the sections
+referenced by your step first.
 
-README.md is the build specification. Read its referenced sections before edits.
-Read docs/STATUS.md and docs/TEAM.md for the current step and ownership.
+- Implement ONLY the current step. Where README says "Agent's choice", decide sensibly
+  and note the decision in your report. Otherwise, do not add features.
+- Follow README §1 hard rules and the lead lifecycle exactly.
+- Python 3.12 with uv. Add dependencies only if the step names them.
+- Never invent API details for Laya or xai-sdk: read the real package/repo source first.
+- Finish with the step's tests passing (`uv run pytest <paths>`) or its acceptance check
+  shown, with commands and output.
+- If README conflicts with how a library actually works, implement the closest
+  faithful version and list it under "Deviations".
+- Report: files changed, commands + output, decisions made, deviations, open issues.
 
-- Implement only the current agreed step. No extra features or abstractions.
-- Keep reflex/ independent of server/, databases, and outbound network calls.
-- The decision path must never wait on Grok, MongoDB, or the network.
-- Mongo writes go through a background queue. Grok never decides or dispatches.
-- Python 3.12 with uv; keep constants in server/config.py or reflex/config.py.
-- Verify flyvis, fly-brain, Laya and xai-sdk APIs against real source before use.
-- Never fabricate model activity, measured directions, timings, or benchmarks.
-- Keep checkpoint downloads in setup tools, outside the reflex runtime.
-- Preserve upstream licenses and verify node ordering before projecting activity.
-- Run the step's tests or acceptance checks. Report changes, validation,
-  deviations, and open issues briefly.
-- Do not implement Monish's ground-station lane unless explicitly requested.
+The active implementation is the supplied FlyBy Triage plan, T0–T7. The user authorized replacing the former application on triage. Do not modify main. Work only within assigned file ownership when collaborating.
