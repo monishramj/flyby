@@ -2,7 +2,7 @@
 
 Completed step: 0.1 scaffold and configuration. Next active step: 0.4 flyvis smoke.
 
-Read `MASTER_PLAN.md` first when resuming. It captures the user-provided context,
+Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming. The plan captures the user-provided context,
 ownership, complete fly-lane sequence, hardware/Colab decision, interface details,
 acceptance gates and a replacement-agent prompt.
 

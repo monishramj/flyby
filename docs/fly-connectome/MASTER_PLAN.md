@@ -5,14 +5,14 @@ It preserves the current scope and decisions without requiring the original chat
 
 ## Start here
 
-1. Read this file, `AGENTS.md`, `docs/STATUS.md`, and `docs/TEAM.md`.
+1. Read this file, root `AGENTS.md`, `docs/fly-connectome/STATUS.md`, and `docs/TEAM.md`.
 2. Check `git status --short`, branch, latest commits, and remotes. Preserve
    uncommitted work; do not reset or replace another person's implementation.
 3. Read the relevant sections of `README.md`, which contains the supplied full
    build specification and step-by-step prompts. It describes the intended final
    product, not what is already implemented.
 4. Work on `fly/connectome`. Complete the next unfinished checkpoint and its
-   acceptance checks. Update `docs/STATUS.md` before handing off.
+   acceptance checks. Update `docs/fly-connectome/STATUS.md` before handing off.
 
 **Next engineering task: Step 0.4 — real flyvis smoke test and layout export.**
 No real neural model is currently loaded. The scaffold must never be presented
@@ -229,7 +229,7 @@ current flyvis package. npm cache and pytest temporary paths must be redirected
 into the workspace in restricted sessions. No services are intentionally left
 running after the scaffold validation.
 
-At every handoff update `docs/STATUS.md` with: last completed checkpoint, next
+At every handoff update `docs/fly-connectome/STATUS.md` with: last completed checkpoint, next
 concrete action, changed files/commits, exact checks/results, dependency and
 checkpoint identities, measured constants, deviations, active processes, and
 blockers. Distinguish passed, not run, and failed. Keep credentials and bulk
@@ -237,8 +237,9 @@ weights out of Git. Commit working changes on our branch; push when access works
 
 Replacement-agent prompt:
 
-> Continue FlyBy on fly/connectome. Read MASTER_PLAN.md, AGENTS.md,
-> docs/STATUS.md and the relevant README steps. Preserve existing work and keep
+> Continue FlyBy on fly/connectome. Start at docs/fly-connectome/README.md,
+> then read its master plan and status, root AGENTS.md and relevant root README steps.
+> Preserve existing work and keep
 > Monish's ground-station lane separate. Complete the next unfinished checkpoint
 > with real validation, record measured results and update the handoff before
 > stopping. Do not invent model output, API details, benchmarks or readiness.

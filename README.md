@@ -3,8 +3,8 @@
 Local starter repository for our hackathon project. **Step 0.1 is implemented;
 the fly model and mission pipeline are not implemented yet.**
 
-- **[Start here: master plan and agent handoff](MASTER_PLAN.md)**
-- [Build status and next checkpoint](docs/STATUS.md)
+- **[Start here: fly-connectome agent handoff](docs/fly-connectome/README.md)**
+- [Build status and next checkpoint](docs/fly-connectome/STATUS.md)
 - [Team split and integration agreement](docs/TEAM.md)
 - [Local setup](docs/SETUP.md)
 
