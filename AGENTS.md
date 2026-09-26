@@ -1,7 +1,9 @@
 # FlyBy implementation rules
 
-README.md is the build specification. Read its referenced sections before edits.
+Start with MASTER_PLAN.md for scope, decisions, dependencies and the resume prompt.
+README.md is the full build specification. Read its referenced sections before edits.
 Read docs/STATUS.md and docs/TEAM.md for the current step and ownership.
+Update docs/STATUS.md with concrete validation and next steps at every handoff.
 
 - Implement only the current agreed step. No extra features or abstractions.
 - Keep reflex/ independent of server/, databases, and outbound network calls.

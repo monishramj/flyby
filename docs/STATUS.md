@@ -2,6 +2,32 @@
 
 Completed step: 0.1 scaffold and configuration. Next active step: 0.4 flyvis smoke.
 
+Read `MASTER_PLAN.md` first when resuming. It captures the user-provided context,
+ownership, complete fly-lane sequence, hardware/Colab decision, interface details,
+acceptance gates and a replacement-agent prompt.
+
+## Repository handoff
+
+- Shared baseline: `3812336`; active branch: `fly/connectome`.
+- Remote: https://github.com/monishramj/flyby (configured as `origin`).
+- The user accepted the collaborator invitation for `wikzAM`. Write access is
+  confirmed; the initial HTTP 403 is resolved and the shared main branch is published.
+- Git credential-helper execution failed in the restricted session. Outside it,
+  the helper found the existing sign-in; Git needed a command-scoped safe.directory
+  for this exact repository because sandbox and host users differ. No global
+  Git trust or credential settings were changed.
+- Our branch is `fly/connectome`. The shared plan belongs to the foundation;
+  subsequent model and reflex implementation belongs to our branch. Fetch before
+  integration and never force-push.
+- No long-running services or model downloads are active.
+
+## Compute decision
+
+No Colab H100 job is needed now. Keep it available for a Linux reference smoke
+test if local flyvis loading fails, or later offline batches. Upstream documents
+Linux testing on Python 3.9–3.12; Windows/macOS model compatibility remains untested.
+The proposed demo host remains the Mac, subject to measured integrated performance.
+
 Implemented: Python 3.12 project, separate service entry points and health
 routes, README constants, secret loading, CPU thread helper, Vite/TypeScript
 starter with Three.js and Chart.js dependencies, baseline config and isolation

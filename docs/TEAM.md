@@ -8,7 +8,7 @@ The supplied final README wins over the older conversation where they differ.
 | Ground station, Grok, Laya, database | Monish | `server/`, `batch/`, mission UI and related tests |
 | Shared integration | Both | Root dependency files, `web/src/main.ts`, inspection scene, wire contracts |
 
-Start both lanes from the same scaffold commit. Proposed branches:
+Start both lanes from scaffold commit `3812336`. Local branches:
 `fly/connectome` and `ground/triage`. Coordinate edits to shared files; do not
 replace the whole web entry point during integration.
 
@@ -28,4 +28,9 @@ test acceleration only after the reference smoke test works. Measure both
 models together on the demo host before promising 50 Hz. No hardware latency
 claim has been verified.
 
-GitHub owner/name/visibility remain undecided. No remote has been created.
+Repository: https://github.com/monishramj/flyby (`origin` configured).
+The user accepted the collaborator invitation for `wikzAM` on 2026-09-26 and
+write access is confirmed. The shared scaffold is published on main. Our working
+branch is `fly/connectome`; `ground/triage` is only a local starting branch for
+Monish, who can create his own branch from the latest origin/main.
+Fetch before integration and never overwrite Monish's work.
