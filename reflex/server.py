@@ -98,7 +98,7 @@ class Session:
         if frame.mode == Mode.BENCH_RECORD:
             ep.ks.append(frame.k)
             ep.frames.append(frame.pixels.copy())
-            return {"k": frame.k, "cmd": "none", "S": None, "dLR": None}
+            return {"k": frame.k, "cmd": "none", "speed": None, "yaw_rate": None, "S": None, "dLR": None}
         if self.eye is None:
             raise ProtocolError("fly model not loaded; see /health")
         async with EYE_LOCK:
@@ -107,8 +107,8 @@ class Session:
                 _eye_owner[0] = ep
             drive, _ = await asyncio.to_thread(self.eye.step, frame.pixels)
         S, dLR = ep.readout.update(drive)
-        cmd = ep.controller.step(frame.k, S, dLR, frame.reflex_on)
-        return {"k": frame.k, "cmd": cmd, "S": S, "dLR": dLR}
+        command = ep.controller.step(frame.k, S, dLR, frame.reflex_on, frame.goal_bearing, frame.goal_dist)
+        return {"k": frame.k, **command, "S": S, "dLR": dLR}
 
     def _validate(self, frame: Frame) -> Episode:
         ep = self.current

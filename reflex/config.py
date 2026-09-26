@@ -18,7 +18,13 @@ DRONE_RADIUS_M = 0.25
 INSPECT_SPEED_MPS = (1.0, 3.0)
 INSPECT_SPEED_PLANNED_MPS = 1.5  # needs 1.5/4 + 0.04 = 0.415 s warning; 3 m/s needs 0.79 s
 A_BRAKE_MPS2 = 4.0
-SWERVE_MPS = 1.0
+# Fly-inspired navigation (reflex/controller.py): cruise → brake → saccade → cruise.
+NAV_CRUISE_MPS = INSPECT_SPEED_PLANNED_MPS
+SACCADE_DEG = 90.0          # yaw turn after a brake, away from the looming side
+SACCADE_RATE_DPS = 180.0    # a drone cannot match a fly's ~1000°/s saccades
+SACCADE_SUPPRESS_S = 0.3    # looming ignored this long after a saccade (rotation flow)
+GOAL_TURN_DPS = 60.0        # goal steering: yaw rate = GOAL_TURN_DPS · sin(goal bearing)
+GOAL_RADIUS_M = 0.5         # arrived when closer than this
 BRAKE_LATCH_S = 0.5
 EMA_ALPHA = 0.3
 WARMUP_S = 2.0  # Measured: 0.5s leaves 0.241 drift; 2s leaves <0.00026 (CPU).
@@ -42,7 +48,7 @@ THETA_UNCALIBRATED = 1.2
 EXPECTED_NODES = 45_669
 EXPECTED_TYPES = 65
 EXPECTED_COLUMNS = 721
-FRAME_HEADER_BYTES = 12
+FRAME_HEADER_BYTES = 20  # README §4.7's 12 bytes + goal bearing and distance (f32 each)
 VIZ_HEADER_BYTES = 16
 FLYVIS_MODEL = "flow/0000/000"
 FLYVIS_ROOT = ROOT / "data" / "checkpoints" / "flyvis"

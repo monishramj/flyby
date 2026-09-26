@@ -44,7 +44,15 @@ committed; the decisions needed to continue are captured here.
 - Motion features come from T4/T5 cells; our engineered looming readout and
   controller sit after those cells. Do not label these added layers as flyvis cells.
 - **Optical flow comparisons are out of scope**, along with YOLO panels, low-light
-  sweeps, real hardware, autonomous navigation and multiple drones.
+  sweeps, real hardware and multiple drones.
+- **Scope change (user, 2026-09-26):** fly-inspired navigation *is* in scope for
+  the inspection flight: cruise toward a goal, brake on looming, a saccade-like
+  90° yaw turn away, then steer back toward the goal. No human decisions in the
+  loop. These are engineered control rules, not simulated neurons. One 120°
+  eye first; two eyes only if the Mac measures under the frame budget
+  (two eyes batched ≈ 27 ms per step on the 4-core cloud CPU).
+- Demo runs locally on the Mac; Colab is not in the live path and is not needed
+  for calibration batches (CPU handles them).
 - The reflex benchmark compares **reflex on versus off**. It cannot support a
   claim that the fly model outperforms another avoidance algorithm.
 - Use fly-brain only for selected loaders/assets and 3D activity projection.
@@ -215,10 +223,14 @@ Ground Control and time-to-dispatch as essential features.
 - Ground station: port 8000; reflex: port 8001; browser bridges them.
 - Mission emits `inspect.request {lead_id}`; browser returns
   `inspect.result {lead_id, collided}` after inspection.
-- Frame header: episode u32, k u32, reflex_on u8, mode u8, pad u16; 12 bytes,
-  followed by FRAME_R squared grayscale bytes. Use little-endian explicitly.
+- Frame header (changed 2026-09-26 for navigation): episode u32, k u32,
+  reflex_on u8, mode u8, pad u16, goal_bearing f32 (rad, + = goal right of the
+  camera axis), goal_dist f32 (m, NaN = no goal); 20 bytes, little-endian,
+  followed by FRAME_R squared grayscale bytes.
 - Modes: 0 live, 1 bench_record, 2 bench_closed. Command JSON:
-  `{k, cmd, S, dLR, ms}`; cmd is none, brake, brake_swerve_left or brake_swerve_right.
+  `{k, cmd, speed, yaw_rate, S, dLR, ms}`; cmd is none (cruise), brake,
+  saccade_left, saccade_right or arrived; speed m/s target, yaw_rate °/s (+ right).
+  bench_record returns none with null speed/yaw/S/dLR (scripted flight).
 - `eye.layout`: native node types/coordinates/column map, image-space column
   positions, receptor/motion type lists, measured subtype directions, signed type
   edges and S_theta. See README 4.7 for exact field names.

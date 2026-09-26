@@ -16,11 +16,14 @@ def pixels(seed=0):
 
 def test_frame_round_trip_uses_documented_little_endian_layout():
     img = pixels()
-    data = encode_frame(0x01020304, 7, True, Mode.BENCH_CLOSED, img)
-    assert len(data) == 12 + FRAME_R**2 == FRAME_BYTES
+    data = encode_frame(0x01020304, 7, True, Mode.BENCH_CLOSED, img, goal_bearing=0.5, goal_dist=2.0)
+    assert len(data) == 20 + FRAME_R**2 == FRAME_BYTES
     assert data[:12] == bytes([4, 3, 2, 1, 7, 0, 0, 0, 1, 2, 0, 0])
+    assert data[12:20] == struct.pack("<ff", 0.5, 2.0)
     frame = decode_frame(data)
     assert (frame.episode, frame.k, frame.reflex_on, frame.mode) == (0x01020304, 7, True, Mode.BENCH_CLOSED)
+    assert (frame.goal_bearing, frame.goal_dist) == (0.5, 2.0)
+    assert np.isnan(decode_frame(encode_frame(1, 0, True, Mode.LIVE, img)).goal_dist)
     np.testing.assert_array_equal(frame.pixels, img)
 
 
@@ -30,9 +33,12 @@ def test_frame_round_trip_uses_documented_little_endian_layout():
         (b"", "bytes"),
         (encode_frame(1, 0, False, Mode.LIVE, pixels())[:-1], "bytes"),
         (encode_frame(1, 0, False, Mode.LIVE, pixels()) + b"\0", "bytes"),
-        (struct.pack("<IIBBH", 1, 0, 2, 0, 0) + bytes(FRAME_R**2), "reflex_on"),
-        (struct.pack("<IIBBH", 1, 0, 1, 3, 0) + bytes(FRAME_R**2), "mode"),
-        (struct.pack("<IIBBH", 1, 0, 1, 0, 1) + bytes(FRAME_R**2), "pad"),
+        (struct.pack("<IIBBHff", 1, 0, 2, 0, 0, 0, 1) + bytes(FRAME_R**2), "reflex_on"),
+        (struct.pack("<IIBBHff", 1, 0, 1, 3, 0, 0, 1) + bytes(FRAME_R**2), "mode"),
+        (struct.pack("<IIBBHff", 1, 0, 1, 0, 1, 0, 1) + bytes(FRAME_R**2), "pad"),
+        (struct.pack("<IIBBHff", 1, 0, 1, 0, 0, 4.0, 1) + bytes(FRAME_R**2), "goal_bearing"),
+        (struct.pack("<IIBBHff", 1, 0, 1, 0, 0, float("inf"), 1) + bytes(FRAME_R**2), "goal_bearing"),
+        (struct.pack("<IIBBHff", 1, 0, 1, 0, 0, 0, -1) + bytes(FRAME_R**2), "goal_dist"),
     ],
 )
 def test_malformed_frames_are_rejected(data, match):
@@ -87,7 +93,7 @@ def test_live_frames_return_scores_and_commands(ws, eye, reflex_on):
     eye.q = 1.0  # S rises well above theta within a few frames
     replies = [send_frame(ws, 5, k, reflex_on, Mode.LIVE) for k in range(3)]
     for k, reply in enumerate(replies):
-        assert set(reply) == {"k", "cmd", "S", "dLR", "ms"} and reply["k"] == k
+        assert set(reply) == {"k", "cmd", "speed", "yaw_rate", "S", "dLR", "ms"} and reply["k"] == k
         assert reply["ms"] >= 0
     assert replies[-1]["S"] > reflex_server.THETA
     assert replies[-1]["cmd"] == ("brake" if reflex_on else "none")
@@ -146,7 +152,7 @@ def test_malformed_text_messages_keep_connection_open(ws, text, match):
 def test_bench_record_stores_frames_and_metadata(ws, eye, tmp_path):
     send_msg(ws, type="episode.begin", episode=12, params={"seed": 42, "obstacle": "post"})
     for k in range(4):
-        assert send_frame(ws, 12, k, True, Mode.BENCH_RECORD, seed=k) == {"k": k, "cmd": "none", "S": None, "dLR": None, "ms": pytest.approx(0, abs=1e3)}
+        assert send_frame(ws, 12, k, True, Mode.BENCH_RECORD, seed=k) == {"k": k, "cmd": "none", "speed": None, "yaw_rate": None, "S": None, "dLR": None, "ms": pytest.approx(0, abs=1e3)}
     assert send_msg(ws, type="episode.end", episode=12, result={"collided": True}) == {"ack": "episode.end", "episode": 12}
     with np.load(tmp_path / "frames" / "12.npz") as saved:
         assert saved["frames"].shape == (4, FRAME_R, FRAME_R) and saved["frames"].dtype == np.uint8

@@ -17,8 +17,9 @@ port 8000. The browser is the bridge: inspection approval opens the scene;
 camera frames go directly to the reflex, and inspection results go back to
 the mission server. No Python imports across the process boundary.
 
-The authoritative wire formats are README sections 4.7–4.8. Binary frame
-headers are 12 bytes; visualization headers are 16 bytes. Standardize frame
+The authoritative wire formats are README sections 4.7–4.8, except the reflex
+frame header, which is now 20 bytes (goal bearing and distance added for
+navigation; see docs/fly-connectome/MASTER_PLAN.md). Visualization headers are 16 bytes. Standardize frame
 header endianness as little-endian when implementing Step 6.1 (the supplied
 README states this explicitly only for visualization packets).
 

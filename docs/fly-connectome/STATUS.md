@@ -2,10 +2,28 @@
 
 Completed: 0.1, 0.4, 6.1, 6.3, 6.4, plus the **two-pathway LPLC2-style readout**
 (now live in the server) and a cached warm-up. θ is still uncalibrated.
-Next: **Step 6.2 carport scene** (user wants it soon; shared with Monish), then
-calibrate θ from seeded carport episodes (Step 8.2).
+Also done: fly-inspired navigation controller (brake → saccade → goal steering).
+Next: **carport scene with a goal** (shared with Monish), then calibrate θ
+from seeded carport episodes run headlessly here.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
+
+## Fly-inspired navigation controller (2026-09-26)
+
+User decisions: no human in the loop for avoidance; expand scope to navigate
+around obstacles toward a goal; demo on the Mac; one 120° eye first (two eyes
+if the Mac is fast enough).
+
+- `reflex/controller.py`: cruise at 1.5 m/s with yaw = 60°/s·sin(goal bearing) →
+  brake when S > θ (latched 0.5 s, re-latched while S stays high) → 90° saccade at
+  180°/s away from the looming side (goal side if |dLR| ≤ 0.5θ) → looming
+  ignored for 0.3 s → cruise. `arrived` within 0.5 m of the goal. reflex_on=0
+  cruises to the goal with no brake or saccade.
+- Frame header is now 20 bytes (goal_bearing, goal_dist f32). Replies carry
+  `speed` and `yaw_rate`. Swerve commands are gone; `SWERVE_MPS` removed.
+- Tests: 60 passed with `-m "slow or not slow"`.
+- Next: the carport scene with a goal behind obstacles, hover start, a 120°
+  camera and a headless seeded bench to calibrate θ and the saccade.
 
 ## Two-pathway looming readout (live, 2026-09-26)
 
