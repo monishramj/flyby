@@ -7,6 +7,37 @@ Step 8.2 must calibrate θ before any avoidance claim.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
+## Readout prototype: LPLC2-style units (in progress, not wired into the server)
+
+Tools: `tools/looming_stimuli.py` (disc, texture and forward-flight corridor
+clips with floor, posts, boxes and debris, plus collision truth) and
+`tools/compare_readouts.py` (records real T4/T5 drive once per clip, then scores
+readouts offline). flyvis has no LPLC2/LPi cells, so these units are an
+**engineered layer on top of real T4/T5 output**, not flyvis cells.
+
+Unit design: a hexagonal set of overlapping units (7, 19 or 37), each with four
+branches. Each branch is excited by outward and inhibited by inward motion on its
+side of the unit's own centre. The "2d" unit needs all four branches (geometric
+mean, LPLC2-like). The "horiz" unit needs only left+right. S sums the units;
+dLR = left units − right units.
+
+Findings (S traces: `measurements/readout-traces-fov90-v3.png`, 90° FOV, 3 m/s):
+
+- The §4.8 half-field readout fails in forward flight. An empty corridor holds
+  S ≈ 0.33, and obstacles add signal only in the last ~0.2 s.
+- Local units reject corridor and floor flow (baseline ~0.03 for 7×2d).
+- 2d units rise genuinely only for compact debris, in the last ~0.3 s. They do
+  not respond to posts or boxes taller than the frame, which only expand sideways.
+- Horizontal units rise genuinely for a 0.8 m box from ~0.7 s before contact, and
+  for thin posts in the last ~0.3 s.
+- 7 larger units were less noisy than 19 or 37 smaller ones.
+- At 3 m/s, genuine warning is about 0.3–0.7 s, short of the 0.79 s target.
+- Swerve direction is unreliable in textured clutter.
+- The first-crossing warning tables printed by the tool are **not reliable**:
+  θ comes from only 2–3 obstacle-free clips, so texture noise crosses it early
+  (e.g. "3 s" warnings at 1.5 m/s). Proper calibration needs many seeded
+  non-colliding episodes (Step 8.2), ideally in the real carport scene.
+
 ## Step 6.4 — looming readout and avoidance (2026-09-26, Linux CPU)
 
 Files: `reflex/looming.py`, `reflex/controller.py` (new), `reflex/server.py`,
