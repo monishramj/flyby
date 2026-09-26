@@ -13,9 +13,10 @@ Another agent can continue from this folder without access to the original chat.
 | [Team agreement](../TEAM.md) | Our files versus Monish's ground-station lane |
 | [Setup](../SETUP.md) | Reproducible local commands, including this Windows workspace |
 
-**Next checkpoint:** README Step 6.3 — fly eye (`reflex/hexeye.py`).
-Steps 0.4 and 6.1 passed: real model smoke/layout are saved, and `/ws/reflex`
-validates frames and episodes. Commands are always `none` until Steps 6.3–6.4.
+**Next checkpoint:** README Step 6.4 — looming readout and controller.
+Steps 0.4, 6.1 and 6.3 passed: `/ws/reflex` validates frames, and `FlyEye` runs
+the pretrained model per frame. Commands stay `none` until 6.4 wires them up.
+Note the §4.8 rest-subtraction deviation in STATUS.md.
 
 ## Paste this into the next agent
 

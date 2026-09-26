@@ -1,7 +1,7 @@
 # FlyBy
 
-Local repository for our hackathon project. **Steps 0.1, 0.4 and 6.1 are implemented:
-the fly-eye smoke test passes and the reflex frame socket works. The live reflex and mission pipeline are pending.**
+Local repository for our hackathon project. **Steps 0.1, 0.4, 6.1 and 6.3 are implemented:
+the fly eye runs per frame and the reflex frame socket works. The live reflex and mission pipeline are pending.**
 
 - **[Start here: fly-connectome agent handoff](docs/fly-connectome/README.md)**
 - [Build status and next checkpoint](docs/fly-connectome/STATUS.md)
