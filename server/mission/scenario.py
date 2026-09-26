@@ -1,4 +1,4 @@
-"""Seeded flood scene. Object labels stay internal to simulation/evaluation."""
+"""Seeded post-tsunami coastal scene. Object labels stay internal to simulation/evaluation."""
 from copy import deepcopy
 from dataclasses import dataclass
 import json
@@ -52,7 +52,12 @@ def generate(seed: int, cfg: Settings) -> Scenario:
                "height": cfg.HOUSE_SIZE_M[1], "kind": "house"} for key, p in gazetteer.items()]
     houses[1].update(kind="carport", width=cfg.CARPORT_SIZE_M[0], height=cfg.CARPORT_SIZE_M[1])
     # Scene geometry is expressed relative to the configured area.
-    water = [{"x": cfg.AREA_M * .72, "y": 0, "width": cfg.AREA_M * .12, "height": cfg.AREA_M}]
+    # Post-tsunami coast: open sea east of the area, a still-flooded low strip, and inland ponding.
+    a = cfg.AREA_M
+    water = [{"x": a, "y": -a * .3, "width": a, "height": a * 1.6, "kind": "ocean"},
+             {"x": a * .88, "y": 0, "width": a * .12, "height": a, "kind": "flood"},
+             {"x": a * .62, "y": a * .35, "width": a * .1, "height": a * .07, "kind": "flood"},
+             {"x": a * .3, "y": a * .66, "width": a * .1, "height": a * .05, "kind": "flood"}]
     trees = [{"x": p["x"] - cfg.HOUSE_SIZE_M[0], "y": p["y"], "radius": cfg.TREE_RADIUS_M}
              for p in gazetteer.values()]
     n_subjects = int(rng.integers(cfg.N_SUBJECTS[0], cfg.N_SUBJECTS[1] + 1))

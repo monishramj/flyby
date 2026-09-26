@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { dressScene, groundTexture, loadModels, model, type ModelName } from './models';
 import { notify, store } from './store';
 
 export const colors: Record<string, string> = { dispatch_ground_team: '#327c65', reimage_zoom: '#bb913f', close_in_inspect: '#5f76b0', ignore: '#79847f', dispatched: '#195846', awaiting_human: '#cf653c' };
@@ -8,6 +10,7 @@ export type CameraMode = 'orbit' | 'follow' | 'top';
 
 // World (x east, y north, metres) -> three (x, up, -y): origin SW, north is -z.
 const at = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, -y);
+const BEACH_M = 26;
 const VIS_COLOR: Record<string, string> = { visible: '#5fd08a', partial: '#e3c04a', under_structure: '#d96b5f' };
 
 interface Ctx {
@@ -17,13 +20,14 @@ interface Ctx {
   coverage: { tex: THREE.DataTexture; n: number; count: number } | null;
   sectorLabels: Record<string, HTMLElement>; houseMats: THREE.Material[];
   runId: string; hazardKey: string; truthKey: string; mode: CameraMode; droneTarget: THREE.Vector3; last: THREE.Vector3;
-  pins: Map<string, THREE.Group>; fetching: string;
+  pins: Map<string, THREE.Group>; fetching: string; ocean: THREE.Mesh | null;
 }
 let ctx: Ctx | null = null;
 
 function dispose(root: THREE.Object3D) {
   root.traverse(o => {
     const mesh = o as THREE.Mesh;
+    if (mesh.userData.shared) return; // geometry/materials belong to the model cache
     mesh.geometry?.dispose();
     [mesh.material].flat().forEach(m => m?.dispose());
   });
@@ -36,20 +40,31 @@ function label(text: string, cls: string) {
   return new CSS2DObject(el);
 }
 
+// A quadcopter drawn ~3x real size so it stays readable from the orbit camera.
 function buildDrone() {
   const g = new THREE.Group(), rotors: THREE.Object3D[] = [];
-  const dark = new THREE.MeshStandardMaterial({ color: '#233d33' }), light = new THREE.MeshStandardMaterial({ color: '#9fd4bf' });
-  g.add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.9, 4), dark));
+  const shell = new THREE.MeshStandardMaterial({ color: '#e9ecea', roughness: .35, metalness: .1 });
+  const carbon = new THREE.MeshStandardMaterial({ color: '#23272a', roughness: .5, metalness: .4 });
+  const blade = new THREE.MeshStandardMaterial({ color: '#15181a', transparent: true, opacity: .75 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 2.2, 6, 16), shell); body.rotation.x = Math.PI / 2; body.scale.set(1.25, 1, .55); g.add(body);
+  const battery = new THREE.Mesh(new THREE.BoxGeometry(1.3, .5, 1.8), carbon); battery.position.y = .55; g.add(battery);
   for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.25, 0.3), dark);
-    arm.position.set(sx * 1.2, 0.1, sz * 1.1); arm.rotation.y = Math.atan2(-sz * 2.2, sx * 2.4); g.add(arm);
-    const rotor = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 0.08, 20), light);
-    rotor.position.set(sx * 2.4, 0.4, sz * 2.2); (rotor.material as THREE.MeshStandardMaterial).transparent = true; (rotor.material as THREE.MeshStandardMaterial).opacity = 0.55;
+    const tip = new THREE.Vector3(sx * 2.9, 0.1, sz * 2.9), arm = new THREE.Mesh(new THREE.CylinderGeometry(.14, .18, tip.length(), 8), carbon);
+    arm.position.copy(tip).multiplyScalar(.5); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().normalize()); g.add(arm);
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(.38, .42, .55, 16), carbon); motor.position.copy(tip).setY(.3); g.add(motor);
+    const guard = new THREE.Mesh(new THREE.TorusGeometry(1.55, .06, 6, 40), shell); guard.rotation.x = Math.PI / 2; guard.position.copy(tip).setY(.55); g.add(guard);
+    const rotor = new THREE.Group(); rotor.position.copy(tip).setY(.62);
+    for (const r of [0, Math.PI]) { const b = new THREE.Mesh(new THREE.BoxGeometry(1.45, .03, .22), blade); b.position.x = Math.cos(r) * .72; b.rotation.y = r; rotor.add(b); }
     g.add(rotor); rotors.push(rotor);
+    const led = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), new THREE.MeshBasicMaterial({ color: sz < 0 ? '#39ff8e' : '#ff4b3a' }));
+    led.position.copy(tip).setY(-.1); g.add(led);
   }
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.6, 8), new THREE.MeshStandardMaterial({ color: '#cf653c' }));
-  nose.rotation.x = -Math.PI / 2; nose.position.z = -2.6; g.add(nose);
-  g.scale.setScalar(1.6);
+  const gimbal = new THREE.Mesh(new THREE.SphereGeometry(.5, 16, 12), carbon); gimbal.position.set(0, -.55, -1); g.add(gimbal);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 16), new THREE.MeshStandardMaterial({ color: '#0a2340', metalness: .9, roughness: .1 }));
+  lens.position.set(0, -.85, -1); g.add(lens);
+  for (const sx of [-1, 1]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(.12, .9, 2.4), carbon); skid.position.set(sx * .8, -.7, 0); g.add(skid); }
+  g.traverse(o => { o.castShadow = true; });
+  g.scale.setScalar(1.3);
   return { g, rotors };
 }
 
@@ -69,11 +84,18 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
   catch { labelRoot.innerHTML = '<p class="nogl">3D view unavailable: this browser has no WebGL.</p>'; return false; }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   const labels = new CSS2DRenderer();
   labels.domElement.className = 'labels'; labelRoot.appendChild(labels.domElement);
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#0d1417');
-  scene.add(new THREE.HemisphereLight('#dfeee8', '#25332c', 1.5));
-  const sun = new THREE.DirectionalLight('#ffffff', 1.6); sun.position.set(120, 260, 80); scene.add(sun);
+  // Overcast morning after the surge: low sun from the sea, haze toward the horizon.
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#9fb0b8'); scene.fog = new THREE.Fog('#9fb0b8', 380, 1100);
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.28;
+  scene.add(new THREE.HemisphereLight('#dbe6ec', '#4a4436', 0.8));
+  const sun = new THREE.DirectionalLight('#fff1dc', 2.6); sun.position.set(420, 260, -60); sun.target.position.set(150, 0, -150);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.4;
+  Object.assign(sun.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 50, far: 900 });
+  scene.add(sun, sun.target);
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 4000);
   const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02;
   const { g: drone, rotors } = buildDrone(); scene.add(drone);
@@ -82,7 +104,9 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   const lkp = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: '#c96b43', dashSize: 3, gapSize: 2 })); lkp.visible = false; scene.add(lkp);
   ctx = { renderer, labels, scene, camera, controls, world, leadGroup, truthGroup, hazardGroup, drone, rotors, cam: new THREE.Group(), lkp,
     coverage: null, sectorLabels: {}, houseMats: [], runId: '', hazardKey: '', truthKey: '', mode: 'orbit',
-    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '' };
+    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null };
+  // Models stream in after first paint; the scene is rebuilt with them once they arrive.
+  loadModels().then(count => { if (count && ctx) { ctx.runId = ''; renderMap(); } });
   scene.add(ctx.cam);
 
   const resize = () => {
@@ -115,6 +139,12 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
     const v = ctx.droneTarget.clone().sub(ctx.last);
     if (v.lengthSq() > 0.01) { ctx.drone.rotation.y = Math.atan2(-v.x, -v.z); ctx.last.copy(ctx.droneTarget); }
     ctx.rotors.forEach(r => { r.rotation.y += dt * 40; });
+    const ocean = ctx.ocean;
+    if (ocean) {
+      const pos = ocean.geometry.attributes.position as THREE.BufferAttribute, t = clock.elapsedTime;
+      for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .05 + t * 1.1) * .22 + Math.sin(y * .08 - t * .7) * .15); }
+      pos.needsUpdate = true; ocean.geometry.computeVertexNormals();
+    }
     if (ctx.mode === 'follow') { const shift = ctx.drone.position.clone().sub(ctx.controls.target); ctx.controls.target.add(shift); ctx.camera.position.add(shift); }
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera); ctx.labels.render(ctx.scene, ctx.camera);
@@ -129,17 +159,21 @@ export function setCameraMode(mode: CameraMode) {
   ctx.mode = mode;
   if (mode === 'top') { ctx.controls.target.copy(centre); ctx.camera.position.set(centre.x, area * 1.15, centre.z + 0.01); }
   else if (mode === 'follow') { ctx.controls.target.copy(ctx.drone.position); ctx.camera.position.copy(ctx.drone.position).add(new THREE.Vector3(0, 35, 65)); }
-  else { ctx.controls.target.copy(centre); ctx.camera.position.set(centre.x, area * 0.7, centre.z + area * 0.95); }
+  else { ctx.controls.target.copy(centre); ctx.camera.position.set(-area * 0.3, area * 0.62, centre.z + area * 0.95); }
 }
 
 function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   dispose(c.world); dispose(c.leadGroup); dispose(c.truthGroup); dispose(c.hazardGroup);
   c.pins.clear(); c.sectorLabels = {}; c.houseMats = []; c.truthKey = ''; c.hazardKey = ''; c.coverage = null;
   const { scene, config } = s, area = scene.area_m, cell = config.COVERAGE_CELL_M;
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(area + 160, area + 160), new THREE.MeshStandardMaterial({ color: '#2b3a30' }));
-  ground.rotation.x = -Math.PI / 2; ground.position.set(area / 2, -0.05, -area / 2); c.world.add(ground);
-  const field = new THREE.Mesh(new THREE.PlaneGeometry(area, area), new THREE.MeshStandardMaterial({ color: '#3a4d3d' }));
-  field.rotation.x = -Math.PI / 2; field.position.set(area / 2, 0, -area / 2); c.world.add(field);
+  const margin = 80, painted = groundTexture(scene, s.seed, margin, BEACH_M);
+  const limit = painted?.limit ?? (() => area * .25);
+  // Land stops at the shoreline (BEACH_M past the area edge); the sea fills everything east of it.
+  const shore = area + BEACH_M;
+  const outer = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: '#56603f', roughness: 1 }));
+  outer.rotation.x = -Math.PI / 2; outer.position.set(shore - 1200 - margin, -0.08, -area / 2); outer.receiveShadow = true; c.world.add(outer);
+  const land = new THREE.Mesh(new THREE.PlaneGeometry(area + margin * 2, area + margin * 2), new THREE.MeshStandardMaterial({ map: painted?.tex ?? null, color: painted ? '#ffffff' : '#56603f', roughness: .95, alphaTest: .5 }));
+  land.rotation.x = -Math.PI / 2; land.position.set(area / 2, 0, -area / 2); land.receiveShadow = true; c.world.add(land);
 
   const n = Math.ceil(area / cell), data = new Uint8Array(n * n * 4);
   const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.needsUpdate = true;
@@ -154,13 +188,26 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
     const id = `S${row * scene.sector_grid + col + 1}`, l = label(id, 'sector');
     l.position.copy(at(col * size + 12, (row + 1) * size - 12, 1)); c.world.add(l); c.sectorLabels[id] = l.element;
   }
+  c.ocean = null;
   scene.water.forEach(w => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w.width, 0.6, w.height), new THREE.MeshStandardMaterial({ color: '#3f7f9a', transparent: true, opacity: 0.8 }));
-    m.position.copy(at(w.x + w.width / 2, w.y + w.height / 2, 0.3)); c.world.add(m);
+    if (w.kind === 'ocean') {
+      // The sea runs off to the horizon; the server rectangle only marks where it starts.
+      const width = w.width + 900, height = w.height + 1200, sea = new THREE.Mesh(new THREE.PlaneGeometry(width, height, 90, 90),
+        new THREE.MeshStandardMaterial({ color: '#164656', roughness: .2, metalness: .3 }));
+      sea.rotation.x = -Math.PI / 2; sea.position.copy(at(shore - 20 + width / 2, w.y + w.height / 2, -0.45)); sea.receiveShadow = true;
+      c.world.add(sea); c.ocean = sea;
+      const foam = new THREE.Mesh(new THREE.PlaneGeometry(4, w.height + 400), new THREE.MeshBasicMaterial({ color: '#e8efe9', transparent: true, opacity: .6, depthWrite: false }));
+      foam.rotation.x = -Math.PI / 2; foam.position.copy(at(shore + 2, w.y + w.height / 2, 0.05)); c.world.add(foam);
+      return;
+    }
+    // Standing floodwater: brown, sediment-laden, still.
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(w.width, w.height), new THREE.MeshStandardMaterial({ color: '#55625a', roughness: .06, metalness: .6, transparent: true, opacity: .85 }));
+    pool.rotation.x = -Math.PI / 2; pool.position.copy(at(w.x + w.width / 2, w.y + w.height / 2, 0.45)); pool.receiveShadow = true; c.world.add(pool);
   });
+  const dressed = dressScene(scene, s.seed, c.world, limit);
   const wall = new THREE.MeshStandardMaterial({ color: '#c4c1aa' }), roof = new THREE.MeshStandardMaterial({ color: '#8f5a48' }), post = new THREE.MeshStandardMaterial({ color: '#aeab95' });
-  [wall, roof, post].forEach(m => { m.transparent = true; }); c.houseMats = [wall, roof, post];
-  scene.houses.forEach(h => {
+  [wall, roof, post].forEach(m => { m.transparent = true; }); c.houseMats = dressed ?? [wall, roof, post];
+  if (!dressed) scene.houses.forEach(h => {
     const centre = at(h.x, h.y);
     if (h.kind === 'carport') {
       const slab = new THREE.Mesh(new THREE.BoxGeometry(h.width, 0.6, h.height), post); slab.position.copy(centre).setY(4); c.world.add(slab);
@@ -175,7 +222,7 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
     }
   });
   const trunk = new THREE.MeshStandardMaterial({ color: '#5b4633' }), leaves = new THREE.MeshStandardMaterial({ color: '#4f8a5b' });
-  scene.trees.forEach(t => {
+  if (!dressed) scene.trees.forEach(t => {
     const p = at(t.x, t.y), h = t.radius * 1.5;
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, h, 8), trunk); stem.position.copy(p).setY(h / 2); c.world.add(stem);
     const top = new THREE.Mesh(new THREE.ConeGeometry(t.radius, t.radius * 2.6, 10), leaves); top.position.copy(p).setY(h + t.radius * 1.1); c.world.add(top);
@@ -203,8 +250,9 @@ function syncTruth(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   if (!want || !store.truth) return;
   store.truth.subjects.forEach(p => {
     const colour = VIS_COLOR[p.visibility] ?? '#fff';
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 1.1, 4, 8), new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.4 }));
-    body.position.copy(at(p.x, p.y, 1.2)); c.truthGroup.add(body);
+    const person = model((['manA', 'womanB', 'manC'] as ModelName[])[Number(p.id.slice(1)) % 3], 1.75, 'height');
+    const body = person ?? new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 1.1, 4, 8), new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.4 }));
+    body.position.copy(at(p.x, p.y, person ? 0.1 : 1.2)); if (person) person.scale.setScalar(2.2); c.truthGroup.add(body);
     const ring = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.2, 24), new THREE.MeshBasicMaterial({ color: colour, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.copy(at(p.x, p.y, 0.25)); c.truthGroup.add(ring);
     const l = label(`${p.id} · ${p.visibility.replace('_', ' ')}`, 'truth'); l.position.copy(at(p.x, p.y, 5)); c.truthGroup.add(l);

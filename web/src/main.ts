@@ -8,7 +8,7 @@ import { connect, send } from './ws';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <header class="top">
-  <h1>FlyBy <span>Triage</span></h1>
+  <h1>FLYBY</h1>
   <div class="controls">
     <label>seed <input id="seed" type="number" min="0" value="0" /></label>
     <button id="start" class="primary">Start</button>

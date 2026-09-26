@@ -18,8 +18,7 @@ select, input { background: #131c20; border: 1px solid var(--line); border-radiu
 a { color: #7fc3ac; }
 
 .top { display: flex; align-items: center; gap: 1.2rem; padding: .7rem 1.1rem; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.top h1 { font-size: 1.15rem; letter-spacing: .02em; }
-.top h1 span { color: var(--green); }
+.top h1 { font-size: 1.2rem; font-weight: 800; letter-spacing: .22em; }
 .controls { display: flex; gap: .5rem; align-items: center; }
 .controls label { display: flex; gap: .35rem; align-items: center; color: var(--dim); font-size: .85rem; }
 .controls input { width: 5.2rem; }

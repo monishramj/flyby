@@ -5,6 +5,6 @@ __pycache__/
 *.pyc
 web/node_modules/
 web/dist/
-models/
+/models/
 logs/*.jsonl
 .DS_Store
