@@ -28,10 +28,11 @@ const dom = new JSDOM(html.replace(/<script[^>]*><\/script>/, ''), {
 const { window } = dom;
 
 // jsdom has no 2D context or layout; the canvas calls are exercised, not rasterised.
-window.HTMLCanvasElement.prototype.getContext = () => new Proxy({}, {
+// jsdom has no WebGL either: null makes three throw, which the app answers with its fallback note.
+window.HTMLCanvasElement.prototype.getContext = function (type) { return type === '2d' ? new Proxy({}, {
   get: (target, key) => (key in target ? target[key] : (target[key] = () => new Proxy({}, { get: () => () => {} }))),
   set: () => true,
-});
+}) : null; };
 Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { get: () => 720, configurable: true });
 window.requestAnimationFrame = callback => window.setTimeout(() => callback(Date.now()), 0);
 window.cancelAnimationFrame = id => window.clearTimeout(id);
@@ -53,7 +54,9 @@ window.fetch = async (url, options) => {
 };
 window.addEventListener('error', event => errors.push(`error: ${event.error?.stack || event.message}`));
 window.addEventListener('unhandledrejection', event => errors.push(`rejection: ${event.reason}`));
-const consoleError = message => errors.push(`console.error: ${message}`);
+// jsdom cannot rasterise: three.js and chart.js log their context failures and the app degrades; expected here.
+const expected = /Error creating WebGL context|can't acquire context/;
+const consoleError = (...args) => { const message = args.join(' '); if (!expected.test(message)) errors.push(`console.error: ${message}`); };
 window.console = { ...console, error: consoleError };
 
 window.eval(bundle);
@@ -65,7 +68,25 @@ const tick = () => new Promise(resolve => window.setTimeout(resolve, 0));
 assert.ok(socket, 'the client must open a websocket');
 assert.match(socket.url, /\/ws\/mission$/, 'the client must connect to /ws/mission');
 socket.onopen?.();
-for (const event of fixture.events) socket.onmessage({ data: JSON.stringify(event) });
+// The recording ends with every card settled (the simulated human approved them), so the approve
+// click is taken mid-replay, the moment a lead first awaits approval.
+let approveSent, overrideSent, offered;
+for (const event of fixture.events) {
+  socket.onmessage({ data: JSON.stringify(event) });
+  if (!approveSent && event.type === 'lead.decided' && event.payload.status === 'awaiting_approval') {
+    await tick();
+    offered = count('#queue [data-approve]') > 0 && count('#queue [data-override]') > 0;
+    const before = sent.length;
+    window.document.querySelector('#queue [data-approve]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    approveSent = sent.length > before ? sent.at(-1) : null;
+    const overrideSelect = window.document.querySelector('#queue [data-override]');
+    overrideSelect.value = 'ignore';
+    overrideSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+    await tick();
+    overrideSent = sent.at(-1);
+  }
+}
 await tick();
 
 const snapshot = fixture.events[0].payload;
@@ -82,13 +103,14 @@ check('queue has lead cards', count('#queue .card') > 0, `${count('#queue .card'
 check('cards show a probability bar', count('#queue .card .bar') >= 4);
 check('cards show an action', count('#queue .card .action') > 0,
   window.document.querySelector('#queue .card .action')?.textContent);
-check('cards offer approve and override', count('#queue [data-approve]') > 0 && count('#queue [data-override]') > 0);
+check('cards offer approve and override', offered);
 check('intel feed has messages', count('#intel li:not(.empty)') > 0, `${count('#intel li:not(.empty)')} messages`);
 check('intel feed shows parsed chips', count('#intel .chip') > 0, `${count('#intel .chip')} chips`);
 check('decision log has entries', count('#log li:not(.empty)') > 0, `${count('#log li:not(.empty)')} entries`);
 check('incident panel renders', text('incident').length > 0);
-check('map canvas is sized', window.document.getElementById('map').width > 0,
-  `${window.document.getElementById('map').width}px`);
+check('3D view mounts or explains why not', Boolean(window.document.getElementById('map')) &&
+  (Boolean(window.document.querySelector('#labels .labels')) || /3D view unavailable/.test(text('labels'))));
+check('view has camera modes and a truth toggle', count('[data-cam]') === 3 && Boolean(window.document.getElementById('truth')));
 
 const dispatched = fixture.events.find(event => event.type === 'dispatch.created');
 check('a dispatch was recorded in the fixture', Boolean(dispatched));
@@ -101,17 +123,9 @@ await tick();
 check('clicking a card selects it', Boolean(window.document.querySelector('#queue .card.selected')), selectedId);
 
 // Approve goes over the websocket as a lead.approve command.
-const before = sent.length;
-window.document.querySelector('#queue [data-approve]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-await tick();
-check('approve sends lead.approve', sent.length > before && sent.at(-1).type === 'lead.approve',
-  JSON.stringify(sent.at(-1)));
+check('approve sends lead.approve', approveSent?.type === 'lead.approve', JSON.stringify(approveSent));
 
-const overrideSelect = window.document.querySelector('#queue [data-override]');
-overrideSelect.value = 'ignore';
-overrideSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
-await tick();
-check('override sends lead.override', sent.at(-1).type === 'lead.override', JSON.stringify(sent.at(-1)));
+check('override sends lead.override', overrideSent?.type === 'lead.override', JSON.stringify(overrideSent));
 
 // The brief modal is the only place dispatch text appears.
 const briefButton = window.document.querySelector('#queue [data-brief]');

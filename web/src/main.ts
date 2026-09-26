@@ -1,5 +1,5 @@
 import './style.css';
-import { drawMap, pickLead } from './map';
+import { mountMap, renderMap, setCameraMode, type CameraMode } from './map';
 import { briefHtml, renderAsk, renderIncident, renderIntel, renderLog } from './panels';
 import { bindQueue, renderQueue } from './queue';
 import { renderResults } from './results';
@@ -19,29 +19,37 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="status" id="status"></div>
 </header>
 <nav class="tabs"><button data-tab="mission" class="on">Mission</button><button data-tab="results">Results</button></nav>
-<main id="tab-mission" class="grid">
-  <section class="panel map">
-    <h2>Search area <small id="mission-meta"></small></h2>
-    <canvas id="map" aria-label="Mission map"></canvas>
-    <dl class="incident" id="incident"></dl>
+<main id="tab-mission" class="mission">
+  <section class="view">
+    <canvas id="map" aria-label="3D mission view"></canvas>
+    <div id="labels"></div>
+    <div class="hud tl"><b>Search area</b> <small id="mission-meta"></small></div>
+    <div class="hud tr">
+      <span class="seg"><button data-cam="orbit" class="on">Orbit</button><button data-cam="follow">Follow drone</button><button data-cam="top">Top-down</button></span>
+      <label class="check"><input id="truth" type="checkbox" /> show truth</label>
+    </div>
+    <div class="hud bl legend"><span><i style="background:#cf653c"></i>camera footprint</span><span><i style="background:#54c88c"></i>covered</span><span><i style="background:#7fc3ac"></i>planned sweep</span></div>
   </section>
-  <section class="panel queue">
-    <h2>Triage queue <small id="queue-meta"></small></h2>
-    <div id="queue"></div>
-  </section>
-  <section class="panel feed">
-    <h2>Intel feed</h2>
-    <ul id="intel"></ul>
-  </section>
-  <section class="panel log">
-    <h2>Decision log</h2>
-    <ul id="log"></ul>
-  </section>
-  <section class="panel ask">
-    <h2>Ask Ground Control</h2>
-    <ul id="ask"></ul>
-    <form id="ask-form"><input id="ask-input" placeholder="What is still unresolved near Elm?" autocomplete="off" /><button class="primary">Ask</button></form>
-  </section>
+  <div class="dock">
+    <section class="panel incident-panel"><h2>Incident</h2><dl class="incident" id="incident"></dl></section>
+    <section class="panel queue">
+      <h2>Triage queue <small id="queue-meta"></small></h2>
+      <div id="queue"></div>
+    </section>
+    <section class="panel feed">
+      <h2>Intel feed</h2>
+      <ul id="intel"></ul>
+    </section>
+    <section class="panel log">
+      <h2>Decision log</h2>
+      <ul id="log"></ul>
+    </section>
+    <section class="panel ask">
+      <h2>Ask Ground Control</h2>
+      <ul id="ask"></ul>
+      <form id="ask-form"><input id="ask-input" placeholder="What is still unresolved near Elm?" autocomplete="off" /><button class="primary">Ask</button></form>
+    </section>
+  </div>
 </main>
 <main id="tab-results" class="results" hidden></main>
 <dialog id="brief"><div id="brief-body"></div><form method="dialog"><button class="primary">Close</button></form></dialog>`;
@@ -62,10 +70,17 @@ function select(leadId: string) {
 }
 
 bindQueue(queueRoot, select, openBrief);
-canvas.addEventListener('click', event => {
-  const lead = pickLead(canvas, event);
-  if (lead) select(lead.lead_id);
+mountMap(canvas, element('labels'), leadId => select(leadId));
+document.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(button => {
+  button.onclick = () => {
+    document.querySelectorAll('[data-cam]').forEach(other => other.classList.toggle('on', other === button));
+    setCameraMode(button.dataset.cam as CameraMode);
+  };
 });
+element<HTMLInputElement>('truth').onchange = event => {
+  store.showTruth = (event.target as HTMLInputElement).checked;
+  renderMap();
+};
 element('ask').addEventListener('click', event => {
   const link = (event.target as HTMLElement).closest('[data-lead-link]') as HTMLElement | null;
   if (!link) return;
@@ -131,10 +146,11 @@ function renderStatus() {
 let frame = 0;
 function scheduleDraw() {
   if (frame) return;
-  frame = requestAnimationFrame(() => { frame = 0; drawMap(canvas); });
+  frame = requestAnimationFrame(() => { frame = 0; renderMap(); });
 }
 
 subscribe(type => {
+  if (type === 'truth') element<HTMLInputElement>('truth').checked = store.showTruth;
   renderStatus();
   scheduleDraw();
   if (type !== 'mission.state') {

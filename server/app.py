@@ -143,6 +143,16 @@ async def ask_ground_control(body: Question):
     return await ask(mission.run, body.question, cfg=mission.cfg)
 
 
+@app.get("/api/truth")
+async def truth():
+    """Ground truth for the 3D view's debug toggle; the websocket snapshot stays truth-free."""
+    mission: Mission = app.state.mission
+    if mission.run is None:
+        raise HTTPException(503, "No mission is running.")
+    scene = mission.run.scenario.snapshot(include_truth=True)
+    return {"run_id": mission.run.run_id, "subjects": scene["subjects"], "decoys": scene["decoys"]}
+
+
 @app.get("/api/results/{name}")
 async def results(name: str):
     path = (settings.RESULTS_DIR / name).resolve()

@@ -147,3 +147,12 @@ def test_a_mission_runs_offline_with_grok_and_atlas_unreachable(tmp_path, monkey
         assert "offline" in answer["answer"].lower() or "unavailable" in answer["answer"].lower()
     spooled = (tmp_path / "leads.jsonl")
     assert spooled.is_file() and spooled.read_text().strip(), "writes land in the local JSONL spool"
+
+
+def test_truth_is_served_only_on_request_and_never_in_the_snapshot(client):
+    with client.websocket_connect("/ws/mission") as socket:
+        payload = socket.receive_json()["payload"]
+    assert "subjects" not in payload["scene"] and payload["config"]["FOOTPRINT_M"] > 0
+    assert payload["config"]["ALT_M"] == 40 and payload["config"]["SWEEP_PATH"]
+    body = client.get("/api/truth").json()
+    assert body["run_id"] == payload["run_id"] and body["subjects"] and body["decoys"]

@@ -98,7 +98,9 @@ class MissionRun:
             "config": {"DEMO_SEED": self.cfg.DEMO_SEED, "COVERAGE_CELL_M": self.cfg.COVERAGE_CELL_M,
                        "LIVE_POLICY": self.policy, "PARSE_MODE": self.parse_mode,
                        "TAU_ROUTE": self.cfg.TAU_ROUTE, "MAX_PASSES": self.cfg.MAX_PASSES,
-                       "LIVE_TIME_SCALE": self.cfg.LIVE_TIME_SCALE, "SWEEP_DURATION_S": self.sweep.duration},
+                       "LIVE_TIME_SCALE": self.cfg.LIVE_TIME_SCALE, "SWEEP_DURATION_S": self.sweep.duration,
+                       "ALT_M": self.cfg.ALT_M, "FOV_DEG": self.cfg.FOV_DEG,
+                       "FOOTPRINT_M": self.sweep.footprint_m, "SWEEP_PATH": self.sweep.path},
             "services": {"policy": self.policy, "parse_mode": self.parse_mode,
                          "persistence": "atlas" if self.writer and self.writer.available else "local"},
         }
