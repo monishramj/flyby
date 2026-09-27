@@ -1,11 +1,13 @@
 # Implementation status
 
-Completed: 0.1, 0.4, 6.1, 6.3, 6.4, plus the **two-pathway LPLC2-style readout**
-(now live in the server) and a cached warm-up. θ is still uncalibrated.
-Also done: fly-inspired navigation controller, carport scene, bench and calibration tools,
-and Step 7.4 prep (3D connectome view on a dev page with recorded activity; see below).
-**Blocker:** the looming readout does not yet separate carport collisions from
-safe passes (see the carport section). Next: user decision on a learned readout.
+Completed: 0.1, 0.4, 6.1, 6.3, 6.4, fly-inspired navigation (brake → 90° saccade →
+goal steering), carport scene + bench + calibration tools, Step 7.4 prep (3D connectome
+dev page), and a **fitted cone + learned-units readout** (live when
+`bench/readout_weights.json` exists).
+**Status:** on 100 held-out carport flights the reflex stops in time for 29/63
+collisions (debris 18/20, beam 5/20, posts 6/20) with 3/37 false brakes. Posts look
+limited by eye resolution at 90°; a 60° batch is being evaluated.
+Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
