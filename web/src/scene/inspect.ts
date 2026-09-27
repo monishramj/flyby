@@ -5,6 +5,10 @@
 import * as THREE from 'three';
 
 export const FRAME_R = 96;
+// The camera renders at SUPERSAMPLE× resolution with MSAA, then is area-averaged to
+// FRAME_R² for the fly eye: a sharp, alias-free camera image seen at the eye's resolution.
+export const SUPERSAMPLE = 4;
+const CAM_R = FRAME_R * SUPERSAMPLE;
 export const DT = 0.02;
 export const HOVER_S = 1.0;
 export const A_BRAKE = 4.0;
@@ -66,19 +70,25 @@ export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120): Episod
   };
 }
 
-function noiseTexture(seed: number, size: number, base: number, amp: number, cell: number): THREE.CanvasTexture {
+/** Seeded noise texture: fine grain (amp, cell) plus optional coarse blotches. */
+function noiseTexture(seed: number, size: number, base: number, amp: number, cell: number,
+                      coarseAmp = 0, coarseCell = 0): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
   const r = rng(seed);
+  const coarse: number[] = [];
+  const nc = coarseCell ? size / coarseCell : 0;
+  for (let i = 0; i < nc * nc; i++) coarse.push((r() - 0.5) * 2 * coarseAmp);
   for (let y = 0; y < size; y += cell) for (let x = 0; x < size; x += cell) {
-    const v = Math.max(0, Math.min(255, base + (r() - 0.5) * 2 * amp));
+    const blotch = nc ? coarse[Math.floor(y / coarseCell) * nc + Math.floor(x / coarseCell)] : 0;
+    const v = Math.max(0, Math.min(255, base + blotch + (r() - 0.5) * 2 * amp));
     g.fillStyle = `rgb(${v},${v},${v})`;
     g.fillRect(x, y, cell, cell);
   }
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.magFilter = THREE.NearestFilter;
+  t.anisotropy = 8;
   return t;
 }
 
@@ -90,13 +100,13 @@ export class Inspection {
   readonly scene = new THREE.Scene();
   readonly fpv: THREE.PerspectiveCamera;
   readonly drone = new THREE.Group();
-  readonly target = new THREE.WebGLRenderTarget(FRAME_R, FRAME_R);
+  readonly target = new THREE.WebGLRenderTarget(CAM_R, CAM_R, { samples: 4 });
   k = 0; t = 0; x: number; z: number; yaw: number; speed = 0;
   collided = false; arrived = false; contactK: number | null = null; minClearance = Infinity;
   private posts: THREE.Vector2[] = [];
   private boxes: Box[] = [];
   private debris: Box | null = null;
-  private rgba = new Uint8Array(FRAME_R * FRAME_R * 4);
+  private rgba = new Uint8Array(CAM_R * CAM_R * 4);
 
   constructor(readonly spec: EpisodeSpec) {
     this.x = spec.startX; this.z = spec.startZ; this.yaw = spec.heading;
@@ -105,7 +115,8 @@ export class Inspection {
     s.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(4, 8, 3); s.add(sun);
 
-    const groundTex = noiseTexture(11, 256, 128, 45, 8); groundTex.repeat.set(12, 12);
+    // Concrete-like ground: 2 cm grain with broad stains (texture spans 5 m).
+    const groundTex = noiseTexture(11, 512, 128, 22, 2, 18, 64); groundTex.repeat.set(12, 12);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ map: groundTex }));
     ground.rotation.x = -Math.PI / 2; s.add(ground);
 
@@ -219,17 +230,19 @@ export class Inspection {
     const wasVisible = body.visible; body.visible = false;
     renderer.setRenderTarget(this.target);
     renderer.render(this.scene, this.fpv);
-    renderer.readRenderTargetPixels(this.target, 0, 0, FRAME_R, FRAME_R, this.rgba);
+    renderer.readRenderTargetPixels(this.target, 0, 0, CAM_R, CAM_R, this.rgba);
     renderer.setRenderTarget(null);
     body.visible = wasVisible;
-    const out = new Uint8Array(FRAME_R * FRAME_R);
-    for (let row = 0; row < FRAME_R; row++) {
-      const src = (FRAME_R - 1 - row) * FRAME_R * 4; // WebGL reads bottom-up
-      for (let col = 0; col < FRAME_R; col++) {
-        const i = src + col * 4;
-        out[row * FRAME_R + col] = Math.round(0.299 * this.rgba[i] + 0.587 * this.rgba[i + 1] + 0.114 * this.rgba[i + 2]);
+    const sum = new Float32Array(FRAME_R * FRAME_R);
+    for (let y = 0; y < CAM_R; y++) {
+      const row = FRAME_R - 1 - Math.floor(y / SUPERSAMPLE); // WebGL reads bottom-up
+      for (let x = 0; x < CAM_R; x++) {
+        const i = (y * CAM_R + x) * 4;
+        sum[row * FRAME_R + Math.floor(x / SUPERSAMPLE)] += 0.299 * this.rgba[i] + 0.587 * this.rgba[i + 1] + 0.114 * this.rgba[i + 2];
       }
     }
+    const out = new Uint8Array(FRAME_R * FRAME_R);
+    for (let i = 0; i < out.length; i++) out[i] = Math.round(sum[i] / (SUPERSAMPLE * SUPERSAMPLE));
     return out;
   }
 
