@@ -1,4 +1,4 @@
-﻿diff --git a/.gitignore b/.gitignore
+diff --git a/.gitignore b/.gitignore
 index 670799c..4408233 100644
 --- a/.gitignore
 +++ b/.gitignore
@@ -121,6 +121,216 @@ index 0000000..5bb931c
 +The browser bridges them, and the live connectome consumes reflex activity.
 +Do not add imports between the two Python processes. Hardware performance
 +must be measured on each machine; this rehearsal is on the Windows laptop.
+diff --git a/docs/fly-connectome/HANDOFF.md b/docs/fly-connectome/HANDOFF.md
+new file mode 100644
+index 0000000..e22097e
+--- /dev/null
++++ b/docs/fly-connectome/HANDOFF.md
+@@ -0,0 +1,109 @@
++# FlyBy fly-reflex: handoff (for Monish / whoever runs the demo Mac)
++
++Branch `fly/connectome` (monishramj/flyby). Read this first; details live in
++`STATUS.md` (numbers, history), `INTEGRATION.md` (contract, merge table) and `DEMO.md`.
++
++## What it is
++
++The drone's close-in inspection flies with a **fly-brain reflex in the loop**: a 96×96
++camera frame at up to 50 Hz → pretrained connectome-constrained fly eye (flyvis
++`flow/0000/000`, 45,669 cells) → our engineered looming layer (a centre-weighted
++"collision cone" plus 7 LPLC2-style units, fitted on simulated flights) → a fly-inspired
++controller: cruise to the waypoint → brake on looming → 90° saccade away → hold the
++heading 1 s → steer back. Looming is ignored during the drone's own turns
++(efference copy). The browser shows the flight, the eye view and live activity on real
++connectome neurons (fly-brain, 30,946 left-eye neurons mapped, 100% coverage).
++Everything after the T4/T5 motion cells is engineered, not flyvis cells; say so on screen.
++
++## Run it (Mac or any machine)
++
++```sh
++uv sync --extra fly                                  # CPU PyTorch only in this venv
++uv run --extra fly python -m tools.prepare_flyvis    # once: verified 3.4 MB weights
++uv run --extra fly python -m reflex.server           # :8001 (forces CPU itself)
++cd web && npm ci && npm run dev                      # :5173, proxies /ws/reflex and /reflex
++```
++
++Pages: `/inspect.html` (one inspection flight + live 3D brain), `/flyviz.html` (eye,
++looming trace, circuit), `/connectome.html` (3D view, recorded), `/bench.html`,
++`/capture.html` (tools). Check `http://127.0.0.1:8001/health` shows
++`"model_ready": true, "readout": "learned", "theta_calibrated": true`.
++Do **not** install CUDA PyTorch into this venv (it broke CPU loading and coincided with
++reflex crashes on Windows); use a separate venv for GPU training.
++
++## Integration: the one call
++
++```ts
++import { runInspection } from './scene/flight';
++const outcome = await runInspection(panel, { lead_id, person, waypoints?, maxWallS? });
++send({ type: 'inspect.result', payload: outcome });
++```
++
++- `waypoints`: `[{id, x, z}]` in the scene's metres (x right, forward is −z; the drone
++  starts at z = 6 facing −z; the carport's front beam is at z = 0, roof to z = −5).
++  Default route: `entry (0, 1.5)` → `target (0, −2.5)` (under the roof, where the person
++  is drawn). The last waypoint is the target.
++- `outcome` keeps the rehearsal's fields and adds per-waypoint status:
++  `{lead_id, reached, collided, found: bool|null, waypoints: [{id, status}], t, frames,
++  min_clearance_m, realtime_factor, reflex_ok, late_replies}`;
++  `status` ∈ `reached | skipped | collided | pending` (pending = not attempted).
++  `reached` = the target was reached. Not reached → the mission should send the lead to a
++  human (`awaiting_human`), not mark it empty.
++- A waypoint not reached in **8 s** of flight is skipped, so a route never loops forever.
++- The flight is **lockstep**: each frame waits for the reflex reply, and the sim never runs
++  ahead of real time. `realtime_factor` < 1 means the machine was slower than real time.
++- `attachReflexStream(stream)` (same module) feeds the live eye/brain views.
++
++## Mission timing: the window we need
++
++A 2-waypoint route takes ~7 s of flight when clear and ~10–11 s with one detour; the
++worst case is 1 s hover + 8 s + 8 s = 17 s of flight before it gives up. With the fast
++eye (`aa9afda`) the reflex keeps up with 50 Hz on the Windows laptop (idle, no browser),
++so wall time ≈ flight time + panel setup; the Mac is unmeasured.
++Current triage gives an inspection ~10 s of wall time (`INSPECT_HOVER_S` 40 sim-s at
++`LIVE_TIME_SCALE` 4); the rehearsal capped flights at 8.5 s to beat it.
++**Needed:** either the mission waits for `inspect.result` (recommended, with a hard cap
++of ~30 s wall), or raise `INSPECT_HOVER_S` to ≥ 120 sim-s (30 s wall at ×4). Then pass
++`maxWallS` a few seconds below the mission cap.
++
++## Starting point for the merge
++
++The local rehearsal (Codex, on the Windows laptop, **not pushed**): branch
++`rehearsal/triage-fly`, prototype patch commit `31510af`. It merged `triage` +
++`fly/connectome` (12 conflicts resolved; 153 tests and the production build pass) and ran
++a real mission → `inspect.request` → live flight → `inspect.result` loop. Start from it
++(push it or copy the patch). It predates waypoints: update its panel to read
++`outcome.waypoints` and remove its 8.5 s cap once the mission timing above is changed.
++Conflict resolutions are listed in `INTEGRATION.md`.
++
++## Honest numbers (carport, 90° camera, 1.5 m/s, pretrained eye)
++
++- **Detection, held-out flights** (100 flights never used for tuning): stopped in time for
++  36/63 collisions; 1/37 false brakes plus 2 brakes > 2.5 s early. By obstacle, in time:
++  falling debris 20/20, posts 12/20, sagging beam 4/20.
++- **Route flights, closed loop** (entry → under the roof, efference copy on; 8 flights,
++  seeds 0–2, not a held-out benchmark): 7/8 reached the target, including both
++  debris flights (brake, turn, 0.56 m clearance, back to the target in ~10 s);
++  the sagging-beam flight collided. Reflex-off comparison on this route: the post does
++  not block it, so only debris/beam differ.
++
++## Known limits (say them, don't hide them)
++
++- Thin posts and cables are near the eye's resolution (721 facets; ~3.8° each at 90°).
++- The sagging beam is the weakest case (only its lower edge moves near the centre).
++- The readout was fitted on straight flights; during turns it is blind by design
++  (efference copy). Training on turning flights would remove that.
++- 1.5 m/s is the fitted speed. 1.0 m/s needs a refit (below) before using it.
++- Everything is simulation; the carport is 2.8 × 5 m while triage's carport is 24 × 18 m
++  (treat the scene as a close-in section, or align sizes later).
++
++## Retrain (optional, GPU laptop in a separate CUDA venv)
++
++With the reflex and Vite running (see Run it):
++1. Record: `/bench.html?mode=record&n=40&seed0=100&fov=90` → move `bench/frames` to
++   `frames_train`; `&n=20&seed0=500` → `frames_test`.
++2. Replay: `python -m tools.record_drive frames_train drive_train --device cuda --batch 64`
++   (and for test). Batched replay is bit-identical to the CPU path.
++3. Fit: `python -m tools.fit_readout drive_train drive_test --adapt 0.1 --write`, then
++   restart the reflex. Choose settings on train only; report the test numbers once.
++Worth adding first: more beam variety, turning flights, and `NAV_CRUISE_MPS = 1.0`.
+diff --git a/docs/fly-connectome/INTEGRATION.md b/docs/fly-connectome/INTEGRATION.md
+new file mode 100644
+index 0000000..931a948
+--- /dev/null
++++ b/docs/fly-connectome/INTEGRATION.md
+@@ -0,0 +1,89 @@
++# Integrating the fly reflex with the triage demo (`triage` → `main`)
++
++Reviewed against `origin/triage` at `895250c` on 2026-09-27 (read-only; nothing
++pushed to `triage` or `main`).
++
++## How the two halves fit
++
++The demo is the overhead search from the `triage` branch: the drone sweeps, Laya
++decides, and Grok maintains the picture. When a lead near a structure is approved
++for **close-in inspection**, the mission emits `inspect.request`. The browser then
++flies that inspection in our carport scene, with the fly reflex in the loop, and
++answers with `inspect.result`. Leads not flown in the scene still resolve on the
++mission's `T_INSPECT_S` timer.
++
++```
++mission (:8000) ──inspect.request {lead_id}──▶ browser ──frames──▶ reflex (:8001)
++       ▲                                         │  ◀──commands──
++       └──────inspect.result {lead_id, …}────────┘
++```
++
++## Our side (done on `fly/connectome`)
++
++- `web/src/scene/flight.ts` exports the one call the mission UI needs:
++  ```ts
++  import { runInspection } from './scene/flight';
++  const outcome = await runInspection(panelElement, { lead_id, person });
++  // outcome: { lead_id, reached, collided, found, t, frames, min_clearance_m, late_replies, reflex_ok }
++  ```
++  It renders the chase view, the drone camera and a small HUD into `panelElement`.
++  The flight stops after `maxWallS` (default 18 s) to fit the mission window.
++  If the reflex is not running, it still flies (without the reflex) and reports
++  `reflex_ok: false`.
++- The reflex is reached **through the same origin**. `web/vite.config.ts` proxies
++  `/ws/reflex` and `/reflex/*` to :8001, ahead of the triage proxies for `/ws`
++  and `/api` to :8000. Our `vite.config.ts` already includes the triage proxies.
++- `reflex/` no longer imports the root `runtime.py`, which `triage` deletes;
++  it uses `reflex/threads.py`. The isolation test and reflex config tests moved to
++  `tests/test_reflex_isolation.py` and `tests/test_reflex_config.py`, which
++  `triage` does not touch.
++- The reflex stays a separate process: no server imports, no DB, no network.
++
++## Needed on the mission side (proposals for Monish)
++
++1. **Wire the request (`web/src/main.ts`, `web/src/ws.ts`).** On
++   `inspect.request`, open a panel, `await runInspection(...)`, then send
++   `{type: 'inspect.result', payload: {lead_id, found, collided}}`. Add that
++   command to the `Command` type in `ws.ts`. Fly one inspection at a time and
++   let the others fall back to the timer.
++2. **Result semantics (`server/protocol.py`, `server/mission/loop.py`).**
++   Today `found` overrides truth. A crashed or blocked inspection would therefore
++   mark a real person's lead empty. Proposal:
++   `InspectResult {lead_id, reached: bool, collided: bool, found: bool | None}`.
++   If `reached`, use `found`, or truth when `None`. If not reached, return the
++   lead to a human (e.g. `awaiting_human`, "inspection incomplete"), not
++   `resolved_empty`. Log `collided` in the lead and the metrics.
++3. **Request context (`inspect.request`).** Add `{structure: "carport" | "house",
++   person: bool}` so the scene can draw the person under the roof. `person`
++   comes from simulation truth; the reflex never sees it, only the rendered scene.
++4. **Timer.** `T_INSPECT_S = 90` sim-s at `LIVE_TIME_SCALE = 4` is 22.5 s of wall
++   time. A flight is capped at 18 s, plus the time to open the panel. Suggest
++   pausing the fallback timer while a browser flight is running, or raising it for
++   the flown lead.
++5. **Scale and look.** The mission's carport is `CARPORT_SIZE_M = (24, 18)`. Our
++   inspection carport is 2.8 × 5 m, matching README Step 6.2. Either treat the
++   scene as a close-in section of that structure, or align the sizes. After the
++   merge we can build our carport from the triage Kenney assets
++   (`structure-metal-roof`, `metal-panel`, `planks`, …) so both views match.
++6. **One machine.** Laya and flyvis both run on the Mac's CPU. Set thread
++   counts for both and measure them together before promising 50 Hz.
++
++## Merge rehearsal (fly/connectome `e41de42` + triage `895250c`, local only, re-run after these changes)
++
++Conflicts and how to resolve them:
++
++| File | Resolution |
++| --- | --- |
++| `README.md`, `AGENTS.md` | Keep triage's; add a short fly-reflex section linking `docs/fly-connectome/` |
++| `docs/SETUP.md`, `docs/TEAM.md` (deleted in triage) | Keep ours, updated for the triage commands |
++| `reflex/config.py`, `reflex/server.py` (deleted in triage) | **Keep ours** |
++| `reflex/__init__.py`, `bench/__init__.py` | Keep ours (now non-empty, so a deletion shows as a conflict instead of a silent delete) |
++| `tests/test_config.py` (deleted here, changed in triage) | Take triage's; our reflex tests are in `tests/test_reflex_config.py` |
++| `tests/test_reflex_isolation.py` (git sees it as renamed from `test_scaffold.py`, which triage deletes) | **Keep ours** |
++| `runtime.py` (deleted in triage, unused by us now) | Let it go |
++| `web/vite.config.ts` (both added) | Take ours (it is triage's proxies plus ours) |
++| `uv.lock` | Regenerate with `uv lock` after merging `pyproject.toml` (it merged cleanly and keeps the `fly` extra) |
++| `web/package.json` | Merged cleanly; keep triage's `jsdom` and ranges |
++
++After merging, run `uv lock`, `uv sync --extra fly`, the full pytest suite and
++`npm run build`, then fly one `inspect.request` end to end.
 diff --git a/pyproject.toml b/pyproject.toml
 index cc0be1d..08667cd 100644
 --- a/pyproject.toml
@@ -1301,6 +1511,57 @@ index fd7a26c..bb67e4e 100644
  [[package]]
  name = "yarl"
  version = "1.25.1"
+diff --git a/web/inspect.html b/web/inspect.html
+new file mode 100644
+index 0000000..95bbaf4
+--- /dev/null
++++ b/web/inspect.html
+@@ -0,0 +1,45 @@
++<!doctype html>
++<html lang="en">
++<head>
++<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
++<title>FlyBy Carport Inspection</title>
++<style>
++  :root { color-scheme: dark; }
++  body { margin:0; background:#111914; color:#e8eee7; font:14px/1.45 Inter, "Segoe UI", Arial, sans-serif; }
++  main { display:grid; grid-template-columns: 240px minmax(0,1.4fr) minmax(0,1fr); gap:16px; padding:16px; min-height:100vh; box-sizing:border-box; }
++  #stage, #brain { min-height: 70vh; }
++  #brain { height: 70vh; }
++  h1 { font-size:18px; margin:0 0 10px; }
++  .controls { display:grid; gap:8px; }
++  label { display:grid; gap:4px; font-size:12px; color:#9fb09c; }
++  .toggle { display:flex; gap:8px; align-items:center; color:#e8eee7; }
++  select, input[type=number] { background:#19231b; color:#e8eee7; border:1px solid #344337; border-radius:6px; padding:6px; }
++  button { background:#b5cf89; color:#10160f; border:0; border-radius:6px; padding:10px; font-weight:700; cursor:pointer; }
++  button:disabled { opacity:.5; cursor:default; }
++  #error { color:#ef6a5b; font-size:12px; }
++  pre { font-size:11px; white-space:pre-wrap; color:#9fb09c; }
++  @media (max-width: 1100px) { main { grid-template-columns: 240px minmax(0,1fr); } #brain { grid-column: 1 / -1; } }
++  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
++</style>
++</head>
++<body>
++<main>
++  <aside>
++    <h1>Carport inspection</h1>
++    <div class="controls">
++      <label>Scenario<select id="scenario"></select></label>
++      <label>Seed<input id="seed" type="number" value="0" min="0"></label>
++      <label>Camera FOV<select id="fov"><option value="90">90°</option><option value="120">120°</option><option value="60">60°</option></select></label>
++      <label class="toggle"><input id="reflex" type="checkbox" checked> Fly reflex on</label>
++      <label class="toggle"><input id="person" type="checkbox" checked> Person under the roof</label>
++      <button id="start" type="button">Fly</button>
++    </div>
++    <p id="error"></p>
++    <pre id="result"></pre>
++  </aside>
++  <div id="stage"></div>
++  <div id="brain"></div>
++</main>
++<script type="module" src="/src/inspect-page.ts"></script>
++</body>
++</html>
 diff --git a/web/package-lock.json b/web/package-lock.json
 index f484b6f..05314cc 100644
 --- a/web/package-lock.json
@@ -1356,6 +1617,42 @@ index 41259cb..52adb55 100644
      "jsdom": "^30.1.1",
      "typescript": "7.0.2",
      "vite": "8.3.1"
+diff --git a/web/src/inspect-page.ts b/web/src/inspect-page.ts
+new file mode 100644
+index 0000000..fb91277
+--- /dev/null
++++ b/web/src/inspect-page.ts
+@@ -0,0 +1,30 @@
++// Standalone development page for the close-in inspection (the same code the mission UI
++// calls on inspect.request), with the live 3D connectome view beside it.
++import { SCENARIOS, type Scenario } from './scene/inspect';
++import { runInspection } from './scene/flight';
++import { mountLiveConnectome } from './flyviz/live';
++
++const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
++const scenarioSel = $<HTMLSelectElement>('scenario');
++for (const s of SCENARIOS) scenarioSel.add(new Option(s.replace('_', ' '), s));
++
++// Built now, before any flight; the flight never waits on it.
++const live = mountLiveConnectome($<HTMLDivElement>('brain'));
++(window as unknown as { flybyLive: typeof live }).flybyLive = live;
++
++$<HTMLButtonElement>('start').addEventListener('click', async () => {
++  const button = $<HTMLButtonElement>('start');
++  button.disabled = true;
++  const outcome = await runInspection($<HTMLDivElement>('stage'), {
++    lead_id: `dev-${Date.now()}`,
++    scenario: scenarioSel.value as Scenario,
++    seed: Number($<HTMLInputElement>('seed').value) || 0,
++    fovDeg: Number($<HTMLSelectElement>('fov').value),
++    reflexOn: $<HTMLInputElement>('reflex').checked,
++    person: $<HTMLInputElement>('person').checked,
++    maxWallS: 30,
++  });
++  $<HTMLPreElement>('result').textContent = `inspect.result → ${JSON.stringify(outcome, null, 1)}`;
++  if (!outcome.reflex_ok) $<HTMLParagraphElement>('error').textContent = 'Reflex not reachable: start it with uv run --extra fly python -m reflex.server';
++  button.disabled = false;
++});
 diff --git a/web/src/inspection.ts b/web/src/inspection.ts
 new file mode 100644
 index 0000000..8fa23c8
@@ -1465,172 +1762,6 @@ index 854f6cd..1bc1965 100644
    const decision = lead.decision!;
    const top = Math.max(...Object.values(decision.probs));
    const tau = store.snapshot?.config.TAU_ROUTE ?? 0.5;
-diff --git a/web/src/scene/flight.ts b/web/src/scene/flight.ts
-new file mode 100644
-index 0000000..4807cc4
---- /dev/null
-+++ b/web/src/scene/flight.ts
-@@ -0,0 +1,160 @@
-+// One live close-in inspection flight with the fly reflex in the loop, drawn into a host
-+// element. This is the integration point for the mission UI: on `inspect.request`, call
-+// runInspection(host, request) and send the resolved outcome back as `inspect.result`.
-+// Lockstep: each frame waits for the reflex's reply before the drone moves, and the
-+// simulation never runs ahead of real time. On a slow machine the flight runs slower
-+// than real time, but every command is on time (never a stale reply).
-+import * as THREE from 'three';
-+import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
-+
-+export interface InspectRequest {
-+  lead_id: string;
-+  scenario?: Scenario;   // default: chosen from lead_id
-+  seed?: number;         // default: derived from lead_id
-+  person?: boolean;      // draw a person at the target; omit when unknown
-+  fovDeg?: number;
-+  reflexOn?: boolean;
-+  maxWallS?: number;     // stop the flight after this many wall-clock seconds (mission timer safety)
-+  waypoints?: Waypoint[]; // scene coordinates (x right, z forward is negative); last = target
-+}
-+
-+export interface InspectOutcome {
-+  lead_id: string;
-+  reached: boolean;      // drone got within GOAL_RADIUS of the target
-+  collided: boolean;
-+  found: boolean | null; // reached && person; null when the request did not say
-+  t: number; frames: number; min_clearance_m: number; late_replies: number;
-+  realtime_factor: number; // simulated s per wall-clock s (< 1: the reflex is slower than 50 Hz)
-+  reflex_ok: boolean;    // false if the reflex was unreachable (flown without it)
-+  waypoints: { id: string; status: WaypointStatus }[]; // pending = not attempted before the flight ended
-+}
-+
-+const TARGET_UNDER_ROOF_Z = -2.5;
-+const ENTRY_Z = 1.5; // in front of the carport's front beam
-+const CSS = `
-+.flyby-insp{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;width:100%;height:100%;min-height:320px;font:13px/1.4 system-ui,sans-serif;color:#e8eee7}
-+.flyby-insp canvas.view{width:100%;height:100%;min-height:300px;display:block;border-radius:8px;background:#0b100d}
-+.flyby-insp aside{display:grid;gap:8px;align-content:start}
-+.flyby-insp canvas.fpv{width:100%;aspect-ratio:1;image-rendering:pixelated;border-radius:6px;background:#000}
-+.flyby-insp .cap{font-size:11px;color:#9fb09c;margin:0}
-+.flyby-insp .state{font-weight:700;padding:5px 8px;border-radius:6px;background:#19231b;text-transform:uppercase;letter-spacing:.04em}
-+.flyby-insp .state.act{background:#e0a33c;color:#1b1307}.flyby-insp .state.bad{background:#ef6a5b;color:#fff}.flyby-insp .state.good{background:#6cc48a;color:#0d1b12}
-+.flyby-insp .row{display:flex;justify-content:space-between;border-bottom:1px solid #344337;padding:2px 0;font-variant-numeric:tabular-nums}
-+.flyby-insp .row span{color:#9fb09c}
-+@media (max-width:640px){.flyby-insp{grid-template-columns:1fr}}`;
-+
-+function hashSeed(s: string): number {
-+  let h = 2166136261;
-+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-+  return (h >>> 0) % 100000;
-+}
-+
-+let reflexLink: ReflexLink | null = null;
-+let episodeCounter = Math.floor(Math.random() * 1e6) * 100;
-+let sideChannel: ReflexSideChannel | null = null;
-+
-+/** Receive the reflex's eye.layout and live viz packets (e.g. a flyviz VizStream). */
-+export function attachReflexStream(side: ReflexSideChannel | null) {
-+  sideChannel = side;
-+}
-+
-+async function reflex(): Promise<ReflexLink | null> {
-+  if (reflexLink) return reflexLink;
-+  try {
-+    const link = new ReflexLink({ handle: (data) => sideChannel?.handle(data) ?? false });
-+    await link.open();
-+    reflexLink = link;
-+  } catch {
-+    reflexLink = null;
-+  }
-+  return reflexLink;
-+}
-+
-+export async function runInspection(host: HTMLElement, req: InspectRequest): Promise<InspectOutcome> {
-+  if (!document.getElementById('flyby-insp-css')) {
-+    const style = document.createElement('style'); style.id = 'flyby-insp-css'; style.textContent = CSS;
-+    document.head.appendChild(style);
-+  }
-+  host.innerHTML = `<div class="flyby-insp"><canvas class="view"></canvas><aside>
-+    <canvas class="fpv" width="220" height="220"></canvas>
-+    <p class="cap">Drone camera → fly eye (96 × 96)</p><div class="hud"></div></aside></div>`;
-+  const view = host.querySelector<HTMLCanvasElement>('canvas.view')!;
-+  const fpvCanvas = host.querySelector<HTMLCanvasElement>('canvas.fpv')!;
-+  const hud = host.querySelector<HTMLDivElement>('.hud')!;
-+  const fpvCtx = fpvCanvas.getContext('2d')!;
-+  const fpvImage = new ImageData(FRAME_R, FRAME_R);
-+  const off = document.createElement('canvas'); off.width = off.height = FRAME_R;
-+
-+  const seed = req.seed ?? hashSeed(req.lead_id);
-+  const scenario = req.scenario ?? SCENARIOS[seed % SCENARIOS.length];
-+  // Default route: through the middle of the carport opening, then under the roof.
-+  const waypoints = req.waypoints ?? [
-+    { id: 'entry', x: 0, z: ENTRY_Z },
-+    { id: 'target', x: 0, z: TARGET_UNDER_ROOF_Z },
-+  ];
-+  const spec = makeSpec(seed, scenario, req.fovDeg ?? 90,
-+                        { goalZ: waypoints[waypoints.length - 1].z, person: req.person ?? false, waypoints });
-+  const insp = new Inspection(spec);
-+  (insp.drone.getObjectByName('body') as THREE.Mesh).visible = true;
-+  const renderer = new THREE.WebGLRenderer({ canvas: view, antialias: true });
-+  const chase = new THREE.PerspectiveCamera(55, 1, 0.05, 100);
-+  const link = await reflex();
-+  const reflexOn = req.reflexOn ?? true;
-+  const episode = ++episodeCounter;
-+  const maxWall = (req.maxWallS ?? 40) * 1000;
-+  let command: Command | null = null;
-+
-+  const resize = () => {
-+    const w = view.clientWidth || 640, h = view.clientHeight || 360;
-+    renderer.setSize(w, h, false); chase.aspect = w / h; chase.updateProjectionMatrix();
-+  };
-+  resize();
-+
-+  const drawFpv = (pixels: Uint8Array) => {
-+    for (let i = 0; i < pixels.length; i++) { const j = i * 4; fpvImage.data[j] = fpvImage.data[j + 1] = fpvImage.data[j + 2] = pixels[i]; fpvImage.data[j + 3] = 255; }
-+    off.getContext('2d')!.putImageData(fpvImage, 0, 0);
-+    fpvCtx.imageSmoothingEnabled = false; fpvCtx.drawImage(off, 0, 0, fpvCanvas.width, fpvCanvas.height);
-+  };
-+  const drawHud = () => {
-+    const c = command;
-+    const state = insp.collided ? 'collided' : insp.arrived ? 'reached target' : !link ? 'no reflex' : insp.t < HOVER_S ? 'hover' : (c?.cmd ?? '—').replace('_', ' ');
-+    const cls = insp.collided ? 'bad' : insp.arrived ? 'good' : c?.cmd && c.cmd !== 'none' ? 'act' : '';
-+    hud.innerHTML = `<div class="state ${cls}">${state}</div>
-+      <div class="row"><span>t</span><b>${insp.t.toFixed(1)} s</b></div>
-+      <div class="row"><span>speed</span><b>${insp.speed.toFixed(2)} m/s</b></div>
-+      <div class="row"><span>waypoint</span><b>${Math.min(insp.wp + 1, spec.waypoints.length)} / ${spec.waypoints.length} · ${insp.goal().dist.toFixed(1)} m</b></div>
-+      <div class="row"><span>looming S</span><b>${c?.S == null ? '—' : c.S.toFixed(2)}</b></div>`;
-+  };
-+
-+  const nextPaint = () => new Promise<number>((r) => requestAnimationFrame(r));
-+  const started = performance.now();
-+  while (!insp.done() && performance.now() - started < maxWall) {
-+    const pixels = insp.frame(renderer);
-+    drawFpv(pixels);
-+    if (link) {
-+      const g = insp.goal();
-+      const reply = await link.request(encodeFrame(episode, insp.k, reflexOn, MODE.live, g.bearing, g.dist, pixels));
-+      command = typeof reply.k === 'number' ? (reply as Command) : null;
-+    }
-+    insp.step(command, false);
-+    // A slower-than-real-time reflex still needs a visible chase view and HUD.
-+    // Only the pacing wait depends on whether simulation time is ahead of wall time.
-+    const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
-+    chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
-+    chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
-+    renderer.setRenderTarget(null);
-+    renderer.render(insp.scene, chase);
-+    drawHud();
-+    while (insp.t * 1000 > performance.now() - started) await nextPaint();
-+  }
-+  drawHud();
-+  const r = insp.result();
-+  const wallS = (performance.now() - started) / 1000;
-+  return {
-+    lead_id: req.lead_id, reached: r.arrived, collided: r.collided,
-+    found: req.person === undefined ? null : r.arrived && req.person,
-+    t: r.t, frames: r.frames, min_clearance_m: r.min_clearance_m,
-+    late_replies: 0, reflex_ok: link !== null, waypoints: r.waypoints,
-+    realtime_factor: +(r.t / Math.max(wallS, 1e-3)).toFixed(2),
-+  };
-+}
 diff --git a/web/src/store.ts b/web/src/store.ts
 index 44aaad7..748cb54 100644
 --- a/web/src/store.ts
