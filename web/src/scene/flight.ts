@@ -137,16 +137,15 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
       command = typeof reply.k === 'number' ? (reply as Command) : null;
     }
     insp.step(command, false);
-    // Never run ahead of real time; draw the chase view once per screen refresh.
-    if (insp.t * 1000 > performance.now() - started || !link) {
-      const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
-      chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
-      chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
-      renderer.setRenderTarget(null);
-      renderer.render(insp.scene, chase);
-      drawHud();
-      while (insp.t * 1000 > performance.now() - started) await nextPaint();
-    }
+    // A slower-than-real-time reflex still needs a visible chase view and HUD.
+    // Only the pacing wait depends on whether simulation time is ahead of wall time.
+    const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
+    chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
+    chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
+    renderer.setRenderTarget(null);
+    renderer.render(insp.scene, chase);
+    drawHud();
+    while (insp.t * 1000 > performance.now() - started) await nextPaint();
   }
   drawHud();
   const r = insp.result();
