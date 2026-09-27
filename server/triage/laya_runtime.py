@@ -79,4 +79,9 @@ def load(cfg=settings):
     if missing:
         raise FileNotFoundError("Laya model is not installed. Run `uv run python -m tools.setup_laya`. Missing: " + ", ".join(missing))
     from laya import Agent
-    return LayaRuntime(Agent(str(directory), device=cfg.LAYA_DEVICE, compile=False))
+    agent = Agent(str(directory), device=cfg.LAYA_DEVICE, compile=False)
+    if cfg.LAYA_SCORER:
+        import torch
+        # Only the scorer is fine-tuned on simulated search leads; the encoder and head are stock Laya.
+        agent.model.scorer.load_state_dict(torch.load(cfg.LAYA_SCORER, map_location="cpu")["scorer"])
+    return LayaRuntime(agent)

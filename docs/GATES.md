@@ -53,6 +53,39 @@ From `batch/run_eval.py` over seeds 0–19 (209 leads):
 weakly (AUC ≈ 0.59 on first-pass leads, vs 0.81 for the detector). Do not present it as a
 calibration win. Laya's contribution is the action recommendation, urgency and routing.
 
+## Fine-tuning Laya (tried, not shipped)
+
+`uv run python -m tools.laya_finetune` retrains only Laya's `scorer` (about 1M of its 421M
+parameters) on 971 simulated decision states (seeds 1000–1059), labelled from the simulator's
+truth, and tests on 220 states from seeds 100–111. Urgency is distilled toward stock Laya so it does
+not drift.
+
+| Scorer | Action accuracy | Routed to a human |
+| --- | --- | --- |
+| stock | 0.486 | 0.53 |
+| fine-tuned, 60 epochs | 0.491 | 0.48 |
+
+Heavier training and class weighting (exploratory sweeps, three training seeds each) reached
+accuracy 0.53–0.62, but only by auto-closing more real people: every setting sat on the same
+curve of fewer leads for the human versus more people missed, with wide seed-to-seed variance.
+
+**Why:** the information is not in what Laya reads. In the simulator a person under a roof
+scores *lower* on the camera than debris does (`NOISE`: 0.40 vs 0.45), and the state only
+carries the camera score band, image size, and whether the lead is by a structure:
+
+| Camera | Where | Share that are real people |
+| --- | --- | --- |
+| low | open | 13% |
+| low | by a building or roof | 61% |
+| medium | open / structure | 47% / 76% |
+| high | any | 96–97% |
+
+Stock Laya already sends low-score leads by a building to close-in inspection, so the people it
+auto-closes are low-score people in the open, who read exactly like debris. The real lever is how
+sure Laya must be before it may auto-close (stock Laya, same 220 states): at 50%, 53% of leads
+reach a human and 9 of 87 people are auto-closed; at 60%, 70% reach a human and 1 is auto-closed.
+That is a product decision, not a model fix, so `TAU_ROUTE` is unchanged.
+
 ## GATE T7 — demo seed
 
 `uv run python -m tools.demo_check --find-seed` → **`DEMO_SEED = 7`**

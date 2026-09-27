@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     LAYA_MODEL_ID: str = "convaiinnovations/laya"
     LAYA_REVISION: str = "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
     LAYA_DEVICE: str = "cpu"
+    LAYA_SCORER: str = ""  # path to a scorer from tools/laya_finetune.py; empty = stock Laya (fine-tuning did not help, docs/GATES.md)
     # GATE T0.2: Laya scored 0.25 on the twenty hand cases across all four criteria
     # rewordings, so the live policy is the rule. See docs/GATES.md.
     LIVE_POLICY: Literal["laya", "rule"] = "laya"
