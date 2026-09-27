@@ -15,7 +15,14 @@ import urllib.request
 
 import websockets
 
-PORT = 9340
+TIMEOUT_S = 1800  # give up instead of waiting forever on a page that never finishes
+
+
+def free_port() -> int:
+    import socket
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
 
 
 async def evaluate(ws, expr, msg_id):
@@ -29,24 +36,27 @@ async def evaluate(ws, expr, msg_id):
 
 async def capture(flights, fov, every, out: Path):
     chrome = sorted(glob.glob("/opt/pw-browsers/chromium-*/chrome-linux/chrome"))[0]
+    port = free_port()
     url = f"http://127.0.0.1:5173/capture.html?flights={flights}&fov={fov}&every={every}"
     proc = subprocess.Popen([chrome, "--headless=new", "--no-sandbox", "--use-angle=swiftshader",
-                             "--enable-unsafe-swiftshader", f"--remote-debugging-port={PORT}", url],
+                             "--enable-unsafe-swiftshader", f"--remote-debugging-port={port}", url],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(60):
             try:
-                pages = json.load(urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json"))
+                pages = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json"))
                 page = next(p for p in pages if "capture.html" in p.get("url", ""))
                 break
             except Exception:
                 time.sleep(1)
         async with websockets.connect(page["webSocketDebuggerUrl"], max_size=None) as ws:
-            i = 0
+            i, started = 0, time.monotonic()
             while True:
                 i += 1
                 if await evaluate(ws, "window.__capture && window.__capture.done", i):
                     break
+                if time.monotonic() - started > TIMEOUT_S:
+                    raise SystemExit(f"capture timed out after {TIMEOUT_S} s (are Vite :5173 and the reflex :8001 up?)")
                 await asyncio.sleep(2)
             error = await evaluate(ws, "window.__capture.error || null", i + 1)
             if error:
