@@ -1,6 +1,6 @@
 // Records closed-loop flights for offline playback. Lockstep: each frame waits for
 // the reflex reply, so the recording is what the reflex actually did, frame by frame.
-// URL: capture.html?flights=post:0:on,post:0:off&fov=90&every=2
+// URL: capture.html?flights=post:0:on,post:0:off&fov=90&every=2[&route=1]
 // Result: window.__capture = { done, flights: [{ spec, reflex_on, result, frames: [...] }] }
 import * as THREE from 'three';
 import { HOVER_S, Inspection, MODE, ReflexLink, encodeFrame, makeSpec, type Command, type Scenario } from './scene/inspect';
@@ -26,7 +26,11 @@ async function run() {
   for (const item of (q.get('flights') ?? 'post:0:on').split(',')) {
     const [scenario, seed, onOff] = item.split(':');
     const reflexOn = onOff !== 'off';
-    const spec = makeSpec(Number(seed), scenario as Scenario, fov);
+    // route=1: the mission inspection route (entry in front of the carport, then under the roof).
+    const spec = q.get('route') === '1'
+      ? makeSpec(Number(seed), scenario as Scenario, fov, { goalZ: -2.5, person: true, waypoints: [
+          { id: 'entry', x: 0, z: 1.5 }, { id: 'target', x: 0, z: -2.5 }] })
+      : makeSpec(Number(seed), scenario as Scenario, fov);
     const insp = new Inspection(spec);
     (insp.drone.getObjectByName('body') as THREE.Mesh).visible = true;
     episode += 1;

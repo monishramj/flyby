@@ -210,3 +210,14 @@ def test_a_brake_soon_after_a_saccade_turns_the_same_way_again():
     ctl2 = Controller(THETA)
     outs = [ctl2.step(HOVER + k, THETA + 1 if k in (0, again) else 0.0, THETA if k == 0 else -THETA, True) for k in range(again + LATCH + 3)]
     assert outs[again + LATCH]["cmd"] == "saccade_right"
+
+
+def test_a_brake_with_the_goal_behind_turns_toward_the_goal_not_around():
+    end = LATCH + SACCADE
+    again = end + SUPPRESS + 5
+    ctl = Controller(THETA)
+    # first brake: looming on the left -> turn right; second brake soon after, goal now far to the left
+    outs = [ctl.step(HOVER + k, THETA + 1 if k in (0, again) else 0.0, THETA if k == 0 else 0.0, True,
+                     goal_bearing=0.0 if k < again else -2.5) for k in range(again + LATCH + 3)]
+    assert outs[LATCH]["cmd"] == "saccade_right"
+    assert outs[again + LATCH]["cmd"] == "saccade_left"

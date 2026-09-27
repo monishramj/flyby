@@ -11,7 +11,9 @@ commit:  hold the new heading for COMMIT_S before goal steering resumes, so the
          drone clears the obstacle instead of swinging straight back into it.
          A brake within CHAIN_S of the last saccade turns the same way again
          (flies chain saccades in one direction), so it works around an obstacle
-         instead of alternating left and right. Then cruise again.
+         instead of alternating left and right, unless the goal has fallen more than
+         GOAL_BEHIND_DEG off the heading: then it turns toward the goal side, so a
+         detour never becomes a circle. Then cruise again.
 arrived: within GOAL_RADIUS_M of the goal.
 The first HOVER_S of an episode ignores looming: the scene's onset after the
 gray warm-up is not approach (the scene hovers during this time).
@@ -24,7 +26,7 @@ import math
 from pathlib import Path
 
 from reflex.config import (
-    BRAKE_LATCH_S, CHAIN_S, COMMIT_S, DT_S, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
+    BRAKE_LATCH_S, CHAIN_S, COMMIT_S, DT_S, GOAL_BEHIND_DEG, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
     SACCADE_RATE_DPS, SACCADE_SUPPRESS_S, THETA_UNCALIBRATED, THRESHOLDS_PATH,
 )
 
@@ -78,8 +80,11 @@ class Controller:
             self.state = "cruise"
         if k >= self.suppress_until_k and S > self.theta:
             chained = self.last_saccade_end_k is not None and k - self.last_saccade_end_k <= self.chain_frames
+            goal_behind = abs(math.degrees(goal_bearing)) > GOAL_BEHIND_DEG
             self.state, self.until_k = "brake", k + self.latch_frames
-            if chained:
+            if goal_behind:
+                self.turn = 1.0 if goal_bearing >= 0 else -1.0  # never turn further away from the goal
+            elif chained:
                 pass  # keep turning the same way around the obstacle
             elif abs(dLR) > 0.5 * self.theta:
                 self.turn = 1.0 if dLR > 0 else -1.0  # dLR > 0: looming on the left, turn right

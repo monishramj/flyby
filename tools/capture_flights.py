@@ -34,10 +34,10 @@ async def evaluate(ws, expr, msg_id):
             return msg["result"]["result"].get("value")
 
 
-async def capture(flights, fov, every, out: Path):
+async def capture(flights, fov, every, out: Path, route=False):
     chrome = sorted(glob.glob("/opt/pw-browsers/chromium-*/chrome-linux/chrome"))[0]
     port = free_port()
-    url = f"http://127.0.0.1:5173/capture.html?flights={flights}&fov={fov}&every={every}"
+    url = f"http://127.0.0.1:5173/capture.html?flights={flights}&fov={fov}&every={every}" + ("&route=1" if route else "")
     proc = subprocess.Popen([chrome, "--headless=new", "--no-sandbox", "--use-angle=swiftshader",
                              "--enable-unsafe-swiftshader", f"--remote-debugging-port={port}", url],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -69,7 +69,8 @@ async def capture(flights, fov, every, out: Path):
                 name = f"{flight['spec']['scenario']}_{flight['spec']['seed']}_{'on' if flight['reflex_on'] else 'off'}.json"
                 (out / name).write_text(data)
                 r = flight["result"]
-                print(f"{name}: {len(flight['frames'])} frames, collided={r['collided']} arrived={r['arrived']} t={r['t']}")
+                wp = " ".join(f"{w['id']}:{w['status']}" for w in r.get("waypoints", []))
+                print(f"{name}: {len(flight['frames'])} frames, collided={r['collided']} arrived={r['arrived']} t={r['t']} | {wp}")
     finally:
         proc.terminate()
         proc.wait()
@@ -80,9 +81,10 @@ def main():
     parser.add_argument("flights")
     parser.add_argument("--fov", type=int, default=90)
     parser.add_argument("--every", type=int, default=2)
+    parser.add_argument("--route", action="store_true", help="fly the mission route (entry, then target under the roof)")
     parser.add_argument("--out", type=Path, default=Path("results/capture"))
     args = parser.parse_args()
-    asyncio.run(capture(args.flights, args.fov, args.every, args.out))
+    asyncio.run(capture(args.flights, args.fov, args.every, args.out, args.route))
 
 
 if __name__ == "__main__":

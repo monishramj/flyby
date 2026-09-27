@@ -25,6 +25,7 @@ SACCADE_RATE_DPS = 180.0    # a drone cannot match a fly's ~1000°/s saccades
 SACCADE_SUPPRESS_S = 0.3    # looming ignored this long after a saccade (rotation flow)
 COMMIT_S = 1.0              # after a saccade, hold the new heading this long (no goal steering)
 CHAIN_S = 3.0               # a brake this soon after a saccade turns the same way again
+GOAL_BEHIND_DEG = 100.0     # if the goal is further off-heading than this, turn toward it (no circling)
 GOAL_TURN_DPS = 60.0        # goal steering: yaw rate = GOAL_TURN_DPS · sin(goal bearing)
 GOAL_RADIUS_M = 0.5         # arrived when closer than this
 HOVER_S = 1.0               # each flight starts hovering; looming ignored meanwhile (scene onset)

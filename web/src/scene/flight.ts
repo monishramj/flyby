@@ -1,9 +1,11 @@
 // One live close-in inspection flight with the fly reflex in the loop, drawn into a host
 // element. This is the integration point for the mission UI: on `inspect.request`, call
 // runInspection(host, request) and send the resolved outcome back as `inspect.result`.
-// Live mode never waits on the reflex: each 20 ms tick uses the newest reply.
+// Lockstep: each frame waits for the reflex's reply before the drone moves, and the
+// simulation never runs ahead of real time. On a slow machine the flight runs slower
+// than real time, but every command is on time (never a stale reply).
 import * as THREE from 'three';
-import { DT, FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario } from './inspect';
+import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
 
 export interface InspectRequest {
   lead_id: string;
@@ -12,7 +14,8 @@ export interface InspectRequest {
   person?: boolean;      // draw a person at the target; omit when unknown
   fovDeg?: number;
   reflexOn?: boolean;
-  maxWallS?: number;     // stop the flight after this many seconds (mission timer safety)
+  maxWallS?: number;     // stop the flight after this many wall-clock seconds (mission timer safety)
+  waypoints?: Waypoint[]; // scene coordinates (x right, z forward is negative); last = target
 }
 
 export interface InspectOutcome {
@@ -21,10 +24,13 @@ export interface InspectOutcome {
   collided: boolean;
   found: boolean | null; // reached && person; null when the request did not say
   t: number; frames: number; min_clearance_m: number; late_replies: number;
+  realtime_factor: number; // simulated s per wall-clock s (< 1: the reflex is slower than 50 Hz)
   reflex_ok: boolean;    // false if the reflex was unreachable (flown without it)
+  waypoints: { id: string; status: WaypointStatus }[]; // pending = not attempted before the flight ended
 }
 
 const TARGET_UNDER_ROOF_Z = -2.5;
+const ENTRY_Z = 1.5; // in front of the carport's front beam
 const CSS = `
 .flyby-insp{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;width:100%;height:100%;min-height:320px;font:13px/1.4 system-ui,sans-serif;color:#e8eee7}
 .flyby-insp canvas.view{width:100%;height:100%;min-height:300px;display:block;border-radius:8px;background:#0b100d}
@@ -81,8 +87,13 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
 
   const seed = req.seed ?? hashSeed(req.lead_id);
   const scenario = req.scenario ?? SCENARIOS[seed % SCENARIOS.length];
+  // Default route: through the middle of the carport opening, then under the roof.
+  const waypoints = req.waypoints ?? [
+    { id: 'entry', x: 0, z: ENTRY_Z },
+    { id: 'target', x: 0, z: TARGET_UNDER_ROOF_Z },
+  ];
   const spec = makeSpec(seed, scenario, req.fovDeg ?? 90,
-                        { goalZ: TARGET_UNDER_ROOF_Z, person: req.person ?? false });
+                        { goalZ: waypoints[waypoints.length - 1].z, person: req.person ?? false, waypoints });
   const insp = new Inspection(spec);
   (insp.drone.getObjectByName('body') as THREE.Mesh).visible = true;
   const renderer = new THREE.WebGLRenderer({ canvas: view, antialias: true });
@@ -90,8 +101,8 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   const link = await reflex();
   const reflexOn = req.reflexOn ?? true;
   const episode = ++episodeCounter;
-  const maxWall = (req.maxWallS ?? 18) * 1000;
-  let command: Command | null = null, stale = 0;
+  const maxWall = (req.maxWallS ?? 40) * 1000;
+  let command: Command | null = null;
 
   const resize = () => {
     const w = view.clientWidth || 640, h = view.clientHeight || 360;
@@ -111,44 +122,40 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
     hud.innerHTML = `<div class="state ${cls}">${state}</div>
       <div class="row"><span>t</span><b>${insp.t.toFixed(1)} s</b></div>
       <div class="row"><span>speed</span><b>${insp.speed.toFixed(2)} m/s</b></div>
-      <div class="row"><span>target</span><b>${insp.goal().dist.toFixed(1)} m</b></div>
+      <div class="row"><span>waypoint</span><b>${Math.min(insp.wp + 1, spec.waypoints.length)} / ${spec.waypoints.length} · ${insp.goal().dist.toFixed(1)} m</b></div>
       <div class="row"><span>looming S</span><b>${c?.S == null ? '—' : c.S.toFixed(2)}</b></div>`;
   };
 
-  return new Promise<InspectOutcome>((resolve) => {
-    const started = performance.now();
-    let last = started, acc = 0;
-    const tick = (now: number) => {
-      acc += Math.min(100, now - last); last = now;
-      let finished = insp.done() || now - started > maxWall;
-      while (!finished && acc >= DT * 1000) {
-        acc -= DT * 1000;
-        const reply = link?.latest;
-        if (reply && typeof reply.k === 'number') {
-          if (reply.k !== insp.k && insp.k > 0) stale += 1; // reply to the frame sent last tick
-          command = reply as Command;
-        }
-        insp.step(command, false);
-        const pixels = insp.frame(renderer);
-        drawFpv(pixels);
-        const g = insp.goal();
-        link?.request(encodeFrame(episode, insp.k, reflexOn, MODE.live, g.bearing, g.dist, pixels));
-        finished = insp.done();
-      }
+  const nextPaint = () => new Promise<number>((r) => requestAnimationFrame(r));
+  const started = performance.now();
+  while (!insp.done() && performance.now() - started < maxWall) {
+    const pixels = insp.frame(renderer);
+    drawFpv(pixels);
+    if (link) {
+      const g = insp.goal();
+      const reply = await link.request(encodeFrame(episode, insp.k, reflexOn, MODE.live, g.bearing, g.dist, pixels));
+      command = typeof reply.k === 'number' ? (reply as Command) : null;
+    }
+    insp.step(command, false);
+    // Never run ahead of real time; draw the chase view once per screen refresh.
+    if (insp.t * 1000 > performance.now() - started || !link) {
       const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
       chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
       chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
       renderer.setRenderTarget(null);
       renderer.render(insp.scene, chase);
       drawHud();
-      if (!finished) { requestAnimationFrame(tick); return; }
-      const r = insp.result();
-      resolve({
-        lead_id: req.lead_id, reached: r.arrived, collided: r.collided,
-        found: req.person === undefined ? null : r.arrived && req.person,
-        t: r.t, frames: r.frames, min_clearance_m: r.min_clearance_m, late_replies: stale, reflex_ok: link !== null,
-      });
-    };
-    requestAnimationFrame(tick);
-  });
+      while (insp.t * 1000 > performance.now() - started) await nextPaint();
+    }
+  }
+  drawHud();
+  const r = insp.result();
+  const wallS = (performance.now() - started) / 1000;
+  return {
+    lead_id: req.lead_id, reached: r.arrived, collided: r.collided,
+    found: req.person === undefined ? null : r.arrived && req.person,
+    t: r.t, frames: r.frames, min_clearance_m: r.min_clearance_m,
+    late_replies: 0, reflex_ok: link !== null, waypoints: r.waypoints,
+    realtime_factor: +(r.t / Math.max(wallS, 1e-3)).toFixed(2),
+  };
 }

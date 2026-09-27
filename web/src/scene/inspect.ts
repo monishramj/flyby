@@ -19,6 +19,7 @@ export const DRONE_Y = 1.2;
 export const HEADER_BYTES = 20;
 export const MAX_T_S = 25;
 export const GOAL_RADIUS = 0.5;
+export const WAYPOINT_TIMEOUT_S = 8; // a waypoint not reached in this long is skipped, not chased forever
 export const MODE = { live: 0, bench_record: 1, bench_closed: 2 } as const;
 
 const POST_X = 1.4, POST_R = 0.05, POST_H = 2.3, BACK_Z = -5, BEAM_TOP = 2.3;
@@ -34,7 +35,11 @@ export interface EpisodeSpec {
   startX: number; startZ: number; heading: number; goalX: number; goalZ: number;
   beamSag: number; debris: { x: number; tFall: number } | null;
   person: boolean; // a person lying at the goal (mission inspections)
+  waypoints: Waypoint[]; // flown in order; the last one is the goal
 }
+
+export interface Waypoint { id: string; x: number; z: number }
+export type WaypointStatus = 'pending' | 'reached' | 'skipped' | 'collided';
 
 export function rng(seed: number): () => number {
   let a = (seed * 2654435761) >>> 0;
@@ -48,7 +53,7 @@ export function rng(seed: number): () => number {
 }
 
 export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120,
-                         opts: { goalZ?: number; person?: boolean } = {}): EpisodeSpec {
+                         opts: { goalZ?: number; person?: boolean; waypoints?: Waypoint[] } = {}): EpisodeSpec {
   const r = rng(seed * 31 + SCENARIOS.indexOf(scenario));
   const u = (a: number, b: number) => a + (b - a) * r();
   const side = r() < 0.5 ? -1 : 1;
@@ -67,6 +72,7 @@ export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120,
     seed, scenario, fovDeg, startX, startZ,
     heading: u(-2, 2) * Math.PI / 180,
     goalX: startX, goalZ: opts.goalZ ?? -8, person: opts.person ?? false,
+    waypoints: opts.waypoints ?? [{ id: 'target', x: startX, z: opts.goalZ ?? -8 }],
     beamSag: scenario === 'beam' ? u(0.95, 1.3) : u(0, 0.3),
     debris: scenario === 'debris' ? { x: startX + u(-0.15, 0.15), tFall: tArrive - 2.5 / CRUISE_MPS - fallS + u(-0.3, 0.3) } : null,
   };
@@ -105,6 +111,7 @@ export class Inspection {
   readonly target = new THREE.WebGLRenderTarget(CAM_R, CAM_R, { samples: 4 });
   k = 0; t = 0; x: number; z: number; yaw: number; speed = 0;
   collided = false; arrived = false; contactK: number | null = null; minClearance = Infinity;
+  wp = 0; wpStartT = 0; wpStatus: WaypointStatus[];
   private posts: THREE.Vector2[] = [];
   private boxes: Box[] = [];
   private debris: Box | null = null;
@@ -112,6 +119,7 @@ export class Inspection {
 
   constructor(readonly spec: EpisodeSpec) {
     this.x = spec.startX; this.z = spec.startZ; this.yaw = spec.heading;
+    this.wpStatus = spec.waypoints.map(() => 'pending' as WaypointStatus);
     const s = this.scene;
     s.background = new THREE.Color(0xb8bdb8);
     s.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.6));
@@ -144,6 +152,10 @@ export class Inspection {
 
     const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.05, 24), new THREE.MeshLambertMaterial({ color: 0xffffff }));
     goal.position.set(spec.goalX, 0.03, spec.goalZ); s.add(goal);
+    for (const w of spec.waypoints.slice(0, -1)) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.02, 8, 32), new THREE.MeshLambertMaterial({ color: 0xe0a33c }));
+      ring.rotation.x = Math.PI / 2; ring.position.set(w.x, 0.03, w.z); ring.name = `waypoint-${w.id}`; s.add(ring);
+    }
     if (spec.person) {
       const skin = new THREE.MeshLambertMaterial({ color: 0xc9a27e }), cloth = new THREE.MeshLambertMaterial({ color: 0x2f5d8a });
       const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.1, 4, 12), cloth);
@@ -191,8 +203,10 @@ export class Inspection {
     this.drone.rotation.set(0, -this.yaw, 0);
   }
 
+  /** Bearing and distance to the current waypoint (the last one once all are resolved). */
   goal(): { bearing: number; dist: number } {
-    const dx = this.spec.goalX - this.x, dz = this.spec.goalZ - this.z;
+    const w = this.spec.waypoints[Math.min(this.wp, this.spec.waypoints.length - 1)];
+    const dx = w.x - this.x, dz = w.z - this.z;
     const fwd = dx * Math.sin(this.yaw) - dz * Math.cos(this.yaw);
     const right = dx * Math.cos(this.yaw) + dz * Math.sin(this.yaw);
     return { bearing: Math.atan2(right, fwd), dist: Math.hypot(dx, dz) };
@@ -229,8 +243,21 @@ export class Inspection {
     this.pose();
     const c = this.clearance();
     this.minClearance = Math.min(this.minClearance, c);
-    if (c <= 0) { this.collided = true; this.contactK = this.k; }
-    if (this.goal().dist < GOAL_RADIUS) this.arrived = true;
+    if (c <= 0) {
+      this.collided = true; this.contactK = this.k;
+      if (this.wp < this.wpStatus.length) this.wpStatus[this.wp] = 'collided';
+      return;
+    }
+    if (this.wp >= this.wpStatus.length) return;
+    if (this.goal().dist < GOAL_RADIUS) this.nextWaypoint('reached');
+    else if (!scripted && this.t >= HOVER_S && this.t - this.wpStartT > WAYPOINT_TIMEOUT_S) this.nextWaypoint('skipped');
+  }
+
+  private nextWaypoint(status: WaypointStatus) {
+    this.wpStatus[this.wp] = status;
+    this.wp += 1;
+    this.wpStartT = this.t;
+    if (this.wp >= this.wpStatus.length) this.arrived = this.wpStatus[this.wpStatus.length - 1] === 'reached';
   }
 
   /** Render the FPV camera to FRAME_R² grayscale, row 0 = top of the image. */
@@ -256,12 +283,13 @@ export class Inspection {
   }
 
   done(): boolean {
-    return this.collided || this.arrived || this.t >= MAX_T_S || this.z < this.spec.goalZ - 1;
+    return this.collided || this.wp >= this.wpStatus.length || this.t >= MAX_T_S || this.z < this.spec.goalZ - 1;
   }
 
   result() {
     return { collided: this.collided, contact_k: this.contactK, arrived: this.arrived, t: +this.t.toFixed(2),
-             frames: this.k, min_clearance_m: +this.minClearance.toFixed(3), end: [+this.x.toFixed(3), +this.z.toFixed(3)] };
+             frames: this.k, min_clearance_m: +this.minClearance.toFixed(3), end: [+this.x.toFixed(3), +this.z.toFixed(3)],
+             waypoints: this.spec.waypoints.map((w, i) => ({ id: w.id, status: this.wpStatus[i] })) };
   }
 }
 
