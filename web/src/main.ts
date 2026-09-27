@@ -1,6 +1,8 @@
 import './style.css';
 import { mountMap, renderMap, setCameraMode, type CameraMode } from './map';
-import { briefHtml, renderAsk, renderIncident, renderIntel, renderLog } from './panels';
+import { briefHtml, dismissed, renderAssistant, renderIncident, renderIntel } from './panels';
+// Ask Ground Control is disabled in the UI; the /api/ask backend is intact. Restore renderAsk to re-enable.
+// import { renderAsk } from './panels';
 import { bindQueue, renderQueue } from './queue';
 import { renderResults } from './results';
 import { notify, store, subscribe, type Lead } from './store';
@@ -40,15 +42,17 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       <h2>Intel feed</h2>
       <ul id="intel"></ul>
     </section>
-    <section class="panel log">
-      <h2>Decision log</h2>
-      <ul id="log"></ul>
+    <section class="panel assistant">
+      <h2>Grok assistant <small>suggests only · you decide</small></h2>
+      <ul id="assistant"></ul>
     </section>
+    <!-- Ask Ground Control (disabled)
     <section class="panel ask">
       <h2>Ask Ground Control</h2>
       <ul id="ask"></ul>
       <form id="ask-form"><input id="ask-input" placeholder="What is still unresolved near Elm?" autocomplete="off" /><button class="primary">Ask</button></form>
     </section>
+    -->
   </div>
 </main>
 <main id="tab-results" class="results" hidden></main>
@@ -57,7 +61,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = element<HTMLCanvasElement>('map');
 const queueRoot = element('queue');
-const exchanges: { question: string; answer: string; tool_calls: any[] }[] = [];
+// const exchanges: { question: string; answer: string; tool_calls: any[] }[] = [];
 
 function openBrief(lead: Lead) {
   element('brief-body').innerHTML = briefHtml(lead);
@@ -70,6 +74,23 @@ function select(leadId: string) {
 }
 
 bindQueue(queueRoot, select, openBrief);
+element('assistant').addEventListener('click', event => {
+  const target = event.target as HTMLElement;
+  const accept = target.closest('[data-accept]') as HTMLElement | null;
+  const dismiss = target.closest('[data-dismiss]') as HTMLElement | null;
+  const link = target.closest('[data-lead-link]') as HTMLElement | null;
+  const proposal = store.snapshot?.proposals?.find(p => p.proposal_id === (accept ?? dismiss)?.dataset[accept ? 'accept' : 'dismiss']);
+  if (accept && proposal) {
+    // Highlighting is the only effect: no lead changes state until the commander approves or overrides it.
+    store.highlight = store.highlight.join() === proposal.lead_ids.join() ? [] : proposal.lead_ids;
+    store.selected = store.highlight[0] ?? '';
+    notify('selected');
+  } else if (dismiss && proposal) {
+    dismissed.add(proposal.proposal_id);
+    if (store.highlight.join() === proposal.lead_ids.join()) store.highlight = [];
+    notify('selected');
+  } else if (link) select(link.dataset.leadLink!);
+});
 mountMap(canvas, element('labels'), leadId => select(leadId));
 document.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(button => {
   button.onclick = () => {
@@ -81,12 +102,14 @@ element<HTMLInputElement>('truth').onchange = event => {
   store.showTruth = (event.target as HTMLInputElement).checked;
   renderMap();
 };
+/* Ask Ground Control (disabled)
 element('ask').addEventListener('click', event => {
   const link = (event.target as HTMLElement).closest('[data-lead-link]') as HTMLElement | null;
   if (!link) return;
   event.preventDefault();
   select(link.dataset.leadLink!);
 });
+*/
 
 const seedInput = element<HTMLInputElement>('seed');
 element('start').onclick = () => send({ type: 'mission.control', payload: { cmd: 'start' } });
@@ -109,6 +132,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(button => {
   };
 });
 
+/* Ask Ground Control (disabled)
 element<HTMLFormElement>('ask-form').onsubmit = async event => {
   event.preventDefault();
   const input = element<HTMLInputElement>('ask-input');
@@ -116,7 +140,7 @@ element<HTMLFormElement>('ask-form').onsubmit = async event => {
   if (!question) return;
   input.value = '';
   exchanges.push({ question, answer: 'Asking Ground Control…', tool_calls: [] });
-  renderAsk(element('ask'), exchanges);
+  // renderAsk(element('ask'), exchanges);
   try {
     const response = await fetch('/api/ask', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ question }) });
     const body = await response.json();
@@ -124,8 +148,9 @@ element<HTMLFormElement>('ask-form').onsubmit = async event => {
   } catch {
     exchanges[exchanges.length - 1] = { question, answer: 'Ground Control is offline. No action was taken.', tool_calls: [] };
   }
-  renderAsk(element('ask'), exchanges);
+  // renderAsk(element('ask'), exchanges);
 };
+*/
 
 function renderStatus() {
   const snapshot = store.snapshot;
@@ -140,7 +165,7 @@ function renderStatus() {
   if (!snapshot || !state) return;
   const counts = snapshot.leads.reduce<Record<string, number>>((total, lead) => ({ ...total, [lead.status]: (total[lead.status] ?? 0) + 1 }), {});
   element('mission-meta').textContent = `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.finished ? 'sweep complete' : state.running ? 'flying' : 'paused'}`;
-  element('queue-meta').textContent = `${(counts.awaiting_human ?? 0) + (counts.awaiting_approval ?? 0)} waiting · ${counts.dispatched ?? 0} dispatched · ${counts.ignored ?? 0} ignored`;
+  element('queue-meta').textContent = `${(counts.awaiting_human ?? 0) + (counts.awaiting_approval ?? 0)} waiting · ${counts.dispatched ?? 0} dispatched · ${counts.auto_closed ?? 0} auto-closed · ${counts.ignored ?? 0} ignored`;
 }
 
 let frame = 0;
@@ -156,8 +181,8 @@ subscribe(type => {
   if (type !== 'mission.state') {
     renderQueue(queueRoot);
     renderIntel(element('intel'));
-    renderLog(element('log'));
     renderIncident(element('incident'));
+    renderAssistant(element('assistant'));
   }
   if (type === 'dispatch.created' && store.dispatched) {
     const lead = store.snapshot?.leads.find(item => item.lead_id === store.dispatched);
@@ -169,6 +194,6 @@ window.addEventListener('resize', scheduleDraw);
 renderStatus();
 renderQueue(queueRoot);
 renderIntel(element('intel'));
-renderLog(element('log'));
-renderAsk(element('ask'), exchanges);
+renderAssistant(element('assistant'));
+// renderAsk(element('ask'), exchanges);
 connect();

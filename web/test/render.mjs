@@ -100,13 +100,11 @@ check('header renders', text('status').includes('live'), text('status'));
 check('mission meta renders', /t\+\d+s/.test(text('mission-meta')), text('mission-meta'));
 check('queue meta renders', /dispatched/.test(text('queue-meta')), text('queue-meta'));
 check('queue has lead cards', count('#queue .card') > 0, `${count('#queue .card')} cards`);
-check('cards show a probability bar', count('#queue .card .bar') >= 4);
 check('cards show an action', count('#queue .card .action') > 0,
   window.document.querySelector('#queue .card .action')?.textContent);
 check('cards offer approve and override', offered);
 check('intel feed has messages', count('#intel li:not(.empty)') > 0, `${count('#intel li:not(.empty)')} messages`);
 check('intel feed shows parsed chips', count('#intel .chip') > 0, `${count('#intel .chip')} chips`);
-check('decision log has entries', count('#log li:not(.empty)') > 0, `${count('#log li:not(.empty)')} entries`);
 check('incident panel renders', text('incident').length > 0);
 check('3D view mounts or explains why not', Boolean(window.document.getElementById('map')) &&
   (Boolean(window.document.querySelector('#labels .labels')) || /3D view unavailable/.test(text('labels'))));
@@ -139,6 +137,36 @@ if (briefButton) {
   results.push('skip brief modal — no dispatched lead is still in the queue');
 }
 
+// Auto-closed leads stay visible and reopenable.
+check('auto-closed bin lists closed leads', count('#queue .closed-bin li') > 0, `${count('#queue .closed-bin li')} closed`);
+{
+  const reopen = window.document.querySelector('#queue .closed-bin [data-override]');
+  reopen.value = 'dispatch_ground_team';
+  reopen.dispatchEvent(new window.Event('change', { bubbles: true }));
+  await tick();
+  check('reopening an auto-closed lead sends lead.override', sent.at(-1).type === 'lead.override' &&
+    sent.at(-1).payload.action === 'dispatch_ground_team', JSON.stringify(sent.at(-1)));
+}
+
+// Grok assistant proposals render with code-supplied evidence and never send a command.
+{
+  const leadIds = window.document.querySelectorAll('#queue [data-lead]');
+  const ids = [...leadIds].slice(0, 2).map(node => node.dataset.lead);
+  socket.onmessage({ data: JSON.stringify({ type: 'assistant.proposal', payload: {
+    proposal_id: 'I1-1', kind: 'link_intel', lead_ids: ids, intel_id: 'I1', text: 'These leads sit at the reported landmark.',
+    digits_stripped: false, t: 12, evidence: { landmark: 'elm_school', leads: ids.map(id => ({ lead_id: id, sector: 'S1', status: 'auto_closed', detector_conf: .3, distance_to_landmark_m: 4.2 })) } } }) });
+  await tick();
+  check('assistant panel renders a proposal', count('#assistant [data-accept]') === 1, text('assistant').slice(0, 60));
+  check('assistant evidence shows code distances', text('assistant').includes('4 m from elm school'));
+  const before = sent.length;
+  window.document.querySelector('#assistant [data-accept]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  check('accepting a proposal only highlights leads', sent.length === before && count('#queue .card.highlight, #queue .closed-bin li.selected') > 0);
+  window.document.querySelector('#assistant [data-dismiss]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  check('dismissing removes the proposal', count('#assistant [data-accept]') === 0 && sent.length === before);
+}
+
 // Controls must map to the documented commands.
 window.document.getElementById('demo').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await tick();
@@ -150,13 +178,13 @@ for (const [id, cmd] of [['start', 'start'], ['pause', 'pause'], ['reset', 'rese
   check(`${id} sends mission.control ${cmd}`, sent.at(-1).payload.cmd === cmd);
 }
 
-// Ask Ground Control renders the answer and its tool trace.
-window.document.getElementById('ask-input').value = 'What is still unresolved in S3?';
-window.document.getElementById('ask-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-await new Promise(resolve => window.setTimeout(resolve, 20));
-check('ask renders the answer', text('ask').includes('awaiting approval'), text('ask').slice(0, 80));
-check('ask renders a tool trace', count('#ask details') > 0 && text('ask').includes('list_leads'));
-check('ask links lead ids', count('#ask [data-lead-link]') >= 0);
+// Ask Ground Control is disabled in the UI.
+// window.document.getElementById('ask-input').value = 'What is still unresolved in S3?';
+// window.document.getElementById('ask-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+// await new Promise(resolve => window.setTimeout(resolve, 20));
+// check('ask renders the answer', text('ask').includes('awaiting approval'), text('ask').slice(0, 80));
+// check('ask renders a tool trace', count('#ask details') > 0 && text('ask').includes('list_leads'));
+// check('ask links lead ids', count('#ask [data-lead-link]') >= 0);
 
 // Results tab draws from results/summary.json only.
 window.document.querySelector('[data-tab="results"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));

@@ -10,11 +10,14 @@ from server.mission.loop import PENDING, TERMINAL, MissionRun
 from server.mission.truth import optimal_action
 from server.store.writer import Writer
 
+DECIDED = {"ignored", "auto_closed", "reimaging", "awaiting_approval", "awaiting_human"}
+HUMAN = {"dispatched", "inspecting", "reimaging", "ignored"}
 VALID = {
-    "captured": {"ignored", "reimaging", "awaiting_approval", "awaiting_human"},
-    "awaiting_approval": {"dispatched", "inspecting", "reimaging", "ignored", "awaiting_human", "awaiting_approval"},
-    "awaiting_human": {"dispatched", "inspecting", "reimaging", "ignored", "awaiting_approval", "awaiting_human"},
-    "reimaging": {"ignored", "awaiting_approval", "awaiting_human", "reimaging"},
+    "captured": DECIDED,
+    "awaiting_approval": DECIDED | HUMAN,
+    "awaiting_human": DECIDED | HUMAN,
+    "auto_closed": DECIDED | HUMAN,
+    "reimaging": DECIDED,
     "inspecting": {"awaiting_approval", "resolved_empty"},
     "dispatched": set(), "ignored": set(), "resolved_empty": set(),
 }
@@ -205,3 +208,34 @@ async def test_both_policies_complete_a_run(policy):
     run, _ = await run_fast(seed=11, policy=policy, sim_human=True)
     assert all(lead["history"][0]["source"] == ("rule" if policy == "rule" else "laya") for lead in run.leads.values())
     assert all(lead["baseline_rule"] for lead in run.leads.values())
+
+
+def open_lead(lead_id, conf):
+    return {"lead_id": lead_id, "t_capture": 1.0, "x": 150.0, "y": 150.0, "sector": "S5", "pass": 1,
+            "detector_conf": conf, "box_px": 40.0, "altitude_m": 40, "near_structure": False,
+            "nearest_landmark": "elm_school", "truth": {"is_person": False, "kind": "decoy", "type": "debris"}}
+
+
+async def test_ignore_only_auto_closes_a_low_band_and_stays_reopenable():
+    run = MissionRun(3, fast_settings(), fast=True, policy="laya", runtime=FakeRuntime(action="ignore"))
+    low, medium = open_lead("L-low", .2), open_lead("L-medium", .6)
+    for lead in (low, medium):
+        run._register(lead)
+        await run._decide(lead)
+    assert low["status"] == "auto_closed", "a low-band ignore is closed but kept reviewable"
+    assert medium["status"] == "awaiting_human", "an ignore on a non-low band needs a human"
+    assert run.override("L-low", "dispatch_ground_team") is True and low["status"] == "dispatched"
+    await run.stop()
+
+
+async def test_new_intel_re_decides_an_auto_closed_lead():
+    run = MissionRun(3, fast_settings(), fast=True, policy="laya", runtime=FakeRuntime(action="ignore"))
+    lead = open_lead("L-low", .2)
+    run._register(lead)
+    await run._decide(lead)
+    assert lead["status"] == "auto_closed"
+    run.leads = {"L-low": lead}
+    await run.incident.apply(IntelParse.model_validate({"reports": [{"sector": "S5", "urgency": "critical",
+                             "subject_count": 2, "source": "firsthand"}]}), "I1", 5.0)
+    assert len(lead["history"]) == 2, "the changed context triggers a second decision"
+    await run.stop()

@@ -2,41 +2,43 @@
 
 Every number here came from a tool in this repo. Re-run the command to reproduce it.
 
-## GATE T0.2 — Laya accuracy (failed, fallback taken)
+## GATE T0.2 — Laya accuracy (passed after fixing the state format)
+
+**Root cause of the earlier failure.** Laya is a ModernBERT text classifier. The state was sent
+as raw JSON (`{"detector_band": "high", "box_px": 40, ...}`); Laya cannot read number thresholds
+or key names and answered `close_in_inspect` for 18 of 20 cases with P(person) ≈ 0.01. Rewording
+only the criteria never fixed this. The state is now rendered as short plain-language sentences
+(`server/triage/laya_runtime.render`) and the criteria use the same words.
 
 `uv run python -m tools.laya_smoke --device cpu` → `results/laya_smoke_cpu.json`
 
-| Criteria variant | Action accuracy on the 20 hand cases | What Laya answered |
-| --- | --- | --- |
-| 0 (README §4.2 wording) | 0.25 | `close_in_inspect` ×18, `ignore` ×2 |
-| 1 (band-explicit reword) | 0.25 | `ignore` ×20 |
-| 2 (state-field reword) | 0.25 | `ignore` ×20 |
-| 3 (outcome reword) | 0.25 | `ignore` ×20 |
+| State format / criteria | Action accuracy, 20 hand cases |
+| --- | --- |
+| JSON, README criteria (before) | 0.25 |
+| Prose, README criteria | 0.10 |
+| Prose, plain-language criteria (final) | **0.75** |
 
-Chance is 0.25. All three permitted rewordings were tried and none reached 0.50, so the
-gate's fallback applies: **`LIVE_POLICY=rule`**. Laya still loads, and its decisions and
-P(person) are recorded by `tools/laya_check.py` and the `laya` arm of `batch/run_eval.py`.
+Gate passed (≥ 0.50): **`LIVE_POLICY=laya`**. The criteria were tuned on 198 first-pass leads
+from seeds 100–111 (action accuracy 0.54 vs the rule's 0.50 there).
 
-Laya's maximum action probability never exceeded 0.60 on any mission lead, so under
-`policy="laya"` every lead routes to a human — confirmed by the T2.4 sweep below.
-
-**Latency.** In-mission p95 is 494 ms on CPU (higher than the 348 ms smoke figure, because
-mission states carry more context). `LAYA_TIMEOUT_MS = 1500` ≈ 3 × p95. The previous value
-of 500 ms made 14 of 23 leads fall back on timeout; at 1500 ms the fallback rate is 0.00.
+**Latency.** In-mission p95 ≈ 175 ms on CPU. `LAYA_TIMEOUT_MS = 1500` is kept (≈ 3× the
+loaded p95 with queue effects); fallback rate is 0.00.
 
 ## GATE T2.4 — routing threshold
 
-`uv run python -m tools.laya_check` → `results/laya_check.json`
+`uv run python -m tools.laya_check --seeds 100 … 107` → `results/laya_check.json` (79 leads)
 
-| TAU_ROUTE | auto-handled share | auto accuracy |
+| TAU_ROUTE | routed share | auto accuracy |
 | --- | --- | --- |
-| 0.40 – 0.80 | 0.00 | n/a |
+| 0.40 | 0.04 | 0.461 |
+| 0.45 | 0.14 | 0.471 |
+| **0.50** | **0.39** | **0.542** |
+| 0.55 | 0.65 | 0.464 |
+| 0.60 | 0.89 | 0.556 |
 
-No threshold reaches 0.90 auto-handled accuracy, and no threshold routes only ~30%,
-because Laya's top probability stays below 0.40. `TAU_ROUTE` is therefore **frozen at the
-README default 0.60**; it governs the `laya` arm only. Under `policy="rule"` the
-probabilities are one-hot, so leads reach a human through the pass-`MAX_PASSES` reimage
-rule and through fallbacks rather than through the probability gate.
+No threshold reaches 0.90 auto accuracy (Laya's probabilities stay flat, top action ≈ 0.4–0.5),
+so `TAU_ROUTE` is **frozen at 0.50**, the value nearest 30% routed. Laya action accuracy on these
+leads is 0.443 vs the rule's 0.405 (small sample).
 
 ## Calibration result (reported, not assumed)
 
@@ -44,13 +46,12 @@ From `batch/run_eval.py` over seeds 0–19 (209 leads):
 
 | Signal | ECE (10 equal bins) |
 | --- | --- |
-| Laya P(person) | 0.4548 |
-| Raw detector confidence | 0.1297 |
+| Laya P(person) | 0.2477 |
+| Raw detector confidence | 0.1138 |
 
-**Laya's P(person) is worse calibrated than raw detector confidence.** Laya returns
-P(person) ≈ 0.006 for every lead, including clearly visible people. The pitch must say
-this plainly: the calibration claim is a measured result that came out negative, which is
-why the live policy is the deterministic rule.
+**Laya's P(person) is still worse calibrated than raw detector confidence** and discriminates
+weakly (AUC ≈ 0.59 on first-pass leads, vs 0.81 for the detector). Do not present it as a
+calibration win. Laya's contribution is the action recommendation, urgency and routing.
 
 ## GATE T7 — demo seed
 
@@ -66,20 +67,14 @@ why the live policy is the deterministic rule.
 
 `uv run python -m batch.run_eval` → `results/summary.json`
 
-| Arm | Time to dispatch (median) | vs manual @120 s/image | vs manual @10 s/image | Subjects found |
-| --- | --- | --- | --- | --- |
-| rule | 125.0 s | 4090 s → 32.7× | 240 s → 1.9× | 62/141 |
-| laya | 100.8 s | 4090 s → 40.6× | 240 s → 2.4× | 81/141 |
+| Arm | Time to dispatch (median) | vs manual @120 s/image | vs manual @10 s/image | Subjects found | Final action accuracy |
+| --- | --- | --- | --- | --- | --- |
+| rule | 125.0 s | 4090 s → 32.7× | 240 s → 1.9× | 62/141 | 0.689 |
+| laya | 80.2 s | 4090 s → 51.0× | 240 s → 3.0× | 72/141 | 0.813 |
 
-The `laya` arm looks faster only because Laya routes every lead to the simulated human,
-who then picks the §4.4 optimal action 90% of the time. It measures the simulated
-operator, not Laya. Quote the **rule** arm.
+Laya's `ignore` auto-closes only on a low detector band; auto-closed leads are re-decided when intel changes their context. Laya routes 44.5% of leads to the simulated human, who then picks the §4.4 optimal action 90% of
+the time, so part of the laya arm's edge is the simulated operator, not Laya. First-decision
+accuracy (before any human) is 0.44 for laya vs 0.42 for the rule.
 
-`under_structure` subjects are reported separately (median 256.8 s, rule arm): overhead
+`under_structure` subjects are reported separately (median 394.1 s, laya arm): overhead
 review cannot see them at all, so they are excluded from the primary comparison.
-
-## Open items
-
-- `MONGODB_URI` is empty in `.env`, so all persistence goes to `logs/*.jsonl`. Set the URI
-  to log to Atlas; nothing else changes. `uv run python -m tools.atlas_smoke` reports which
-  target is live.

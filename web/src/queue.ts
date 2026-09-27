@@ -27,10 +27,10 @@ export function rank(leads: Lead[]): Lead[] {
 }
 
 function probabilityBar(lead: Lead) {
-  const probs = lead.decision?.probs;
-  if (!probs) return '';
+  const decision = lead.decision;
+  if (decision?.source !== 'laya') return ''; // the rule policy's probabilities are one-hot, not evidence
   return `<div class="bars">${ACTIONS.map(action => {
-    const share = Math.round((probs[action] ?? 0) * 100);
+    const share = Math.round((decision.probs[action] ?? 0) * 100);
     return `<div class="bar" title="${LABELS[action]} ${share}%"><span style="width:${share}%;background:${colors[action]}"></span><em>${share}</em></div>`;
   }).join('')}</div>`;
 }
@@ -40,7 +40,7 @@ function card(lead: Lead): string {
   const action = decision?.action ?? 'ignore';
   const needsHuman = lead.status === 'awaiting_human';
   const settled = !PENDING.includes(lead.status);
-  return `<article class="card ${settled ? 'settled' : ''} ${store.selected === lead.lead_id ? 'selected' : ''}" data-lead="${lead.lead_id}">
+  return `<article class="card ${settled ? 'settled' : ''} ${store.selected === lead.lead_id ? 'selected' : ''} ${store.highlight.includes(lead.lead_id) ? 'highlight' : ''}" data-lead="${lead.lead_id}">
     <header>
       <span class="thumb" style="--tone:${colors[action]}" aria-hidden="true">
         <span class="box" style="width:${Math.min(38, Math.max(8, lead.box_px / 2))}px;height:${Math.min(38, Math.max(8, lead.box_px / 2))}px"></span>
@@ -53,6 +53,7 @@ function card(lead: Lead): string {
         ${settled ? `<span class="tag done">${lead.status}</span>` : ''}
         ${needsHuman ? '<span class="tag human">needs human</span>' : ''}
         ${lead.reranked ? '<span class="tag rerank">re-ranked</span>' : ''}
+        ${store.highlight.includes(lead.lead_id) ? '<span class="tag rerank">grok linked</span>' : ''}
         ${decision?.used_fallback ? '<span class="tag warn">fallback</span>' : ''}
       </div>
     </header>
@@ -75,11 +76,41 @@ function card(lead: Lead): string {
   </article>`;
 }
 
+/** Why an auto-closed lead might still be a survivor, from the incident picture only. */
+export function closedRisk(lead: Lead): string[] {
+  const context = lead.state?.context ?? {};
+  return [
+    context.near_last_known_point ? 'near last known point' : '',
+    ['critical', 'high'].includes(context.sector_priority) ? `${context.sector_priority} sector` : '',
+    context.reported_subjects_in_sector ? `${context.reported_subjects_in_sector} reported in sector` : '',
+  ].filter(Boolean);
+}
+
+let binOpen = false;
+
+function closedRow(lead: Lead): string {
+  const risk = closedRisk(lead);
+  return `<li class="${risk.length ? 'risky' : ''} ${store.selected === lead.lead_id || store.highlight.includes(lead.lead_id) ? 'selected' : ''}" data-lead="${lead.lead_id}">
+    <b>${lead.lead_id}</b> <small>${lead.sector} · detector ${pct(lead.detector_conf)}</small>
+    ${risk.map(reason => `<span class="tag warn">${reason}</span>`).join('')}
+    <span class="row-actions"><button data-approve="${lead.lead_id}" class="ghost">Confirm ignore</button>
+    <select data-override="${lead.lead_id}" aria-label="Reopen ${lead.lead_id}">
+      <option value="">Reopen…</option>
+      ${ACTIONS.filter(item => item !== 'ignore').map(item => `<option value="${item}">${LABELS[item]}</option>`).join('')}
+    </select></span></li>`;
+}
+
 export function renderQueue(root: HTMLElement) {
   const leads = store.snapshot ? rank(store.snapshot.leads) : [];
-  root.innerHTML = leads.length
+  const closed = (store.snapshot?.leads ?? []).filter(lead => lead.status === 'auto_closed')
+    .sort((a, b) => closedRisk(b).length - closedRisk(a).length || b.detector_conf - a.detector_conf);
+  root.innerHTML = (leads.length
     ? leads.map(card).join('')
-    : '<p class="empty">No leads are waiting on a decision.</p>';
+    : '<p class="empty">No leads are waiting on a decision.</p>')
+    + (closed.length ? `<details class="closed-bin" ${binOpen ? 'open' : ''}>
+      <summary>Auto-closed (${closed.length})${closed.some(lead => closedRisk(lead).length) ? ' · <span class="warn">review flagged</span>' : ''}</summary>
+      <ul>${closed.map(closedRow).join('')}</ul></details>` : '');
+  root.querySelector('.closed-bin')?.addEventListener('toggle', event => { binOpen = (event.target as HTMLDetailsElement).open; });
 }
 
 export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void, onBrief: (lead: Lead) => void) {

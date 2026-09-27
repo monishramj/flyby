@@ -1,6 +1,5 @@
 """Local-only official Laya adapter. Acquisition belongs to tools.setup_laya."""
 from math import isfinite
-from copy import deepcopy
 from time import perf_counter
 
 from server.config import settings
@@ -12,39 +11,35 @@ QUESTIONS = {
         "type": "choice",
         "instructions": "What should incident command do with this drone lead?",
         "criteria": {
-            "dispatch_ground_team": "likely a real person who is clearly visible and reachable; send a crew",
-            "reimage_zoom": "possibly a person but the image is small or partly hidden; take another zoomed pass",
-            "close_in_inspect": "possibly a person inside or under a structure the overhead camera cannot see into",
-            "ignore": "likely debris, an animal, a warm spot, or a false alarm",
+            "dispatch_ground_team": "highly confident it is a person; send a crew",
+            "reimage_zoom": "unsure, or the image is tiny; take a closer picture",
+            "close_in_inspect": "unsure and next to a building or under a roof",
+            "ignore": "not confident it is a person; ignore",
         },
     },
     "urgency": {"type": "score", "instructions": "How urgent is this lead?", "criteria": ["low", "moderate", "high", "critical"]},
-    "is_person": {"type": "noul", "instructions": "Is this lead a real person?"},
+    "is_person": {"type": "noul", "instructions": "Is this a real person?"},
 }
 
 
-def questions_for_variant(index=0):
-    questions = deepcopy(QUESTIONS)
-    variants = (
-        None,
-        ("high detector confidence and a clear, adequately sized person detection; dispatch a rescue crew",
-         "medium detector confidence, a small image, or partial visibility without a nearby structure; zoom and reimage",
-         "medium detector confidence and near_structure is true: a possible person obscured by a structure; inspect closely",
-         "low detector confidence indicates debris, an animal, or a false alarm; ignore"),
-        ("detector_band is high: strong evidence of a visible person; send a ground team",
-         "detector_band is medium and near_structure is false: uncertain or small person image; take a zoom pass",
-         "detector_band is medium and near_structure is true: possible person under cover; close inspection",
-         "detector_band is low: weak evidence and likely a false positive; ignore the detection"),
-        ("high confidence or a clear second-pass image means rescue personnel should be dispatched",
-         "uncertain first-pass detection with a small box and no structure needs another zoom image",
-         "uncertain detection near a structure may hide a survivor and requires a close inspection",
-         "weak low-confidence detection is probably an inanimate object or other false alarm"),
-    )
-    if not 0 <= index < len(variants):
-        raise ValueError("Criteria variant must be 0–3")
-    if variants[index] is not None:
-        questions["action"]["criteria"] = dict(zip(ACTIONS, variants[index]))
-    return questions
+def render(state):
+    """Laya reads text, not JSON thresholds: say what the state means in plain words."""
+    lead, context = state["lead"], state.get("context", {})
+    words = {"high": "highly confident", "medium": "unsure", "low": "not confident"}[lead["detector_band"]]
+    parts = [f"The detector is {words} ({round(lead['detector_conf'] * 100)}%) this is a person.",
+             "It is next to a building or under a roof." if lead.get("near_structure") else "It is out in the open.",
+             {"small": "The image is tiny.", "medium": "The image is clear.", "large": "The image is large and clear."}[lead["size_band"]]]
+    if lead.get("passes", 1) > 1:
+        parts.append("This is a zoomed second look.")
+    if "sector_priority" in context:
+        parts.append(f"The sector is {context['sector_priority']} priority.")
+    if context.get("hazards_nearby"):
+        parts.append("Nearby hazards: " + ", ".join(h.replace("_", " ") for h in context["hazards_nearby"]) + ".")
+    if context.get("near_last_known_point"):
+        parts.append("It is near the last known point of a missing person.")
+    if context.get("reported_subjects_in_sector"):
+        parts.append(f"{context['reported_subjects_in_sector']} people were reported in this sector.")
+    return " ".join(parts)
 
 
 def normalize(result, latency_ms):
@@ -73,7 +68,7 @@ class LayaRuntime:
 
     def system_one(self, state, questions=QUESTIONS):
         start = perf_counter()
-        result = self.agent.system_one(state, questions)
+        result = self.agent.system_one(render(state) if isinstance(state, dict) else state, questions)
         return normalize(result, (perf_counter() - start) * 1000)
 
 

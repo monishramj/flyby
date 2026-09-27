@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     REIMAGE_BOX_MULT: float = 3.0
     REIMAGE_CONF_SHIFT: dict[str, float] = {"subject": 0.20, "decoy": -0.10}
     T_INSPECT_S: float = 90
-    TAU_ROUTE: float = 0.60
+    TAU_ROUTE: float = 0.50
     # Three times the p95 measured inside a mission by tools/laya_check.py (494 ms on CPU).
     LAYA_TIMEOUT_MS: float = 1500
     RHO: float = 0.9
@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     GROK_BRIEF_TIMEOUT_S: float = 8
     GROK_ASK_TIMEOUT_S: float = 20
     ASK_MAX_TOOL_ROUNDS: int = 4
+    GROK_ASSISTANT_TIMEOUT_S: float = 30
+    ASSISTANT_MAX_TOOL_ROUNDS: int = 6
     SIM_HUMAN_ROUTED_S: float = 20
     SIM_HUMAN_APPROVE_S: float = 5
     HANDOFF_S: float = 60
@@ -71,7 +73,7 @@ class Settings(BaseSettings):
     LAYA_DEVICE: str = "cpu"
     # GATE T0.2: Laya scored 0.25 on the twenty hand cases across all four criteria
     # rewordings, so the live policy is the rule. See docs/GATES.md.
-    LIVE_POLICY: Literal["laya", "rule"] = "rule"
+    LIVE_POLICY: Literal["laya", "rule"] = "laya"
     PARSE_MODE: Literal["oracle", "grok"] = "grok"
     # T7: tools/demo_check.py --find-seed showed seed 7 routes leads to a human,
     # re-ranks the queue at t+99 s, and reaches three dispatches.

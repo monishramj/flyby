@@ -72,8 +72,8 @@ async def evaluate(seeds, arms, cfg, *, writer=None):
     results, subjects_by_arm = {}, {}
     for policy in arms:
         results[policy], subjects_by_arm[policy] = await run_arm(policy, seeds, cfg, runtime, writer)
-    gate = (f"LIVE_POLICY={cfg.LIVE_POLICY}; README GATE T0.2 set the live policy to the rule "
-            f"after Laya scored 0.25 on the twenty hand cases.")
+    gate = (f"LIVE_POLICY={cfg.LIVE_POLICY}; Laya reads a plain-language rendering of the state "
+            f"(JSON scored 0.25 on the twenty hand cases; prose scores 0.75).")
     summary = metrics.summarize(results, subjects_by_arm, list(seeds), cfg, policy_gate=gate)
     frames = pd.DataFrame([{**row, "arm": policy, "history": json.dumps(row["history"]),
                             "status_history": json.dumps(row["status_history"]),

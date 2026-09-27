@@ -22,6 +22,9 @@ Weights occupy roughly 843 MB on disk and 1.7 GB when widened to fp32 in memory.
 The model card warns about weak zero-shot decisions, noul label bias, and
 overconfidence. No claim of search-and-rescue calibration is made before evaluation.
 
+The state dict is rendered to plain-language sentences before inference (`laya_runtime.render`):
+Laya is a text model and scored at chance on raw JSON (see docs/GATES.md).
+
 Run `uv run python -m tools.laya_smoke --device mps` (or `cpu`). The report in
 `results/laya_smoke_<device>.json` includes twenty hand-labeled cases, up to three
 criteria rewordings after failure, fifty warm latencies, and the recommended

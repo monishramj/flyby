@@ -20,7 +20,7 @@ HackGT 13 · Georgia Tech · Sept 25–27, 2026. Submissions are due **Sunday 8:
 - **Laya decisions.** For each lead, Laya (an open-weights, Jev-compatible decision model running locally) returns an action, an urgency, and P(person), each with a probability. Leads below a confidence threshold go to a human.
 - **Grok intel.** Grok turns messy radio and text intel into a structured incident picture. Code merges it, and it feeds the context Laya decides on. When new intel changes a pending lead's context, that lead is re-decided, so the queue re-ranks.
 - **Dispatch.** A human approves every dispatch, and Grok writes the crew brief. Code inserts every number in the brief.
-- **Ask Ground Control.** The commander can question the live mission through Grok with read-only tools.
+- **Grok assistant.** When intel arrives, Grok reviews the mission with read-only tools (intel, leads, leads near a landmark) and proposes findings: intel that matches specific leads, likely duplicates, auto-closed leads worth a second look. Code validates every id and computes every distance; a proposal only highlights leads. (The Ask Ground Control chat is disabled in the UI; its backend remains.)
 
 **How we prove it worked** (all in simulation, with declared assumptions):
 
@@ -35,7 +35,7 @@ HackGT 13 · Georgia Tech · Sept 25–27, 2026. Submissions are due **Sunday 8:
 - **Re-decision** of pending leads when new intel changes their context
 - Grok intel parsing into a schema, merged deterministically into an in-memory incident picture
 - Grok dispatch briefs (numbers inserted by code)
-- Ask Ground Control: Grok with 4 read-only tools and a visible tool trace
+- Grok assistant: bounded tool loop that proposes, never acts
 - Ground-control UI: 2D map, lead queue with approve and override, intel feed with parsed chips, decision log, chat
 - MongoDB Atlas logging, with a local JSONL fallback
 - Batch evaluation and a results tab
@@ -90,7 +90,8 @@ results                               ▲ Grok intel parse (async) + determinist
 
 ```
 captured → decided ─┬─ auto (max prob ≥ TAU_ROUTE):
-                    │    ignore                 → ignored
+                    │    ignore, detector band low → auto_closed (reviewable; reopen or confirm)
+                    │    ignore, any other band    → awaiting_human
                     │    reimage_zoom           → reimaging → recapture (pass+1) → decided
                     │    dispatch / inspect     → awaiting_approval
                     └─ routed (max prob < TAU_ROUTE, fallback, or pass > MAX_PASSES) → awaiting_human
@@ -106,7 +107,7 @@ built state, it is re-decided (new decision appended to its history; queue re-so
 
 **Lifecycle notes:**
 
-- Dispatch and inspection always need a human click.
+- Dispatch and inspection always need a human click. Nothing is closed silently: `auto_closed` leads stay listed, can be reopened, and are re-decided when new intel changes their context.
 - A lead can be re-imaged at most once. At pass `MAX_PASSES` (= 2), a `reimage_zoom` decision routes the lead to a human instead of re-imaging again.
 - Leads that are dispatched, ignored, reimaging, or inspecting are never re-decided.
 - **Optional external hook:** when an inspection starts, the server emits `inspect.request {lead_id}`. If an external client answers `inspect.result {lead_id, found, collided}` before the timer runs out, that answer wins. Nothing in this README requires a client to exist.
@@ -928,7 +929,7 @@ uv run python -m tools.atlas_smoke            # write-behind proof; reports Atla
 ```
 
 Gate outcomes and the frozen constants they justify are recorded in [docs/GATES.md](docs/GATES.md).
-The live policy is the deterministic rule, because Laya failed GATE T0.2 at chance accuracy.
+The live policy is Laya (rule is the fallback and the baseline arm); see docs/GATES.md.
 
 ## 7. Demo (\~1:15)
 

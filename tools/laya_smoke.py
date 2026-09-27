@@ -6,7 +6,7 @@ import math
 import numpy as np
 
 from server.config import settings
-from server.triage.laya_runtime import load, questions_for_variant
+from server.triage.laya_runtime import QUESTIONS, load
 
 
 def hand_cases():
@@ -51,31 +51,21 @@ def main():
     parser.add_argument("--device", choices=("cpu", "mps"), default=settings.LAYA_DEVICE)
     args = parser.parse_args()
     runtime = load(settings.model_copy(update={"LAYA_DEVICE": args.device}))
-    cases, attempts = hand_cases(), []
-    selected = 0
-    for variant in range(4):
-        questions = questions_for_variant(variant)
-        answers = []
-        for case in cases:
-            result = runtime.system_one(case["state"], questions)
-            actual = result["answers"]["action"]["choice"]
-            answers.append({**case, **result, "correct": actual == case["expected"]})
-            print(json.dumps({"variant": variant, "case": case["name"], "expected": case["expected"], **result}), flush=True)
-        accuracy = sum(item["correct"] for item in answers) / len(answers)
-        attempts.append({"variant": variant, "accuracy": accuracy, "cases": answers})
-        if accuracy >= .5:
-            selected = variant
-            break
-    else:
-        selected = max(attempts, key=lambda item: item["accuracy"])["variant"]
-    questions = questions_for_variant(selected)
-    runtime.system_one(cases[0]["state"], questions)
-    latencies = [runtime.system_one(cases[index % len(cases)]["state"], questions)["latency_ms"] for index in range(50)]
+    cases = hand_cases()
+    answers = []
+    for case in cases:
+        result = runtime.system_one(case["state"], QUESTIONS)
+        actual = result["answers"]["action"]["choice"]
+        answers.append({**case, **result, "correct": actual == case["expected"]})
+        print(json.dumps({"case": case["name"], "expected": case["expected"], **result}), flush=True)
+    accuracy = sum(item["correct"] for item in answers) / len(answers)
+    attempts = [{"accuracy": accuracy, "cases": answers}]
+    runtime.system_one(cases[0]["state"], QUESTIONS)
+    latencies = [runtime.system_one(cases[index % len(cases)]["state"], QUESTIONS)["latency_ms"] for index in range(50)]
     p50, p95 = (float(value) for value in np.percentile(latencies, [50, 95]))
-    accuracy = attempts[selected]["accuracy"]
     report = {"device": runtime.device, "runtime": "laya==0.3.20", "revision": settings.LAYA_REVISION,
               "p50_ms": p50, "p95_ms": p95, "recommended_timeout_ms": math.ceil(3 * p95),
-              "accuracy": accuracy, "selected_variant": selected, "gate_passed": accuracy >= .5,
+              "accuracy": accuracy, "gate_passed": accuracy >= .5,
               "warm_calls": len(latencies), "latencies_ms": latencies, "attempts": attempts}
     settings.RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     output = settings.RESULTS_DIR / f"laya_smoke_{runtime.device}.json"

@@ -220,3 +220,105 @@ async def test_an_unknown_tool_is_refused_without_raising():
 async def test_grok_unavailable_without_credentials():
     with pytest.raises(GrokUnavailable):
         await parse_intel("anything", GAZETTEER, cfg=fast_settings(XAI_API_KEY="", XAI_MODEL=""))
+
+
+# ---- assistant: Grok proposes, code validates, nothing changes -----------------------------------
+
+async def mission_for_assistant():
+    run = await mission_for_ask()
+    lead = {"lead_id": "L-B", "t_capture": 2.0, "x": 48.0, "y": 59.0, "sector": "S1", "pass": 1,
+            "detector_conf": .3, "box_px": 30.0, "altitude_m": 40, "near_structure": False,
+            "nearest_landmark": "elm_school", "truth": {"is_person": False, "kind": "decoy", "type": "debris"}}
+    run._register(lead)
+    await run._decide(lead)
+    run.intel_log["I1"] = {"intel_id": "I1", "t": 3.0, "raw": "two people at elm school",
+                           "parse": {"reports": [{"landmark": "elm_school", "sector": "S1", "urgency": "high",
+                                                  "source": "firsthand"}], "unparseable": False}}
+    return run
+
+
+async def test_assistant_proposals_are_validated_and_evidence_comes_from_code():
+    from server.grok.assistant import review
+    run = await mission_for_assistant()
+    before = json.dumps({key: run.snapshot()[key] for key in ("leads", "incident")}, sort_keys=True, default=str)
+    link = {"kind": "link_intel", "lead_ids": ["L-A", "L-B"], "intel_id": "I1", "text": "I1 names Elm School, 2 people; L-A and L-B sit there."}
+    script = [SimpleNamespace(content=None, tool_calls=[
+                  call("get_intel", {}, "c1"),
+                  call("propose", link, "c2"),
+                  call("propose", link, "c3"),                                                     # duplicate
+                  call("propose", {"kind": "note", "lead_ids": ["L-ZZ"], "text": "ghost"}, "c4"),  # unknown id
+                  call("propose", {"kind": "possible_duplicate", "lead_ids": ["L-A"], "text": "one"}, "c5"),
+                  call("propose", {"kind": "note", "lead_ids": ["L-B"], "text": "x", "dispatch": True}, "c6")]),
+              SimpleNamespace(tool_calls=[], content="done")]
+    proposals = await review(run, trigger="I1", seen=set(), cfg=fast_settings(), client=FakeClient(script=script))
+    assert [p["kind"] for p in proposals] == ["link_intel"], "only the valid, first-seen proposal survives"
+    proposal = proposals[0]
+    assert proposal["text"] == "I1 names Elm School, people; L-A and L-B sit there." and proposal["digits_stripped"]
+    assert proposal["evidence"]["landmark"] == "elm_school"
+    assert proposal["evidence"]["leads"][0]["distance_to_landmark_m"] == 0.0, "distance computed by code"
+    after = json.dumps({key: run.snapshot()[key] for key in ("leads", "incident")}, sort_keys=True, default=str)
+    assert after == before, "proposing never changes a lead or the incident picture"
+    await run.stop()
+
+
+async def test_assistant_failure_yields_no_proposals_and_no_change():
+    from server.grok.assistant import review
+    run = await mission_for_assistant()
+    statuses = {key: lead["status"] for key, lead in run.leads.items()}
+    proposals = await review(run, trigger="I1", seen=set(), cfg=fast_settings(),
+                             client=FakeClient(error=RuntimeError("xai down")))
+    assert proposals == []
+    assert {key: lead["status"] for key, lead in run.leads.items()} == statuses
+    await run.stop()
+
+
+async def test_live_intel_in_grok_mode_triggers_a_review_that_emits_proposals():
+    run = await mission_for_assistant()
+    run.parse_mode = "grok"
+    events = []
+    run.subscribe(events.append)
+    script = [SimpleNamespace(content=None, tool_calls=[call("propose", {"kind": "note", "lead_ids": ["L-B"],
+                                                                         "text": "Check L-B against the Elm report."})]),
+              SimpleNamespace(tool_calls=[], content="done")]
+    run.grok_client = FakeClient(script=script)
+    run._request_review("I1")
+    run._request_review("I2")  # coalesces behind the running review instead of starting a second one
+    while run._assistant_running:
+        await asyncio.sleep(0)
+    assert [e["type"] for e in events].count("assistant.proposal") == 1
+    assert run.snapshot()["proposals"][0]["lead_ids"] == ["L-B"]
+    await run.stop()
+
+
+async def test_find_leads_near_computes_distances_in_code():
+    from server.grok.assistant import assistant_tools, strip_numbers
+    run = await mission_for_assistant()
+    _, tools = assistant_tools(run, [], set())
+    near = tools["find_leads_near"]("elm_school", 10)
+    assert [row["lead_id"] for row in near] == ["L-A", "L-B"] and near[0]["distance_m"] == 0.0
+    assert "error" in tools["find_leads_near"]("atlantis")
+    assert strip_numbers("I12 and L-D10 in S9: 2 people, 4.5 m") == "I12 and L-D10 in S9: people, m"
+    await run.stop()
+
+
+async def test_proposals_survive_a_real_writer_and_are_logged(tmp_path):
+    """Regression: the live server has a writer; an unknown collection used to drop every proposal."""
+    from server.store.writer import Writer
+    cfg = fast_settings(LOG_DIR=tmp_path)
+    run = await mission_for_assistant()
+    run.writer = Writer(cfg)
+    await run.writer.start()
+    run.parse_mode = "grok"
+    events = []
+    run.subscribe(events.append)
+    run.grok_client = FakeClient(script=[
+        SimpleNamespace(content=None, tool_calls=[call("propose", {"kind": "note", "lead_ids": ["L-B"], "text": "Check L-B."})]),
+        SimpleNamespace(tool_calls=[], content="done")])
+    run._request_review("I1")
+    while run._assistant_running:
+        await asyncio.sleep(0)
+    assert [e["type"] for e in events].count("assistant.proposal") == 1
+    await run.writer.stop()
+    logged = [json.loads(line) for line in (tmp_path / "proposals.jsonl").read_text().splitlines()]
+    assert logged[0]["proposals"][0]["lead_ids"] == ["L-B"]
+    await run.stop()

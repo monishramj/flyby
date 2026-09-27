@@ -1,5 +1,6 @@
 """The mission lifecycle from README §1. Live and batch runs share this object."""
 import asyncio
+import logging
 from copy import deepcopy
 from datetime import UTC, datetime
 from time import perf_counter
@@ -8,7 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from server.config import settings
-from server.grok import briefs
+from server.grok import assistant, briefs
 from server.grok.parse import parse_intel
 from server.incident.store import IncidentStore
 from server.mission import intel_script
@@ -21,8 +22,12 @@ from server.triage.decide import Decider
 from server.triage.fallback import ACTIONS, rule
 from server.triage.state import build_state
 
-TERMINAL = frozenset({"dispatched", "ignored", "resolved_empty"})
+# auto_closed is terminal for counting, but a commander can still reopen it and new intel re-decides it.
+log = logging.getLogger(__name__)
+
+TERMINAL = frozenset({"dispatched", "ignored", "auto_closed", "resolved_empty"})
 PENDING = frozenset({"awaiting_approval", "awaiting_human"})
+REVIEWABLE = PENDING | {"auto_closed"}
 HEARTBEAT_S = 1.0
 
 
@@ -52,6 +57,10 @@ class MissionRun:
         self._coverage_mark = -1.0
         self._started = self._stopped = self._finished = False
         self._task = None
+        self._assistant_running = False
+        self._assistant_again = None
+        self._assistant_seen: set = set()
+        self.proposals: list[dict] = []
 
     # ---- events -------------------------------------------------------------
 
@@ -94,6 +103,7 @@ class MissionRun:
             "leads": [self.public_lead(lead) for lead in self.leads.values()],
             "intel": [deepcopy(row) for row in self.intel_log.values()],
             "incident": self.incident.public(),
+            "proposals": deepcopy(self.proposals),
             "state": self.mission_state(cells=True),
             "config": {"DEMO_SEED": self.cfg.DEMO_SEED, "COVERAGE_CELL_M": self.cfg.COVERAGE_CELL_M,
                        "LIVE_POLICY": self.policy, "PARSE_MODE": self.parse_mode,
@@ -210,6 +220,9 @@ class MissionRun:
         base = lead["t_capture"] if base is None else base
         decision = await self.decider.decide(state, policy=self.policy)
         payload = decision.model_dump()
+        if payload["action"] == "ignore" and state["lead"]["detector_band"] != "low":
+            # Nothing is closed silently: only a low detector band may auto-close.
+            payload["routed_to_human"] = True
         t = base + decision.latency_ms / 1000 if self.fast else self.clock.now
         lead["state"] = state
         lead["decision"] = payload
@@ -223,7 +236,7 @@ class MissionRun:
         if decision["routed_to_human"]:
             status = "awaiting_human"
         elif action == "ignore":
-            status = "ignored"
+            status = "auto_closed"  # reviewable: a human can reopen it, and new intel re-decides it
         elif action == "reimage_zoom":
             status = "reimaging" if lead["pass"] < self.cfg.MAX_PASSES else "awaiting_human"
         else:
@@ -264,13 +277,13 @@ class MissionRun:
 
     def approve(self, lead_id):
         lead = self.leads.get(lead_id)
-        if lead is None or lead["status"] not in PENDING:
+        if lead is None or lead["status"] not in REVIEWABLE:
             return False
         return self._apply_human(lead, lead["decision"]["action"], kind="approve")
 
     def override(self, lead_id, action):
         lead = self.leads.get(lead_id)
-        if lead is None or lead["status"] not in PENDING or action not in ACTIONS:
+        if lead is None or lead["status"] not in REVIEWABLE or action not in ACTIONS:
             return False
         return self._apply_human(lead, action, kind="override")
 
@@ -384,13 +397,39 @@ class MissionRun:
         self._emit("intel.parsed", {"intel_id": message["intel_id"], "parse": deepcopy(parse), "ok": ok})
         self._log_intel(message, parse, latency_ms, ok=ok)
         await self.incident.apply(parse, message["intel_id"], round(message["t"], 3))
+        if self.parse_mode == "grok" and not self.fast:
+            self._request_review(message["intel_id"])
+
+    # ---- Grok assistant (proposes only; off the decision path) ---------------
+
+    def _request_review(self, trigger):
+        """One review in flight; intel arriving meanwhile coalesces into a single follow-up."""
+        if self._assistant_running:
+            self._assistant_again = trigger
+            return
+        self._assistant_running = True
+        self._spawn(self._review(trigger))
+
+    async def _review(self, trigger):
+        try:
+            while trigger is not None and not self._stopped:
+                for proposal in await assistant.review(self, trigger=trigger, seen=self._assistant_seen,
+                                                       cfg=self.cfg, client=self.grok_client):
+                    self.proposals.append(proposal)
+                    self._emit("assistant.proposal", deepcopy(proposal))
+                trigger, self._assistant_again = self._assistant_again, None
+        except Exception:
+            # The assistant is advisory: a failure must never touch the mission, but it must be visible.
+            log.exception("Grok assistant review failed")
+        finally:
+            self._assistant_running = False
 
     async def on_incident_update(self, picture):
         """T2.3: a pending lead whose built state changed is decided again."""
         self._emit("incident.update", self.incident.public())
         self._persist_incident(picture)
         for lead in list(self.leads.values()):
-            if lead["status"] not in PENDING:
+            if lead["status"] not in REVIEWABLE:
                 continue
             state = self._build_state(lead)
             if state == lead.get("state"):

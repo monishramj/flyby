@@ -1,21 +1,22 @@
 export type Action = 'dispatch_ground_team' | 'reimage_zoom' | 'close_in_inspect' | 'ignore';
 export interface Decision { action: Action; probs: Record<Action, number>; urgency: number | null; p_person: number | null; latency_ms: number; used_fallback: boolean; routed_to_human: boolean; source: string; version: number }
-export interface Lead { lead_id: string; x: number; y: number; sector: string; pass: number; detector_conf: number; box_px: number; nearest_landmark: string; status: string; decision?: Decision; history: (Decision & { t: number })[]; dispatch?: Record<string, unknown>; reranked?: boolean }
+export interface Lead { lead_id: string; x: number; y: number; sector: string; pass: number; detector_conf: number; box_px: number; nearest_landmark: string; status: string; decision?: Decision; history: (Decision & { t: number })[]; dispatch?: Record<string, unknown>; reranked?: boolean; state?: { context?: Record<string, any> } }
 export interface Intel { intel_id: string; t: number; raw: string; parse?: { reports: Record<string, unknown>[]; unparseable: boolean }; ok?: boolean }
 export interface Scene { area_m: number; sector_grid: number; houses: { x: number; y: number; width: number; height: number; kind: string }[]; water: { x: number; y: number; width: number; height: number; kind?: string }[]; trees: { x: number; y: number; radius: number }[]; gazetteer: Record<string, { x: number; y: number; label?: string; sector: string }> }
 export interface Picture { sector_priority: Record<string, string>; reported_subjects: Record<string, number>; hazards: { type: string; x: number; y: number }[]; last_known_point?: { x: number; y: number; landmark?: string } | null }
 export interface MissionState { t: number; drone: { x: number; y: number }; coverage_pct: number; coverage_cells: { x: number; y: number }[]; running: boolean; finished: boolean }
-export interface Snapshot { run_id: string; seed: number; scene: Scene; leads: Lead[]; intel: Intel[]; incident: Picture; state: MissionState; config: { DEMO_SEED: number; COVERAGE_CELL_M: number; LIVE_POLICY: string; PARSE_MODE: string; ALT_M: number; FOV_DEG: number; FOOTPRINT_M: number; SWEEP_PATH: { x: number; y: number }[] }; services: Record<string, string> }
-export type ServerMessage = { type: 'mission.snapshot'; payload: Snapshot } | { type: 'mission.state'; payload: MissionState } | { type: 'lead.new'; payload: Lead } | { type: 'lead.decided'; payload: { lead_id: string; decision: Decision; status: string; lead?: Lead } } | { type: 'lead.status'; payload: { lead_id: string; status: string; lead?: Lead } } | { type: 'intel.new'; payload: Intel } | { type: 'intel.parsed'; payload: { intel_id: string; parse?: Intel['parse']; ok: boolean } } | { type: 'incident.update'; payload: Picture } | { type: 'dispatch.created'; payload: { lead_id: string; brief: Record<string, unknown>; pin: { x: number; y: number } } } | { type: 'inspect.request'; payload: { lead_id: string } } | { type: 'error'; payload: { message: string } };
+export interface Snapshot { run_id: string; seed: number; scene: Scene; leads: Lead[]; intel: Intel[]; incident: Picture; state: MissionState; config: { DEMO_SEED: number; COVERAGE_CELL_M: number; LIVE_POLICY: string; PARSE_MODE: string; ALT_M: number; FOV_DEG: number; FOOTPRINT_M: number; SWEEP_PATH: { x: number; y: number }[] }; services: Record<string, string>; proposals?: Proposal[] }
+export type ServerMessage = { type: 'mission.snapshot'; payload: Snapshot } | { type: 'mission.state'; payload: MissionState } | { type: 'lead.new'; payload: Lead } | { type: 'lead.decided'; payload: { lead_id: string; decision: Decision; status: string; lead?: Lead } } | { type: 'lead.status'; payload: { lead_id: string; status: string; lead?: Lead } } | { type: 'intel.new'; payload: Intel } | { type: 'intel.parsed'; payload: { intel_id: string; parse?: Intel['parse']; ok: boolean } } | { type: 'incident.update'; payload: Picture } | { type: 'dispatch.created'; payload: { lead_id: string; brief: Record<string, unknown>; pin: { x: number; y: number } } } | { type: 'inspect.request'; payload: { lead_id: string } } | { type: 'assistant.proposal'; payload: Proposal } | { type: 'error'; payload: { message: string } };
+export interface Proposal { proposal_id: string; kind: 'link_intel' | 'possible_duplicate' | 'note'; lead_ids: string[]; intel_id: string | null; text: string; digits_stripped: boolean; t: number; evidence: { leads: { lead_id: string; sector: string; status: string; detector_conf: number; distance_to_landmark_m?: number }[]; landmark?: string; max_separation_m?: number; intel_sectors?: string[] } }
 export interface Truth { run_id: string; subjects: { id: string; x: number; y: number; visibility: string }[]; decoys: { id: string; x: number; y: number; type: string }[] }
-export const store = { truth: null as Truth | null, showTruth: false, snapshot: null as Snapshot | null, selected: '', connected: false, error: '', dispatched: '', log: [] as { lead_id: string; decision: Decision; t: number }[] };
+export const store = { truth: null as Truth | null, showTruth: false, snapshot: null as Snapshot | null, selected: '', connected: false, error: '', dispatched: '', highlight: [] as string[], log: [] as { lead_id: string; decision: Decision; t: number }[] };
 const listeners = new Set<(type: string) => void>();
 export const subscribe = (listener: (type: string) => void) => { listeners.add(listener); return () => listeners.delete(listener); };
 export const notify = (type: string) => listeners.forEach(fn => fn(type));
 export function receive(message: ServerMessage) {
   const { type, payload } = message;
   if (type === 'mission.snapshot') {
-    store.snapshot = payload; store.selected = ''; store.error = '';
+    store.snapshot = payload; store.selected = ''; store.highlight = []; store.error = '';
     store.log = payload.leads.flatMap(lead => lead.history.map(decision => ({ lead_id: lead.lead_id, decision, t: decision.t }))).sort((a, b) => a.t - b.t);
   } else if (type === 'error') store.error = payload.message;
   else if (store.snapshot) {
@@ -40,6 +41,7 @@ export function receive(message: ServerMessage) {
     if (type === 'intel.new') s.intel.push(payload);
     if (type === 'intel.parsed') { const row = s.intel.find(i => i.intel_id === payload.intel_id); if (row) Object.assign(row, payload); }
     if (type === 'incident.update') s.incident = payload;
+    if (type === 'assistant.proposal') (s.proposals ??= []).push(payload);
     if (type === 'dispatch.created') {
       const lead = s.leads.find(l => l.lead_id === payload.lead_id);
       if (lead) { lead.dispatch = payload.brief; store.dispatched = lead.lead_id; }

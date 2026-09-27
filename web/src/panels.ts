@@ -1,5 +1,5 @@
-import { LABELS, pct, urgencyLabel } from './queue';
-import { store, type Intel, type Lead } from './store';
+import { pct, urgencyLabel } from './queue';
+import { store, type Intel, type Lead, type Proposal } from './store';
 
 const clean = (value: string) => value.replace(/[<>&]/g, character => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[character]!));
 
@@ -23,18 +23,6 @@ export function renderIntel(root: HTMLElement) {
     ? rows.map(row => `<li><header><b>${row.intel_id}</b><time>t+${Math.round(row.t)}s</time></header>
         <p>${clean(row.raw)}</p><div class="chips">${chips(row)}</div></li>`).join('')
     : '<li class="empty">No radio traffic yet.</li>';
-}
-
-export function renderLog(root: HTMLElement) {
-  const rows = [...store.log].reverse().slice(0, 60);
-  root.innerHTML = rows.length
-    ? rows.map((entry, index) => {
-      const repeat = store.log.filter(item => item.lead_id === entry.lead_id).length > 1 && index < rows.length;
-      return `<li><time>t+${Math.round(entry.t)}s</time> <b>${entry.lead_id}</b>
-        <span>${LABELS[entry.decision.action]}</span>
-        <small>${entry.decision.source} · ${urgencyLabel(entry.decision.urgency)} · P ${pct(entry.decision.p_person)}${repeat ? ' · re-decision' : ''}</small></li>`;
-    }).join('')
-    : '<li class="empty">No decisions yet.</li>';
 }
 
 export function renderIncident(root: HTMLElement) {
@@ -85,4 +73,24 @@ export function renderAsk(root: HTMLElement, exchanges: { question: string; answ
 function linkLeads(text: string): string {
   const ids = new Set((store.snapshot?.leads ?? []).map(lead => lead.lead_id));
   return text.replace(/L-[A-Za-z0-9]+/g, match => (ids.has(match) ? `<a href="#" data-lead-link="${match}">${match}</a>` : match));
+}
+
+const KINDS: Record<Proposal['kind'], string> = { link_intel: 'Intel ↔ leads', possible_duplicate: 'Possible duplicate', note: 'Look at this' };
+export const dismissed = new Set<string>();
+
+/** Grok proposes; every number shown here is computed by the server, never by the model. */
+export function renderAssistant(root: HTMLElement) {
+  const rows = (store.snapshot?.proposals ?? []).filter(p => !dismissed.has(p.proposal_id)).reverse();
+  root.innerHTML = rows.length
+    ? rows.map(p => {
+      const evidence = p.evidence;
+      const facts = evidence.leads.map(lead => `<span class="chip" data-lead-link="${lead.lead_id}">${lead.lead_id} · ${lead.sector} · ${lead.status.replaceAll('_', ' ')}${lead.distance_to_landmark_m != null ? ` · ${Math.round(lead.distance_to_landmark_m)} m from ${(evidence.landmark ?? '').replaceAll('_', ' ')}` : ''}</span>`).join('');
+      return `<li class="${store.highlight.join() === p.lead_ids.join() ? 'on' : ''}">
+        <header><b>${KINDS[p.kind]}</b>${p.intel_id ? ` <small>${p.intel_id}</small>` : ''}<time>t+${Math.round(p.t)}s</time></header>
+        <p>${clean(p.text)}</p>
+        <div class="chips">${facts}${evidence.max_separation_m != null ? `<span class="chip muted">${evidence.max_separation_m} m apart</span>` : ''}</div>
+        <footer><button class="primary" data-accept="${p.proposal_id}">Show leads</button><button class="ghost" data-dismiss="${p.proposal_id}">Dismiss</button></footer>
+      </li>`;
+    }).join('')
+    : `<li class="empty">${store.snapshot?.config.PARSE_MODE === 'grok' ? 'Watching intel. Suggestions appear here; they never act on their own.' : 'The assistant runs when intel is parsed by Grok (PARSE_MODE=grok).'}</li>`;
 }

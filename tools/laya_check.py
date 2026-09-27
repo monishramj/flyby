@@ -86,7 +86,7 @@ def main():
                             "fallbacks": sum(row["used_fallback"] for row in rows)}] if latencies else [])
 
     sweep = []
-    for tau in np.round(np.arange(.4, .81, .05), 2):
+    for tau in np.round(np.arange(.3, .81, .05), 2):
         auto = [row for row in rows if row["max_prob"] >= tau and not row["used_fallback"]
                 and not (row["pass"] >= cfg.MAX_PASSES and row["laya"] == "reimage_zoom")]
         sweep.append({"tau_route": tau, "auto_share": round(len(auto) / len(rows), 3) if rows else 0,
