@@ -222,9 +222,12 @@ class MissionRun:
         base = lead["t_capture"] if base is None else base
         decision = await self.decider.decide(state, policy=self.policy)
         payload = decision.model_dump()
-        if payload["action"] == "ignore" and state["lead"]["detector_band"] != "low":
-            # Nothing is closed silently: only a low detector band may auto-close.
+        seen = state["lead"]
+        if payload["action"] == "ignore" and not (seen["detector_band"] == "low" and not seen.get("near_structure")
+                                                  and max(payload["probs"].values()) >= self.cfg.TAU_CLOSE):
+            # Only a confident ignore on a low score in the open may auto-close; anything else could be a person.
             payload["routed_to_human"] = True
+        lead["person_chance"] = self.cfg.PERSON_CHANCE[f"{seen['detector_band']}/{'structure' if seen.get('near_structure') else 'open'}"]
         t = base + decision.latency_ms / 1000 if self.fast else self.clock.now
         lead["state"] = state
         lead["model_text"] = render(state)  # exactly what Laya read, shown under "Why?"

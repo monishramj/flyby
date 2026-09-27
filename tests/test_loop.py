@@ -239,3 +239,28 @@ async def test_new_intel_re_decides_an_auto_closed_lead():
                              "subject_count": 2, "source": "firsthand"}]}), "I1", 5.0)
     assert len(lead["history"]) == 2, "the changed context triggers a second decision"
     await run.stop()
+
+
+async def test_only_a_confident_ignore_in_the_open_may_auto_close():
+    """No one gets lost: cover or doubt sends a would-be ignore to a human instead."""
+    cases = [("L-open-sure", False, True, "auto_closed"),       # low score, in the open, Laya 0.94 sure
+             ("L-roof-sure", True, True, "awaiting_human"),     # 61% of low-score leads by a building are people
+             ("L-open-unsure", False, False, "awaiting_human")]  # Laya under TAU_CLOSE
+    for lead_id, structure, confident, expected in cases:
+        run = MissionRun(3, fast_settings(), fast=True, policy="laya",
+                         runtime=FakeRuntime(action="ignore", confident=confident))
+        lead = {**open_lead(lead_id, .2), "near_structure": structure}
+        run._register(lead)
+        await run._decide(lead)
+        assert lead["status"] == expected, lead_id
+        assert lead["person_chance"] == (0.61 if structure else 0.13)
+        await run.stop()
+
+
+async def test_the_rule_obeys_the_same_close_gate():
+    run = MissionRun(3, fast_settings(), fast=True, policy="rule", runtime=FakeRuntime())
+    lead = {**open_lead("L-roof", .2), "near_structure": True}
+    run._register(lead)
+    await run._decide(lead)
+    assert lead["decision"]["action"] == "ignore" and lead["status"] == "awaiting_human"
+    await run.stop()

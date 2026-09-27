@@ -200,3 +200,6 @@ dialog form { margin-top: 1rem; text-align: right; }
 .closed-list .row-actions { margin-left: auto; display: flex; gap: .3rem; }
 .closed-list button, .closed-list select { font-size: .72rem; padding: .2rem .4rem; }
 .closed-note { font-size: .76rem; color: var(--dim); margin: 0 0 .5rem; }
+
+.person { color: var(--ink); font-weight: 600; }
+.confirm-all { font-size: .78rem; margin-bottom: .5rem; }

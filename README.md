@@ -89,8 +89,8 @@ results                               ▲ Grok intel parse (async) + determinist
 
 ```
 captured → decided ─┬─ auto (max prob ≥ TAU_ROUTE):
-                    │    ignore, detector band low → auto_closed (reviewable; reopen or confirm)
-                    │    ignore, any other band    → awaiting_human
+                    │    ignore, low camera score, in the open, ≥ TAU_CLOSE → auto_closed (confirm or reopen)
+                    │    ignore, anything else       → awaiting_human (it could be a person)
                     │    reimage_zoom           → reimaging → recapture (pass+1) → decided
                     │    dispatch / inspect     → awaiting_approval
                     └─ routed (max prob < TAU_ROUTE, fallback, or pass > MAX_PASSES) → awaiting_human

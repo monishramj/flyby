@@ -102,23 +102,29 @@ That is a product decision, not a model fix, so `TAU_ROUTE` is unchanged.
 
 | Arm | Time to dispatch (median) | vs manual @120 s/image | vs manual @10 s/image | Subjects found | Final action accuracy |
 | --- | --- | --- | --- | --- | --- |
-| rule | 125.0 s | 4090 s → 32.7× | 240 s → 1.9× | 62/141 | 0.689 |
-| laya | 80.2 s | 4090 s → 51.0× | 240 s → 3.0× | 72/141 | 0.813 |
+| rule | 125.0 s | 4090 s → 32.7× | 240 s → 1.9× | 72/141 | 0.689 |
+| laya | 82.7 s | 4090 s → 49.4× | 240 s → 2.9× | 77/141 | 0.818 |
 
 Laya's `ignore` auto-closes only on a low detector band; auto-closed leads are re-decided when intel changes their context. Laya routes 44.5% of leads to the simulated human, who then picks the §4.4 optimal action 90% of
 the time, so part of the laya arm's edge is the simulated operator, not Laya. First-decision
 accuracy (before any human) is 0.44 for laya vs 0.42 for the rule.
 
-**Human load (sub-problem 2).** A manual reviewer handles every flag. Of 209 flags:
+**Human load (sub-problem 2).** A manual reviewer handles every flag. Of 209 flags, after the
+"no one gets lost" gate (below):
 
 | Arm | Needed judgment | One-click approval | No human | Real people closed with no human look |
 | --- | --- | --- | --- | --- |
-| rule | 32 | 62 | 115 | 27 |
-| laya | 111 | 60 | 38 | 7 |
+| rule | 65 | 62 | 82 | 10 |
+| laya | 144 | 58 | 7 | 2 |
 
-The rule hands a human far fewer flags but silently closes 27 real people; Laya closes 7 but
-sends 53% of flags for judgment, because its probabilities are flat. Present this as the
-trade-off it is.
+**No one gets lost.** An `ignore` may auto-close only on a low camera score, in the open, with Laya
+at least `TAU_CLOSE = 0.60` sure; anything else goes to a human. The queue ranks by
+`PERSON_CHANCE` (the measured table in the fine-tuning section), so likely people come first
+whether or not Laya was confident. Auto-closed leads are never final: the commander confirms them
+in one batch or reopens any. Versus the 0.50 bar: Laya's people closed unseen 7 → 2, subjects
+found 72 → 77, median time to dispatch 80 → 83 s, flags needing judgment 111 → 144. The two that
+remain are low-score people in the open, who read exactly like debris; in the live app they still
+sit in the Auto-closed tab awaiting confirmation (the batch's simulated human never confirms).
 
 `under_structure` subjects are reported separately (median 394.1 s, laya arm): overhead
 review cannot see them at all, so they are excluded from the primary comparison.

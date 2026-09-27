@@ -8,23 +8,20 @@ const URGENCY = ['low', 'moderate', 'high', 'critical'];
 export const PENDING = ['awaiting_human', 'awaiting_approval'];
 const CREW_ACTIONS = ['dispatch_ground_team', 'close_in_inspect'];
 const CAMERA_TIP = "The drone detector's own score that this is a person.";
+const PERSON_TIP = 'Share of past flags like this one (camera score, cover) that were real people.';
+const person = (lead: Lead) => `<span class="person" title="${PERSON_TIP}">Person ${pct(lead.person_chance)}</span>`;
 
 export const urgencyLabel = (value: number | null | undefined) => (value === null || value === undefined ? '—' : `${URGENCY[Math.min(3, Math.round(value))]} (${value.toFixed(1)})`);
 export const pct = (value: number | null | undefined) => (value === null || value === undefined ? '—' : `${Math.round(value * 100)}%`);
 const clean = (value: string) => value.replace(/[<>&]/g, character => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[character]!));
 const words = (value: string) => value.replaceAll('_', ' ');
 
-/** Routed leads first, then urgency, then P(person); detector confidence breaks ties. */
+/** Likely people first, whether or not Laya was sure: then urgency, then camera score. */
 export function rank(leads: Lead[]): Lead[] {
-  const pending = leads.filter(lead => PENDING.includes(lead.status)).sort((a, b) => {
-    const routed = Number(b.status === 'awaiting_human') - Number(a.status === 'awaiting_human');
-    if (routed) return routed;
-    const urgency = (b.decision?.urgency ?? -1) - (a.decision?.urgency ?? -1);
-    if (urgency) return urgency;
-    const person = (b.decision?.p_person ?? -1) - (a.decision?.p_person ?? -1);
-    if (person) return person;
-    return b.detector_conf - a.detector_conf;
-  });
+  const pending = leads.filter(lead => PENDING.includes(lead.status)).sort((a, b) =>
+    (b.person_chance ?? 0) - (a.person_chance ?? 0)
+    || (b.decision?.urgency ?? -1) - (a.decision?.urgency ?? -1)
+    || b.detector_conf - a.detector_conf);
   // Dispatched leads stay listed below, so their brief is still reachable.
   const dispatched = leads.filter(lead => lead.status === 'dispatched').reverse();
   return [...pending, ...dispatched];
@@ -120,7 +117,7 @@ function card(lead: Lead): string {
     </header>
     <p class="action" style="--tone:${colors[action]}">${LABELS[action]} <small>${source}</small></p>
     <p class="reason">${reason(lead)}</p>
-    <p class="facts">${urgency ? `<span class="urgency u${Math.min(3, Math.round(decision!.urgency!))}">${urgency}</span> · ` : ''}<span title="${CAMERA_TIP}">Camera ${pct(lead.detector_conf)}</span></p>
+    <p class="facts">${person(lead)} · ${urgency ? `<span class="urgency u${Math.min(3, Math.round(decision!.urgency!))}">${urgency}</span> · ` : ''}<span title="${CAMERA_TIP}">Camera ${pct(lead.detector_conf)}</span></p>
     ${settled ? '' : order(lead)}
     <footer>
       ${settled ? '' : `<button data-approve="${lead.lead_id}" class="primary">Approve ${LABELS[action].toLowerCase()}${ready ? ' with order' : ''}</button>
@@ -150,7 +147,7 @@ let tab: 'work' | 'closed' = 'work';
 function closedRow(lead: Lead): string {
   const risk = closedRisk(lead);
   return `<li class="${risk.length ? 'risky' : ''} ${store.selected === lead.lead_id ? 'selected' : ''}" data-lead="${lead.lead_id}">
-    <b>${lead.lead_id}</b> <small>${lead.sector} · camera ${pct(lead.detector_conf)}</small>
+    <b>${lead.lead_id}</b> ${person(lead)} <small>${lead.sector} · camera ${pct(lead.detector_conf)}</small>
     ${risk.map(item => `<span class="tag warn">${item}</span>`).join('')}
     <span class="row-actions"><button data-approve="${lead.lead_id}" class="ghost">Confirm ignore</button>
     <select data-override="${lead.lead_id}" aria-label="Reopen ${lead.lead_id}">
@@ -168,7 +165,9 @@ export function renderQueue(root: HTMLElement) {
   const body = tab === 'work'
     ? (leads.length ? leads.map(card).join('') : '<p class="empty">Nothing needs you right now.</p>')
     : (closed.length
-      ? `<p class="closed-note">Laya closed these low-camera-score leads. New intel re-decides them; reopen any you doubt.</p><ul class="closed-list">${closed.map(closedRow).join('')}</ul>`
+      ? `<p class="closed-note">Laya was sure these are not people. Nothing is final until you confirm; new intel re-decides them.</p>
+        <button class="primary confirm-all" data-confirm-closed>Confirm ${closed.length} as not a person</button>
+        <ul class="closed-list">${closed.map(closedRow).join('')}</ul>`
       : '<p class="empty">Laya has not closed any leads.</p>');
   root.innerHTML = `<nav class="work-tabs">
       <button data-tab-work="work" class="${tab === 'work' ? 'on' : ''}">Needs you (${waiting})</button>
@@ -185,6 +184,12 @@ export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void,
     const card = target.closest('[data-lead]') as HTMLElement | null;
     const tabButton = target.closest('[data-tab-work]') as HTMLElement | null;
     if (tabButton) { tab = tabButton.dataset.tabWork as typeof tab; renderQueue(root); return; }
+    if (target.closest('[data-confirm-closed]')) {
+      // One human glance closes the batch; each lead still gets its own ordinary approval.
+      (store.snapshot?.leads ?? []).filter(lead => lead.status === 'auto_closed')
+        .forEach(lead => send({ type: 'lead.approve', payload: { lead_id: lead.lead_id } }));
+      return;
+    }
     if (approve) { send({ type: 'lead.approve', payload: { lead_id: approve.dataset.approve! } }); return; }
     if (whyButton) {
       const id = whyButton.dataset.why!;

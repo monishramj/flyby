@@ -138,6 +138,11 @@ if (briefButton) {
 }
 
 // Auto-closed leads live in their own tab at the top of the Work column, reviewable and reopenable.
+// The strict close gate means a short recording may close nothing, so two are closed here.
+for (const lead of fixture.events.filter(e => e.type === 'lead.new').slice(-2).map(e => e.payload)) {
+  socket.onmessage({ data: JSON.stringify({ type: 'lead.status', payload: { lead_id: lead.lead_id, status: 'auto_closed' } }) });
+}
+await tick();
 {
   const tabs = () => [...window.document.querySelectorAll('#queue [data-tab-work]')];
   check('work column has Needs you / Auto-closed tabs', tabs().length === 2 && /Needs you \(\d+\)/.test(tabs()[0].textContent) &&
@@ -156,6 +161,23 @@ if (briefButton) {
   check('back on Needs you, the cards return', count('#queue .card') > 0);
 }
 
+// No one gets lost: likely people rank first, and auto-closes need one human confirmation.
+{
+  const chances = [...window.document.querySelectorAll('#queue .card:not(.settled) .person')].map(node => Number(node.textContent.match(/\d+/)[0]));
+  check('cards lead with the person chance', count('#queue .card .person') > 0, chances.join(', '));
+  check('queue ranks likely people first', chances.every((value, index) => index === 0 || chances[index - 1] >= value));
+  window.document.querySelectorAll('#queue [data-tab-work]')[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  const closed = count('#queue .closed-list li');
+  const before = sent.length;
+  window.document.querySelector('#queue [data-confirm-closed]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  check('confirming auto-closes sends one approval per lead', sent.length - before === closed &&
+    sent.slice(before).every(message => message.type === 'lead.approve'), `${closed} closed`);
+  window.document.querySelectorAll('#queue [data-tab-work]')[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+}
+
 // Layout: the queue is the work surface; incident and intel are background, closed by default.
 check('work column holds the queue', Boolean(window.document.querySelector('.work #queue')));
 check('context drawer holds intel and incident, closed', Boolean(window.document.querySelector('#context #intel')) &&
@@ -164,7 +186,7 @@ check('context drawer holds intel and incident, closed', Boolean(window.document
 
 // Cards explain themselves in plain words.
 {
-  const first = window.document.querySelector('#queue .card');
+  const first = [...window.document.querySelectorAll('#queue .card')].find(node => node.querySelector('.action small')?.textContent === 'Laya');
   check('cards give a code-written reason', first.querySelector('.reason').textContent.trim().length > 0,
     first.querySelector('.reason').textContent.trim());
   check('cards label the camera score', /Camera \d+%/.test(first.querySelector('.facts').textContent), first.querySelector('.facts').textContent.trim());

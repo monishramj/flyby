@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     REIMAGE_CONF_SHIFT: dict[str, float] = {"subject": 0.20, "decoy": -0.10}
     T_INSPECT_S: float = 90
     TAU_ROUTE: float = 0.50
+    TAU_CLOSE: float = 0.60  # Laya must be this sure to auto-close; at 0.50 it closed 9 of 87 held-out people, at 0.60 one
+    # Measured share of flags that were real people, by camera band and cover (docs/GATES.md, 1,191 states).
+    # Calibrated by construction, so it ranks the queue; Laya's own P(person) is less reliable.
+    PERSON_CHANCE: dict[str, float] = {"low/open": 0.13, "low/structure": 0.61, "medium/open": 0.47,
+                                       "medium/structure": 0.76, "high/open": 0.96, "high/structure": 0.97}
     # Three times the p95 measured inside a mission by tools/laya_check.py (494 ms on CPU).
     LAYA_TIMEOUT_MS: float = 1500
     RHO: float = 0.9
