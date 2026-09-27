@@ -68,7 +68,7 @@ mission (:8000) ──inspect.request {lead_id}──▶ browser ──frames─
 6. **One machine.** Laya and flyvis both run on the Mac's CPU. Set thread
    counts for both and measure them together before promising 50 Hz.
 
-## Merge rehearsal (fly/connectome + triage, local only)
+## Merge rehearsal (fly/connectome `e41de42` + triage `895250c`, local only, re-run after these changes)
 
 Conflicts and how to resolve them:
 
@@ -78,7 +78,9 @@ Conflicts and how to resolve them:
 | `docs/SETUP.md`, `docs/TEAM.md` (deleted in triage) | Keep ours, updated for the triage commands |
 | `reflex/config.py`, `reflex/server.py` (deleted in triage) | **Keep ours** |
 | `reflex/__init__.py`, `bench/__init__.py` | Keep ours (now non-empty, so a deletion shows as a conflict instead of a silent delete) |
-| `tests/test_config.py` | Take triage's (our reflex tests moved out) |
+| `tests/test_config.py` (deleted here, changed in triage) | Take triage's; our reflex tests are in `tests/test_reflex_config.py` |
+| `tests/test_reflex_isolation.py` (git sees it as renamed from `test_scaffold.py`, which triage deletes) | **Keep ours** |
+| `runtime.py` (deleted in triage, unused by us now) | Let it go |
 | `web/vite.config.ts` (both added) | Take ours (it is triage's proxies plus ours) |
 | `uv.lock` | Regenerate with `uv lock` after merging `pyproject.toml` (it merged cleanly and keeps the `fly` extra) |
 | `web/package.json` | Merged cleanly; keep triage's `jsdom` and ranges |
