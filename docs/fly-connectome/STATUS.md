@@ -2,11 +2,47 @@
 
 Completed: 0.1, 0.4, 6.1, 6.3, 6.4, plus the **two-pathway LPLC2-style readout**
 (now live in the server) and a cached warm-up. θ is still uncalibrated.
-Also done: fly-inspired navigation controller (brake → saccade → goal steering).
-Next: **carport scene with a goal** (shared with Monish), then calibrate θ
-from seeded carport episodes run headlessly here.
+Also done: fly-inspired navigation controller, carport scene, bench and calibration tools.
+**Blocker:** the looming readout does not yet separate carport collisions from
+safe passes (see the carport section). Next: user decision on a learned readout.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
+
+## Carport scene and first calibration (2026-09-27) — reflex NOT yet reliable
+
+Built: `web/src/scene/inspect.ts` (carport: 4 posts, sagging front beam, roof,
+hanging debris panel that drops into the path, back wall, bins, goal behind),
+`web/inspect.html` (live chase view + drone camera + HUD), `web/bench.html`
+(seeded record/closed-loop runs, lockstep), `tools/calibrate_reflex.py`,
+`tools/plot_calibration.py`. Scenarios: post, beam, debris (collide);
+clear, near_post (should not collide; heading jitter makes 3/12 near_post collide).
+Headless runs work here: Chromium `--headless=new --use-angle=swiftshader`;
+60 recorded flights take ~1 min; replaying them through the eye takes ~7 min.
+
+Calibration result with the live 7-unit, 2-pathway readout at 120° FOV:
+θ = 1.92 at 1/21 false brakes, but only **8/39 collisions detected**
+(posts 0/12, beam 0/12, debris 7/12), one with ≥ 0.415 s warning.
+
+Why (S traces: `results/reflex_calibration.png`, regenerate with the tools):
+- Safe flights pass ~0.7–0.9 m under the front beam and roof edge; that
+  overhead structure genuinely looms (S ≈ 1.5–1.75), as high as real hits.
+- Wide units cannot separate a doorway (edges expanding around an empty centre)
+  from an obstacle (covering the centre). A unit must be about the width of the
+  drone's path at braking distance to discriminate.
+- A full-width sagging beam only expands vertically, so neither the 2d nor the
+  horiz pathway responds. A vertical (up/down) pathway catches it
+  (19 units, 90–120°: 11–12/12 beams, ~0.5–0.9 s warning).
+
+Offline sweep (cached drive; FOV 60/90/120; 7 or 19 units; all/centre/horizon/
+inner subsets; 2d/horiz/vert pathways): **no single setting catches all three
+obstacle types**; posts are rarely caught. θ at 5% false brakes on 21 safe flights.
+Results are calibration-set only; the sweep is not saved in the repo.
+
+Open decision for the user: a learned readout (weights on the per-unit
+2d/horiz/vert pathway responses, fit on hundreds of simulated flights and
+tested on held-out seeds), analogous to the giant fiber weighting its looming
+inputs. The alternative is a nearness cue from optic-flow magnitude plus known
+speed, which needs a T4/T5 speed calibration.
 
 ## Fly-inspired navigation controller (2026-09-26)
 
