@@ -12,6 +12,28 @@ Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
+## Faster eye sampling: reflex now keeps up with 50 Hz (2026-09-27, Windows CPU)
+
+`aa9afda`: `FlyEye._step` samples hexals with a precomputed gather equivalent to flyvis
+`BoxEye` (bilinear resize + zero pad + 13×13 mean + receptor sampling is linear and
+separable). Built from BoxEye's own resize at init and checked against BoxEye on 3 random
+frames (raises if max abs err > 1e-5); `eye.box_eye` unchanged for batched callers.
+Activity max abs diff vs BoxEye over 100 steps: 2.3e-6. Test: `test_hex_sampler_matches_flyvis_boxeye`.
+
+Live reflex, real pretrained model, CPU 4 threads, machine idle (CPU ~8 %, 4.4 GB free),
+throwaway Python WebSocket client (no browser), 500 live frames of a growing dark disc per
+run, 2 runs each, servers new → old → new; the old path = BoxEye patched back in:
+
+| eye path | lockstep replies/s | lockstep latency p50/p95 | paced 50 Hz: replies/s | paced 50 Hz latency p50/p95 | server `ms` p50/p95 |
+| --- | --- | --- | --- | --- | --- |
+| gather (new) | 56.1–58.2 | 16.5–17.0 / 20.5–21.2 ms | 49.9–50.0 | 17.5–18.2 / 35.5–42.8 ms | 15.4–15.9 / 18.0–19.3 |
+| BoxEye (old) | 47.3–47.9 | 20.5–20.7 / 24.8–25.2 ms | 48.4–48.7 | 124–181 / 283–357 ms (backlog) | 19.1–19.4 / 22.5–23.2 |
+
+All replies in order; 100 viz packets per 500 frames; no reflex crashes. With the old path a
+50 Hz sender builds a backlog (replies 0.1–0.4 s late); with the gather it does not, on an
+idle machine. Not measured: a browser flight after this change (the page's own rendering
+shares the CPU, which is why earlier browser flights saw 20–36 replies/s), and the Mac.
+
 ## Windows laptop GPU/CPU benchmark (2026-09-26, measurement only, checkout `1e22904`)
 
 Machine: i7-11800H (8C/16T), 15.7 GB RAM, RTX 3050 Ti Laptop 4 GB (driver 566.07), AC
