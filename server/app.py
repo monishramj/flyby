@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from server.config import settings
 from server.grok.ask import ask
+from server.grok.client import GrokUnavailable
+from server.grok.vision import check_person
 from server.mission.loop import MissionRun
 from server.protocol import command_adapter, event
 from server.store.writer import Writer
@@ -150,6 +152,23 @@ async def ask_ground_control(body: Question):
     if mission.run is None:
         raise HTTPException(503, "No mission is running.")
     return await ask(mission.run, body.question, cfg=mission.cfg)
+
+
+class VisionRequest(BaseModel):
+    lead_id: str = Field(min_length=1, max_length=64)
+    image: str = Field(min_length=32, max_length=settings.VISION_MAX_IMAGE_CHARS)
+
+
+@app.post("/api/vision")
+async def vision(body: VisionRequest):
+    """Advisory person check on the drone's photo at the target; changes no mission state."""
+    try:
+        report = await check_person(body.image, cfg=app.state.mission.cfg)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except GrokUnavailable as exc:
+        raise HTTPException(503, "Grok vision is offline; nothing was changed.") from exc
+    return {"lead_id": body.lead_id, **report}
 
 
 @app.get("/api/truth")

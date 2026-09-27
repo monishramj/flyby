@@ -1,5 +1,5 @@
 import { mountLiveConnectome } from './flyviz/live';
-import { runInspection, type InspectOutcome } from './scene/flight';
+import { runInspection, whenVisionSettled, type InspectOutcome } from './scene/flight';
 import { store, subscribe } from './store';
 import { onInspectionRequest, send, type InspectionRequest } from './ws';
 
@@ -69,7 +69,8 @@ export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
     } finally {
       window.clearTimeout(deadline);
       busy = false; close.disabled = false;
-      // Auto-close after a moment to read the outcome, unless a new flight has started.
+      // Auto-close after a moment to read the outcome (and Grok's advisory photo check), unless a new flight has started.
+      await whenVisionSettled();
       window.setTimeout(() => { if (!busy) panel.hidden = true; }, AUTO_CLOSE_MS);
     }
   }

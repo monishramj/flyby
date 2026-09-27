@@ -57,6 +57,8 @@ class Settings(BaseSettings):
     GROK_PARSE_TIMEOUT_S: float = 10
     GROK_ORDER_TIMEOUT_S: float = 20  # measured 6–11 s; off the critical path, Approve never waits
     GROK_ASK_TIMEOUT_S: float = 20
+    GROK_VISION_TIMEOUT_S: float = 15  # advisory person check on the drone's photo; nothing waits on it
+    VISION_MAX_IMAGE_CHARS: int = 2_000_000  # data-URL length cap (~1.5 MB JPEG)
     ASK_MAX_TOOL_ROUNDS: int = 4
     SIM_HUMAN_ROUTED_S: float = 20
     SIM_HUMAN_APPROVE_S: float = 5
