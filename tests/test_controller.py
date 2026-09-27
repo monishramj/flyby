@@ -102,7 +102,7 @@ def test_brake_latches_then_saccades_away_from_left_looming_then_cruises():
 
 
 def test_saccade_turns_toward_goal_side_when_looming_is_centred():
-    out = run_ctl(Controller(THETA), lambda k: THETA + 1 if k == 0 else 0.0, dLR=0.0, bearing=-0.2)
+    out = run_ctl(Controller(THETA), lambda k: THETA + 1 if k == 0 else 0.0, dLR=0.0, bearing=-0.1)
     assert out[LATCH]["cmd"] == "saccade_left"
 
 
@@ -194,7 +194,7 @@ COMMIT = round(cfg.COMMIT_S / cfg.DT_S)
 
 
 def test_after_a_saccade_the_new_heading_is_held_before_goal_steering():
-    out = run_ctl(Controller(THETA), lambda k: THETA + 1 if k == 0 else 0.0, dLR=THETA, n=200, bearing=-1.0)
+    out = run_ctl(Controller(THETA), lambda k: THETA + 1 if k == 0 else 0.0, dLR=THETA, n=200, bearing=-0.1)
     end = LATCH + SACCADE
     assert all(o["yaw_rate"] == 0.0 and o["speed"] == cfg.NAV_CRUISE_MPS for o in out[end:end + COMMIT])
     assert out[end + COMMIT]["yaw_rate"] < 0  # goal steering resumes toward the goal (left)
@@ -221,3 +221,11 @@ def test_a_brake_with_the_goal_behind_turns_toward_the_goal_not_around():
                      goal_bearing=0.0 if k < again else -2.5) for k in range(again + LATCH + 3)]
     assert outs[LATCH]["cmd"] == "saccade_right"
     assert outs[again + LATCH]["cmd"] == "saccade_left"
+
+
+def test_looming_is_ignored_while_the_controller_itself_turns():
+    ctl = Controller(THETA)
+    # goal 45 degrees right: goal steering turns at ~42 deg/s, above YAW_BLIND_DPS
+    assert ctl.step(HOVER, THETA + 1, 0.0, True, goal_bearing=0.8)["cmd"] == "none"
+    ctl2 = Controller(THETA)
+    assert ctl2.step(HOVER, THETA + 1, 0.0, True, goal_bearing=0.05)["cmd"] == "brake"  # nearly straight

@@ -14,6 +14,10 @@ commit:  hold the new heading for COMMIT_S before goal steering resumes, so the
          instead of alternating left and right, unless the goal has fallen more than
          GOAL_BEHIND_DEG off the heading: then it turns toward the goal side, so a
          detour never becomes a circle. Then cruise again.
+efference copy: while the controller itself steers faster than YAW_BLIND_DPS (and
+         YAW_BLIND_AFTER_S after), looming is ignored: turning sweeps the whole view,
+         which the readout (trained on straight flights) would read as looming.
+         Flies discount self-generated optic flow in the same way.
 arrived: within GOAL_RADIUS_M of the goal.
 The first HOVER_S of an episode ignores looming: the scene's onset after the
 gray warm-up is not approach (the scene hovers during this time).
@@ -27,7 +31,7 @@ from pathlib import Path
 
 from reflex.config import (
     BRAKE_LATCH_S, CHAIN_S, COMMIT_S, DT_S, GOAL_BEHIND_DEG, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
-    SACCADE_RATE_DPS, SACCADE_SUPPRESS_S, THETA_UNCALIBRATED, THRESHOLDS_PATH,
+    SACCADE_RATE_DPS, SACCADE_SUPPRESS_S, THETA_UNCALIBRATED, THRESHOLDS_PATH, YAW_BLIND_AFTER_S, YAW_BLIND_DPS,
 )
 
 
@@ -62,6 +66,8 @@ class Controller:
             self.state = "arrived"
             return self._cmd("arrived", 0.0, 0.0)
         cruise = self._cmd("none", NAV_CRUISE_MPS, GOAL_TURN_DPS * math.sin(goal_bearing))
+        if self.state == "cruise" and abs(cruise["yaw_rate"]) > YAW_BLIND_DPS:
+            self.suppress_until_k = max(self.suppress_until_k, k + round(YAW_BLIND_AFTER_S / DT_S))
         if not reflex_on:
             return cruise
         if self.state == "brake":
