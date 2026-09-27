@@ -190,20 +190,35 @@ function closedRow(lead: Lead): string {
     </select></span></li>`;
 }
 
-// Reading position: the open card stays put while cards arrive around it, and cards that land out of
-// view raise a pill (top/bottom, like unread messages) that clears once they've been on screen.
+// Reading position: every card on screen stays put while cards arrive, leave or move around it, and cards
+// that land out of view raise a pill (top/bottom, like unread messages) that clears once they've been on screen.
 const fresh = new Set<string>();
 let known: Set<string> | null = null;
 const scrollerOf = (root: HTMLElement) => root.closest('.work') as HTMLElement | null;
 const cards = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('.card[data-lead]')];
 
+/** Where each on-screen card sits now, so the next render can put them back. */
 function anchorOf(root: HTMLElement) {
   const scroller = scrollerOf(root);
-  if (!scroller) return null;
-  const view = scroller.getBoundingClientRect(), list = cards(root);
-  const shown = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return r.bottom > view.top && r.top < view.bottom; };
-  const el = list.find(card => card.classList.contains('selected') && shown(card)) ?? (scroller.scrollTop > 0 ? list.find(shown) : undefined);
-  return el ? { id: el.dataset.lead!, top: el.getBoundingClientRect().top } : null;
+  if (!scroller) return [];
+  const view = scroller.getBoundingClientRect();
+  return cards(root).map(el => ({ id: el.dataset.lead!, r: el.getBoundingClientRect() }))
+    .filter(({ r }) => r.bottom > view.top && r.top < view.bottom).map(({ id, r }) => ({ id, top: r.top }));
+}
+
+/** Undo the smallest shift among the cards that were on screen: the ones that stayed in place win,
+ *  and a card that jumped sections (approved → dispatched at the bottom) doesn't drag the view along. */
+function restore(root: HTMLElement, anchor: { id: string; top: number }[]) {
+  const scroller = scrollerOf(root);
+  if (!scroller) return;
+  let shift: number | null = null;
+  for (const { id, top } of anchor) {
+    const el = root.querySelector<HTMLElement>(`.card[data-lead="${id}"]`);
+    if (!el) continue;
+    const delta = el.getBoundingClientRect().top - top;
+    if (shift === null || Math.abs(delta) < Math.abs(shift)) shift = delta;
+  }
+  if (shift) scroller.scrollTop += shift;
 }
 
 function updatePills(root: HTMLElement) {
@@ -248,9 +263,9 @@ export function renderQueue(root: HTMLElement) {
     closed.length ? chip('closed', `Auto-closed (${closed.length})${flagged ? ` <span class="warn">· ${flagged} flagged</span>` : ''}`) : '',
   ].join('');
   root.innerHTML = `${chips ? `<nav class="work-tabs">${chips}</nav>` : ''}${body}`;
-  const scroller = scrollerOf(root), moved = anchor && root.querySelector<HTMLElement>(`.card[data-lead="${anchor.id}"]`);
-  if (scroller && moved) scroller.scrollTop += moved.getBoundingClientRect().top - anchor.top;
+  restore(root, anchor);
   const ids = new Set(leads.map(lead => lead.lead_id));
+  if (known) cards(root).forEach(el => { if (!known!.has(el.dataset.lead!)) el.classList.add('enter'); });
   if (known) ids.forEach(id => { if (!known!.has(id) && tab !== 'closed') fresh.add(id); });
   known = ids; if (tab === 'closed') fresh.clear();
   updatePills(root);
