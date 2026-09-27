@@ -1,0 +1,60 @@
+{
+  "theta": 1.0,
+  "speed_mps": 1.5,
+  "frame_hz": 50,
+  "required_warning_s": 0.415,
+  "model": "flow/0000/000",
+  "clips": {
+    "clear": {
+      "frames": 250,
+      "duration_s": 5.0,
+      "peak_S": 0.0227,
+      "first_brake_t_s": null,
+      "compute_ms_median": 3.78,
+      "compute_ms_p95": 4.28
+    },
+    "debris ahead": {
+      "frames": 242,
+      "duration_s": 4.84,
+      "peak_S": 9.5272,
+      "first_brake_t_s": 1.26,
+      "compute_ms_median": 3.75,
+      "compute_ms_p95": 4.24,
+      "warning_s": 3.573,
+      "dist_at_brake_m": 5.61,
+      "in_time": true
+    },
+    "post ahead": {
+      "frames": 242,
+      "duration_s": 4.84,
+      "peak_S": 3.8296,
+      "first_brake_t_s": 1.92,
+      "compute_ms_median": 3.8,
+      "compute_ms_p95": 4.23,
+      "warning_s": 2.913,
+      "dist_at_brake_m": 4.62,
+      "in_time": true
+    },
+    "debris offset 0.4 m": {
+      "frames": 242,
+      "duration_s": 4.84,
+      "peak_S": 3.8766,
+      "first_brake_t_s": 1.28,
+      "compute_ms_median": 3.76,
+      "compute_ms_p95": 4.24,
+      "warning_s": 3.553,
+      "dist_at_brake_m": 5.58,
+      "in_time": true
+    },
+    "debris passing 1.2 m aside": {
+      "frames": 242,
+      "duration_s": 4.84,
+      "peak_S": 1.5051,
+      "first_brake_t_s": null,
+      "compute_ms_median": 3.87,
+      "compute_ms_p95": 4.26
+    }
+  },
+  "theta_calibrated": true,
+  "total_frames": 1218
+}
