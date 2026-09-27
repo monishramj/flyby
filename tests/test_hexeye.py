@@ -32,6 +32,23 @@ def test_energies_rectify_and_average_named_subtypes_over_region_columns():
     assert set(e) == set(REGIONS)
 
 
+def test_hex_sampler_matches_flyvis_boxeye():
+    torch = pytest.importorskip("torch")
+    rendering = pytest.importorskip("flyvis.datasets.rendering")
+    from reflex.hexeye import hex_sampler
+
+    box = rendering.BoxEye(extent=cfg.FLYVIS_EXTENT, kernel_size=cfg.FLYVIS_KERNEL_SIZE)
+    idx, w = hex_sampler(box, cfg.FRAME_R)
+    assert idx.shape[0] == cfg.EXPECTED_COLUMNS
+    rng = np.random.default_rng(1)
+    frames = [rng.random((cfg.FRAME_R, cfg.FRAME_R), dtype=np.float32) for _ in range(5)]
+    frames += [np.full((cfg.FRAME_R, cfg.FRAME_R), 0.5, np.float32), np.eye(cfg.FRAME_R, dtype=np.float32)]
+    for f in frames:
+        ref = box(torch.as_tensor(f)[None, None]).reshape(-1).numpy()
+        got = (f.reshape(-1)[idx] * w).sum(1)
+        assert np.abs(got - ref).max() < 1e-5
+
+
 def test_readout_rejects_incomplete_direction_map():
     partial = {k: v for k, v in cfg.SUBTYPE_DIR.items() if v != "down"}
     with pytest.raises(ValueError, match="left/right/up/down"):

@@ -69,6 +69,41 @@ class RegionIndex:
         return result
 
 
+def hex_sampler(box_eye, frame_r: int) -> tuple[np.ndarray, np.ndarray]:
+    """BoxEye as a gather: hexal i = sum(frame.ravel()[idx[i]] * w[i]).
+
+    BoxEye is linear in the frame (bilinear resize to its minimum frame size, zero pad,
+    k×k box mean, sample the receptor centres), and the resize is separable, so each
+    hexal is a_y · frame · a_x over a few source rows/columns. Built from BoxEye's own
+    resize and padding; FlyEye checks it against BoxEye before use.
+    """
+    import torch
+    import torchvision.transforms.functional as ttf
+
+    h, w = box_eye.min_frame_size.tolist()
+    k = box_eye.kernel_size
+    eye_r = torch.eye(frame_r)
+    with torch.inference_mode():
+        # frame j has row j (resp. column j) set to 1: its resize is A[:, j] ⊗ 1.
+        a_h = ttf.resize(eye_r[:, :, None].expand(frame_r, frame_r, frame_r)[None], [h, w])[0, :, :, 0].T
+        a_w = ttf.resize(eye_r[:, None, :].expand(frame_r, frame_r, frame_r)[None], [h, w])[0, :, 0, :].T
+    a_h, a_w = a_h.double().numpy(), a_w.double().numpy()  # (h, frame_r), (w, frame_r)
+    left, _, top, _ = box_eye.pad
+    centers = box_eye.receptor_centers.numpy() + np.array([h // 2, w // 2])
+    rows = []
+    for cy, cx in centers:
+        a_y = a_h[max(cy - top, 0):cy - top + k].sum(0)
+        a_x = a_w[max(cx - left, 0):cx - left + k].sum(0)
+        ys, xs = np.flatnonzero(a_y), np.flatnonzero(a_x)
+        rows.append(((ys[:, None] * frame_r + xs).ravel(), np.outer(a_y[ys], a_x[xs]).ravel() / k**2))
+    m = max(len(i) for i, _ in rows)
+    idx = np.zeros((len(rows), m), np.int64)
+    wts = np.zeros((len(rows), m), np.float32)
+    for n, (i, v) in enumerate(rows):
+        idx[n, :len(i)], wts[n, :len(v)] = i, v
+    return idx, wts
+
+
 def load_layout(path: Path = cfg.LAYOUT_PATH) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -101,6 +136,13 @@ class FlyEye:
                 network = view.init_network()
         self.network = network.to(self.device).eval().requires_grad_(False)
         self.box_eye = BoxEye(extent=cfg.FLYVIS_EXTENT, kernel_size=cfg.FLYVIS_KERNEL_SIZE)
+        # Per-frame path: the same sampling as a gather (~3 ms less per step on CPU).
+        self._hex_idx, self._hex_w = hex_sampler(self.box_eye, cfg.FRAME_R)
+        probe = np.random.default_rng(0).random((3, cfg.FRAME_R, cfg.FRAME_R), dtype=np.float32)
+        for image in probe:
+            ref = self.box_eye(torch.as_tensor(image, device=self.device)[None, None]).reshape(-1).cpu().numpy()
+            if np.abs(self._sample(image) - ref).max() > 1e-5:
+                raise RuntimeError("hex_sampler disagrees with flyvis BoxEye")
 
         layout = layout or load_layout()
         types = np.asarray(layout["types"])
@@ -114,12 +156,16 @@ class FlyEye:
         self.last_ms = 0.0
         self._warm = None
 
+    def _sample(self, image: np.ndarray) -> np.ndarray:
+        """(FRAME_R, FRAME_R) float frame -> (hexals,) float32, identical to BoxEye."""
+        return (image.reshape(-1)[self._hex_idx] * self._hex_w).sum(1, dtype=np.float32)
+
     def _step(self, image: np.ndarray) -> np.ndarray:
         torch = self.torch
         with torch.inference_mode():
-            value = torch.as_tensor(image, dtype=torch.float32, device=self.device)[None, None]
+            hexals = torch.as_tensor(self._sample(image), device=self.device)
             self.network.stimulus.zero(1, 1)
-            self.network.stimulus.add_input(self.box_eye(value))
+            self.network.stimulus.add_input(hexals.view(1, 1, 1, -1))
             self.state = self.network(self.network.stimulus(), dt=cfg.DT_S, state=self.state, as_states=True)[-1]
             activity = self.state.nodes.activity[0].cpu().numpy().copy()
         if not np.isfinite(activity).all():
