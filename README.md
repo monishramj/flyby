@@ -119,7 +119,7 @@ built state, it is re-decided (new decision appended to its history; queue re-so
 
 ```
 flyby-triage/
-  AGENTS.md  README.md  .env.example  pyproject.toml
+  AGENTS.md  README.md  pyproject.toml
   server/  config.py app.py protocol.py
            mission/ incident/ triage/ grok/ store/
   web/     index.html src/ (ws, store, map, queue, intel, log, ask, results)
@@ -896,7 +896,7 @@ behavior with Grok and Atlas unreachable; fix anything that blocks or crashes.
 
 ```
 uv sync && (cd web && npm install)
-cp .env.example .env                       # add XAI_API_KEY, and MONGODB_URI if you have one
+printf 'XAI_API_KEY=\nXAI_MODEL=\nMONGODB_URI=\n' > .env   # fill in; everything else defaults in server/config.py
 uv run python -m tools.setup_laya          # once: downloads the local checkpoint
 ```
 
