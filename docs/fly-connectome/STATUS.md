@@ -11,6 +11,18 @@ posts 12/20, beam 4/20), 1/37 false brakes + 2 early brakes. Route flights (entr
 under the roof, 8 flights): 7/8 reached the target; the sagging beam collides.
 Integration with `triage`: `INTEGRATION.md` + `HANDOFF.md` (nothing pushed there).
 
+## Handoff to Monish (2026-09-27)
+
+Pushed since the last handoff: backup recording (`inspect.html?record=1` +
+`tools/record_inspection.py`, localhost only), three clips with measured JSON in
+`media/` (debris reaches target, clear reaches target, beam collides), lockstep chase-view
+fix (`d80fb80`), `rehearsal-triage.patch` (20 files, applies to triage `68033b6`).
+New: `tools/merge_into_triage.sh` reproduces the merge on a local branch; verified here:
+158 passed, 1 skipped, `tsc` + build clean. Fly branch alone: 76 fast tests pass.
+**Open, Monish's side:** mission deadline (wait for `inspect.result` with a ~30 s cap, or
+`INSPECT_HOVER_S` 120 at ×4); Mac live-rate check. Not done: retrain at 1.0 m/s / beam
+variety (current weights are the 1.5 m/s fit).
+
 ## Waypoint routes and efference copy (2026-09-27)
 
 `web/src/scene/inspect.ts`: ordered waypoints; each reached, skipped after

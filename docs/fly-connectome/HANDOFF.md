@@ -28,6 +28,10 @@ Pages: `/inspect.html` (one inspection flight + live 3D brain), `/flyviz.html` (
 looming trace, circuit), `/connectome.html` (3D view, recorded), `/bench.html`,
 `/capture.html` (tools). Check `http://127.0.0.1:8001/health` shows
 `"model_ready": true, "readout": "learned", "theta_calibrated": true`.
+Mac: needs Apple Silicon with macOS 14+ (the locked torch 2.14 has only
+`macosx_14_0_arm64` wheels) and network once for `prepare_flyvis`. The reflex runs on CPU;
+check the live rate first (a debris flight on `/inspect.html`: `realtime_factor` near 1,
+`late_replies` 0). Backup clips if the live demo fails: `docs/fly-connectome/media/`.
 Do **not** install CUDA PyTorch into this venv (it broke CPU loading and coincided with
 reflex crashes on Windows); use a separate venv for GPU training.
 
@@ -75,8 +79,13 @@ never push it. `rehearsal-triage.patch` beside this file is a `git diff` against
 `68033b6` of only the 20 files the rehearsal resolved or changed (conflict resolutions
 plus the mission prototype: server/app.py, mission/loop.py, protocol.py, web/src/
 inspection.ts, main.ts, ws.ts, store.ts, queue.ts, style.css, scene/flight.ts,
-package/uv locks, docs). To reproduce: merge `fly/connectome` into `triage`, then take
-these 20 files from the patch; every other fly file comes unchanged from `fly/connectome`.
+package/uv locks, docs). **To reproduce, run `bash tools/merge_into_triage.sh`** from a
+clean checkout: it makes a local branch `merge/triage-fly` from `origin/triage`, merges
+`fly/connectome`, takes fly-only files from `fly/connectome`, keeps triage's
+`tests/test_config.py`, applies the patch to just its files, and never pushes. Verified in
+the cloud on triage `68033b6`: 158 passed, 1 skipped (fast tests), `tsc` and build clean.
+(`scene/flight.ts`, `inspect-page.ts`, `inspect.html` and these docs come from
+`fly/connectome`, which is newer than the patch.)
 The panel now reads waypoints/realtime_factor and accepts maxWallS (27 s default).
 Result compatibility: reached defaults true for old clients, found defaults null;
 a collision or not-reached result always needs a human. The retry token and reset
