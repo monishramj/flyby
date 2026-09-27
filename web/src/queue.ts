@@ -57,6 +57,26 @@ function routedBecause(lead: Lead): string {
 
 const openWhy = new Set<string>();
 
+/** Atlas Vector Search: what the most similar past flags turned out to be. Keyed by decision count, since a re-decision changes the state. */
+type Similar = { unavailable: boolean; n?: number; people?: number; not_people?: Record<string, number> };
+const similar = new Map<string, Similar>();
+const similarKey = (lead: Lead) => `${lead.lead_id}:${lead.history.length}`;
+
+let rerender = () => {};
+
+function similarRow(lead: Lead): string {
+  const key = similarKey(lead);
+  if (!similar.has(key)) {
+    similar.set(key, { unavailable: true });
+    fetch(`/api/similar/${lead.lead_id}`).then(r => (r.ok ? r.json() : { unavailable: true }))
+      .then(body => { similar.set(key, body); rerender(); }).catch(() => {});
+  }
+  const s = similar.get(key)!;
+  if (s.unavailable || !s.n) return '';
+  const rest = Object.entries(s.not_people ?? {}).map(([type, count]) => `${count} ${words(type)}`).join(', ');
+  return `<div><dt>Similar past flags</dt><dd>${s.people} of ${s.n} were people <small>Atlas Vector Search over earlier missions${rest ? `; the rest: ${rest}` : ''}</small></dd></div>`;
+}
+
 function why(lead: Lead): string {
   const decision = lead.decision;
   if (!decision) return '';
@@ -75,6 +95,7 @@ function why(lead: Lead): string {
     ${lead.status === 'awaiting_human' ? `<p class="routed">${routedBecause(lead)}</p>` : ''}
     <dl>
       <div><dt title="${CAMERA_TIP}">Camera score</dt><dd>${pct(lead.detector_conf)} <small>${CAMERA_TIP}</small></dd></div>
+      ${similarRow(lead)}
       ${decision.urgency != null ? `<div><dt>Urgency</dt><dd>${decision.urgency.toFixed(1)} <small>Laya's rating: 0 low → 3 critical</small></dd></div>` : ''}
       ${decision.p_person != null ? `<div><dt>Chance it's a person</dt><dd>${pct(decision.p_person)} <span class="tag warn">experimental</span> <small>Laya's estimate; less reliable than the camera score in our evaluation</small></dd></div>` : ''}
     </dl>
@@ -236,6 +257,7 @@ export function renderQueue(root: HTMLElement) {
 
 export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void, onBrief: (lead: Lead) => void) {
   const scroller = scrollerOf(root);
+  rerender = () => renderQueue(root);
   scroller?.addEventListener('scroll', () => updatePills(root), { passive: true });
   scroller?.addEventListener('click', event => {
     const pill = (event.target as HTMLElement).closest<HTMLElement>('[data-jump]');
