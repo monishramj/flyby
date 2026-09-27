@@ -5,7 +5,8 @@
 // simulation never runs ahead of real time. On a slow machine the flight runs slower
 // than real time, but every command is on time (never a stale reply).
 import * as THREE from 'three';
-import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
+import { ChaseView } from './dress';
+import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, defaultRoute, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
 
 export interface InspectRequest {
   lead_id: string;
@@ -29,8 +30,6 @@ export interface InspectOutcome {
   waypoints: { id: string; status: WaypointStatus }[]; // pending = not attempted before the flight ended
 }
 
-const TARGET_UNDER_ROOF_Z = -2.5;
-const ENTRY_Z = 1.5; // in front of the carport's front beam
 const CSS = `
 .flyby-insp{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;width:100%;height:100%;min-height:320px;font:13px/1.4 system-ui,sans-serif;color:#e8eee7}
 .flyby-insp canvas.view{width:100%;height:100%;min-height:300px;display:block;border-radius:8px;background:#0b100d}
@@ -87,17 +86,16 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
 
   const seed = req.seed ?? hashSeed(req.lead_id);
   const scenario = req.scenario ?? SCENARIOS[seed % SCENARIOS.length];
-  // Default route: through the middle of the carport opening, then under the roof.
-  const waypoints = req.waypoints ?? [
-    { id: 'entry', x: 0, z: ENTRY_Z },
-    { id: 'target', x: 0, z: TARGET_UNDER_ROOF_Z },
-  ];
+  // Default route: carport = through the middle of the opening, then under the roof;
+  // house = front door, living room, doorway, bedroom, target.
+  const waypoints = req.waypoints ?? defaultRoute(scenario);
   const spec = makeSpec(seed, scenario, req.fovDeg ?? 90,
                         { goalZ: waypoints[waypoints.length - 1].z, person: req.person ?? false, waypoints });
   const insp = new Inspection(spec);
   (insp.drone.getObjectByName('body') as THREE.Mesh).visible = true;
   const renderer = new THREE.WebGLRenderer({ canvas: view, antialias: true });
-  const chase = new THREE.PerspectiveCamera(55, 1, 0.05, 100);
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; // viewer-only sun
+  const chase = new ChaseView(insp.scene, insp.chaseRig);
   const link = await reflex();
   const reflexOn = req.reflexOn ?? true;
   const episode = ++episodeCounter;
@@ -106,7 +104,7 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
 
   const resize = () => {
     const w = view.clientWidth || 640, h = view.clientHeight || 360;
-    renderer.setSize(w, h, false); chase.aspect = w / h; chase.updateProjectionMatrix();
+    renderer.setSize(w, h, false); chase.camera.aspect = w / h; chase.camera.updateProjectionMatrix();
   };
   resize();
 
@@ -123,6 +121,7 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
       <div class="row"><span>t</span><b>${insp.t.toFixed(1)} s</b></div>
       <div class="row"><span>speed</span><b>${insp.speed.toFixed(2)} m/s</b></div>
       <div class="row"><span>waypoint</span><b>${Math.min(insp.wp + 1, spec.waypoints.length)} / ${spec.waypoints.length} · ${insp.goal().dist.toFixed(1)} m</b></div>
+      <div class="row"><span>heading to</span><b>${spec.waypoints[Math.min(insp.wp, spec.waypoints.length - 1)].id}</b></div>
       <div class="row"><span>looming S</span><b>${c?.S == null ? '—' : c.S.toFixed(2)}</b></div>`;
   };
 
@@ -139,11 +138,9 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
     insp.step(command, false);
     // A slower-than-real-time reflex still needs a visible chase view and HUD.
     // Only the pacing wait depends on whether simulation time is ahead of wall time.
-    const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
-    chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
-    chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
-    renderer.setRenderTarget(null);
-    renderer.render(insp.scene, chase);
+    chase.update({ x: insp.x, z: insp.z, yaw: insp.yaw, speed: insp.speed, t: insp.t, drone: insp.drone,
+                   cmd: insp.t < HOVER_S ? undefined : command?.cmd, collided: insp.collided, arrived: insp.arrived });
+    chase.render(renderer);
     drawHud();
     while (insp.t * 1000 > performance.now() - started) await nextPaint();
   }

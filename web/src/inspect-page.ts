@@ -1,13 +1,13 @@
 // Standalone development page for the close-in inspection (the same code the mission UI
 // calls on inspect.request), with the live 3D connectome view beside it.
-import { SCENARIOS, type Scenario } from './scene/inspect';
+import { ALL_SCENARIOS as SCENARIOS, type Scenario } from './scene/inspect';
 import { runInspection } from './scene/flight';
 import { mountLiveConnectome } from './flyviz/live';
 import { recordInspection } from './inspect-recording';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const scenarioSel = $<HTMLSelectElement>('scenario');
-for (const s of SCENARIOS) scenarioSel.add(new Option(s.replace('_', ' '), s));
+for (const s of SCENARIOS) scenarioSel.add(new Option(s === 'house' ? 'house (experimental)' : s.replace('_', ' '), s));
 const query = new URLSearchParams(location.search);
 if (SCENARIOS.includes(query.get('scenario') as Scenario)) scenarioSel.value = query.get('scenario')!;
 if (query.has('seed')) $<HTMLInputElement>('seed').value = query.get('seed')!;

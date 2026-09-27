@@ -107,6 +107,12 @@ INSPECT_HOVER_S=120 at scale 4). The patch does not implement that ownership han
 
 ## Known limits (say them, don't hide them)
 
+- The viewer's chase view is dressed (colours, drone model, shadows, trail); the fly camera
+  renders the measured benchmark scene, verified frame-identical (STATUS.md). The inset
+  "Drone camera → fly eye" shows what the fly actually sees.
+- `house` on `/inspect.html` is experimental: the readout was not fitted indoors and 0/6
+  flights reached the target. Don't use it in the mission demo.
+
 - Thin posts and cables are near the eye's resolution (721 facets; ~3.8° each at 90°).
 - The sagging beam is the weakest case (only its lower edge moves near the centre).
 - The readout was fitted on straight flights; during turns it is blind by design

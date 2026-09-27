@@ -1,8 +1,9 @@
-// Carport inspection scene: world, drone kinematics, collisions, FPV frames, reflex link.
+// Inspection scenes (benchmark carport, damaged house): world, drone kinematics, collisions, FPV frames, reflex link.
 // Units: metres, seconds. World: y up; the drone flies in the x–z plane at DRONE_Y.
 // Heading 0 faces −z; + yaw turns right (toward +x). Camera image: x right, y up,
 // sent with row 0 = top. Constants mirror reflex/config.py where they overlap.
 import * as THREE from 'three';
+import { CHASE, EYE, addChaseEnvironment, makeDrone, makePerson, onLayer, palette, twin } from './dress';
 
 export const FRAME_R = 96;
 // The camera renders at SUPERSAMPLE× resolution with MSAA, then is area-averaged to
@@ -27,8 +28,23 @@ const POST_X = 1.4, POST_R = 0.05, POST_H = 2.3, BACK_Z = -5, BEAM_TOP = 2.3;
 const GRAVITY = 9.81, DEBRIS_Z = -1.0, DEBRIS_HALF = new THREE.Vector3(0.4, 0.35, 0.05);
 const DEBRIS_TOP_Y = POST_H - 0.35 - DEBRIS_HALF.y, DEBRIS_REST_Y = 0.9 + DEBRIS_HALF.y;
 
+// Benchmark scenarios (carport): the readout was fitted and scored on these.
 export const SCENARIOS = ['post', 'beam', 'debris', 'clear', 'near_post'] as const;
-export type Scenario = (typeof SCENARIOS)[number];
+// Plus scenes never used for fitting or scoring (demo / out-of-distribution tests).
+export const ALL_SCENARIOS = [...SCENARIOS, 'house'] as const;
+export type Scenario = (typeof ALL_SCENARIOS)[number];
+
+// House: a gutted open-plan house whose front wall has collapsed (x right, forward is -z).
+// Walls run along the route, as in a real search: a fly-like reflex avoids what looms,
+// it does not aim for doorways, so no solid wall stands across the route.
+const H_CEIL = 2.7, H_T = 0.15, H_CUT = 1.0, H_W = 3.2; // viewer cutaway: walls drawn to 1 m in the chase view
+export const HOUSE_ROUTE: Waypoint[] = [
+  { id: 'entry', x: 0, z: 1.0 }, { id: 'living room', x: 0.3, z: -4.2 }, { id: 'target', x: -1.2, z: -7.2 },
+];
+/** Default inspection route per scene; the last waypoint is the target. */
+export function defaultRoute(scenario: Scenario): Waypoint[] {
+  return scenario === 'house' ? HOUSE_ROUTE : [{ id: 'entry', x: 0, z: 1.5 }, { id: 'target', x: 0, z: -2.5 }];
+}
 
 export interface EpisodeSpec {
   seed: number; scenario: Scenario; fovDeg: number;
@@ -36,6 +52,7 @@ export interface EpisodeSpec {
   beamSag: number; debris: { x: number; tFall: number } | null;
   person: boolean; // a person lying at the goal (mission inspections)
   waypoints: Waypoint[]; // flown in order; the last one is the goal
+  clutter: number; // house: lateral offset of the hanging ceiling panel (m)
 }
 
 export interface Waypoint { id: string; x: number; z: number }
@@ -54,13 +71,14 @@ export function rng(seed: number): () => number {
 
 export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120,
                          opts: { goalZ?: number; person?: boolean; waypoints?: Waypoint[] } = {}): EpisodeSpec {
-  const r = rng(seed * 31 + SCENARIOS.indexOf(scenario));
+  const r = rng(seed * 31 + ALL_SCENARIOS.indexOf(scenario));
   const u = (a: number, b: number) => a + (b - a) * r();
   const side = r() < 0.5 ? -1 : 1;
   const startX = {
     post: side * POST_X + u(-0.15, 0.15),
     near_post: side * (POST_X - u(0.45, 0.7)),
     beam: u(-0.4, 0.4), debris: u(-0.3, 0.3), clear: u(-0.5, 0.5),
+    house: 0, // set below from its own stream: every draw here shifts the benchmark flights' seeds
   }[scenario];
   const startZ = 6;
   // Debris lands ~2.5 m ahead of the drone's straight-line arrival at DEBRIS_Z.
@@ -68,11 +86,16 @@ export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120,
   const accelDist = CRUISE_MPS ** 2 / (2 * A_ACCEL);
   const tArrive = cruiseStart + (startZ - DEBRIS_Z - accelDist) / CRUISE_MPS;
   const fallS = Math.sqrt((2 * (DEBRIS_TOP_Y - DEBRIS_REST_Y)) / GRAVITY);
+  const house = scenario === 'house';
+  const hr = rng(seed * 131 + 7);
+  const startXFinal = house ? -0.2 + 0.4 * hr() : startX;
+  const waypoints = opts.waypoints ?? (house ? HOUSE_ROUTE : [{ id: 'target', x: startX, z: opts.goalZ ?? -8 }]);
+  const last = waypoints[waypoints.length - 1];
   return {
-    seed, scenario, fovDeg, startX, startZ,
+    seed, scenario, fovDeg, startX: startXFinal, startZ,
     heading: u(-2, 2) * Math.PI / 180,
-    goalX: startX, goalZ: opts.goalZ ?? -8, person: opts.person ?? false,
-    waypoints: opts.waypoints ?? [{ id: 'target', x: startX, z: opts.goalZ ?? -8 }],
+    goalX: house ? last.x : startX, goalZ: house ? last.z : opts.goalZ ?? -8, person: opts.person ?? false,
+    waypoints, clutter: house ? -0.3 + 0.6 * hr() : 0,
     beamSag: scenario === 'beam' ? u(0.95, 1.3) : u(0, 0.3),
     debris: scenario === 'debris' ? { x: startX + u(-0.15, 0.15), tFall: tArrive - 2.5 / CRUISE_MPS - fallS + u(-0.3, 0.3) } : null,
   };
@@ -115,40 +138,31 @@ export class Inspection {
   private posts: THREE.Vector2[] = [];
   private boxes: Box[] = [];
   private debris: Box | null = null;
+  /** Viewer chase-camera placement for this scene (see dress.ts ChaseView). */
+  chaseRig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 };
   private rgba = new Uint8Array(CAM_R * CAM_R * 4);
 
   constructor(readonly spec: EpisodeSpec) {
     this.x = spec.startX; this.z = spec.startZ; this.yaw = spec.heading;
     this.wpStatus = spec.waypoints.map(() => 'pending' as WaypointStatus);
     const s = this.scene;
+    const pal = palette();
     s.background = new THREE.Color(0xb8bdb8);
-    s.add(new THREE.HemisphereLight(0xffffff, 0x555555, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(4, 8, 3); s.add(sun);
+    // Fly-camera lights (EYE layer): unchanged from the benchmark. The chase camera has its own.
+    s.add(onLayer(new THREE.HemisphereLight(0xffffff, 0x555555, 1.6), EYE));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(4, 8, 3); s.add(onLayer(sun, EYE));
+    addChaseEnvironment(s);
+    this.chaseRig = spec.scenario === 'house' ? { back: 3.4, up: 4.0, ahead: 1.4, lookY: 0.5 } : { back: 2.5, up: 2.0, ahead: 2.0, lookY: 1.0 };
 
     // Concrete-like ground: 2 cm grain with broad stains (texture spans 5 m).
     const groundTex = noiseTexture(11, 512, 128, 22, 2, 18, 64); groundTex.repeat.set(12, 12);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.MeshLambertMaterial({ map: groundTex }));
     ground.rotation.x = -Math.PI / 2; s.add(ground);
+    const concrete = pal.concrete.clone(); concrete.map = pal.concrete.map!.clone(); concrete.map.repeat.set(10, 10);
+    twin(ground, concrete).castShadow = false;
 
-    const dark = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
-    const wood = new THREE.MeshLambertMaterial({ map: noiseTexture(23, 64, 90, 25, 4) });
-    for (const px of [-POST_X, POST_X]) for (const pz of [0, BACK_Z]) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(POST_R, POST_R, POST_H, 12), dark);
-      m.position.set(px, POST_H / 2, pz); s.add(m); this.posts.push(new THREE.Vector2(px, pz));
-    }
-    // Front beam, sagging as a parabola toward the middle; approximated by 14 boxes.
-    const n = 14, w = (2 * POST_X) / n;
-    for (let i = 0; i < n; i++) {
-      const cx = -POST_X + (i + 0.5) * w;
-      const bottom = BEAM_TOP - 0.2 - spec.beamSag * (1 - (cx / POST_X) ** 2);
-      this.addBox(new THREE.Vector3(cx - w / 2, bottom, -0.075), new THREE.Vector3(cx + w / 2, bottom + 0.2, 0.075), wood);
-    }
-    this.addBox(new THREE.Vector3(-POST_X, BEAM_TOP - 0.2, BACK_Z - 0.075), new THREE.Vector3(POST_X, BEAM_TOP, BACK_Z + 0.075), wood);
-    const roof = new THREE.MeshLambertMaterial({ map: noiseTexture(37, 128, 150, 30, 8) });
-    this.addBox(new THREE.Vector3(-1.7, 2.35, BACK_Z - 0.3), new THREE.Vector3(1.7, 2.45, 0.3), roof);
-    const brick = noiseTexture(41, 256, 110, 55, 16); brick.repeat.set(4, 1);
-    this.addBox(new THREE.Vector3(-10, 0, -11.2), new THREE.Vector3(10, 4, -11), new THREE.MeshLambertMaterial({ map: brick }));
-    for (const bx of [-3.2, 3.4]) this.addBox(new THREE.Vector3(bx - 0.3, 0, -2.3), new THREE.Vector3(bx + 0.3, 1.0, -1.7), dark);
+    if (spec.scenario === 'house') this.buildHouse();
+    else this.buildCarport();
 
     const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.05, 24), new THREE.MeshLambertMaterial({ color: 0xffffff }));
     goal.position.set(spec.goalX, 0.03, spec.goalZ); s.add(goal);
@@ -156,34 +170,119 @@ export class Inspection {
       const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.02, 8, 32), new THREE.MeshLambertMaterial({ color: 0xe0a33c }));
       ring.rotation.x = Math.PI / 2; ring.position.set(w.x, 0.03, w.z); ring.name = `waypoint-${w.id}`; s.add(ring);
     }
+    // Viewer-only beacons over each waypoint, so the route reads at a glance.
+    for (const [i, w] of spec.waypoints.entries()) {
+      const last = i === spec.waypoints.length - 1;
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 12, 1, true),
+        new THREE.MeshBasicMaterial({ color: last ? 0x6cc48a : 0xe0a33c, transparent: true, opacity: 0.25, depthWrite: false }));
+      beam.position.set(w.x, 1.1, w.z); beam.name = `beacon-${i}`;
+      s.add(onLayer(beam, CHASE));
+    }
     if (spec.person) {
-      const skin = new THREE.MeshLambertMaterial({ color: 0xc9a27e }), cloth = new THREE.MeshLambertMaterial({ color: 0x2f5d8a });
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.1, 4, 12), cloth);
-      body.rotation.z = Math.PI / 2; body.position.set(spec.goalX, 0.18, spec.goalZ - 0.3); s.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), skin);
-      head.position.set(spec.goalX + 0.8, 0.2, spec.goalZ - 0.3); s.add(head);
+      const figure = makePerson(); figure.position.set(spec.goalX, 0, spec.goalZ - 0.3);
+      if (spec.scenario === 'house') {
+        figure.rotation.y = 0.6; s.add(figure); // new scene: the fly camera sees the figure too
+      } else {
+        // Benchmark scene: the fly camera keeps the measured capsule; the viewer sees a figure.
+        const skin = new THREE.MeshLambertMaterial({ color: 0xc9a27e }), cloth = new THREE.MeshLambertMaterial({ color: 0x2f5d8a });
+        const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.1, 4, 12), cloth);
+        body.rotation.z = Math.PI / 2; body.position.set(spec.goalX, 0.18, spec.goalZ - 0.3); s.add(onLayer(body, EYE));
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), skin);
+        head.position.set(spec.goalX + 0.8, 0.2, spec.goalZ - 0.3); s.add(onLayer(head, EYE));
+        figure.position.x -= 0.1; s.add(onLayer(figure, CHASE));
+      }
     }
 
     if (spec.debris) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(2 * DEBRIS_HALF.x, 2 * DEBRIS_HALF.y, 2 * DEBRIS_HALF.z), new THREE.MeshLambertMaterial({ map: noiseTexture(53, 64, 120, 40, 8) }));
+      twin(m, pal.panel);
       this.debris = { min: new THREE.Vector3(), max: new THREE.Vector3(), mesh: m };
       s.add(m);
       this.placeDebris();
     }
 
     this.fpv = new THREE.PerspectiveCamera(spec.fovDeg, 1, 0.05, 60);
+    this.fpv.layers.enable(EYE);
     this.drone.add(this.fpv);
-    const body = new THREE.Mesh(new THREE.SphereGeometry(DRONE_RADIUS, 16, 12), new THREE.MeshLambertMaterial({ color: 0xd9480f, transparent: true, opacity: 0.6 }));
-    body.visible = false; body.name = 'body';
+    const body = makeDrone();
+    body.visible = false;
     this.drone.add(body);
     s.add(this.drone);
     this.pose();
   }
 
-  private addBox(min: THREE.Vector3, max: THREE.Vector3, mat: THREE.Material) {
+  /** The benchmark carport (fly camera: exactly as measured; viewer: coloured twins). */
+  private buildCarport() {
+    const s = this.scene, spec = this.spec, pal = palette();
+    const dark = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+    const wood = new THREE.MeshLambertMaterial({ map: noiseTexture(23, 64, 90, 25, 4) });
+    for (const px of [-POST_X, POST_X]) for (const pz of [0, BACK_Z]) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(POST_R, POST_R, POST_H, 12), dark);
+      m.position.set(px, POST_H / 2, pz); s.add(m); this.posts.push(new THREE.Vector2(px, pz));
+      twin(m, pal.rust);
+    }
+    // Front beam, sagging as a parabola toward the middle; approximated by 14 boxes.
+    const n = 14, w = (2 * POST_X) / n;
+    for (let i = 0; i < n; i++) {
+      const cx = -POST_X + (i + 0.5) * w;
+      const bottom = BEAM_TOP - 0.2 - spec.beamSag * (1 - (cx / POST_X) ** 2);
+      this.addBox(new THREE.Vector3(cx - w / 2, bottom, -0.075), new THREE.Vector3(cx + w / 2, bottom + 0.2, 0.075), wood, pal.wood);
+    }
+    this.addBox(new THREE.Vector3(-POST_X, BEAM_TOP - 0.2, BACK_Z - 0.075), new THREE.Vector3(POST_X, BEAM_TOP, BACK_Z + 0.075), wood, pal.wood);
+    const roof = new THREE.MeshLambertMaterial({ map: noiseTexture(37, 128, 150, 30, 8) });
+    this.addBox(new THREE.Vector3(-1.7, 2.35, BACK_Z - 0.3), new THREE.Vector3(1.7, 2.45, 0.3), roof, pal.roof);
+    const brick = noiseTexture(41, 256, 110, 55, 16); brick.repeat.set(4, 1);
+    const brickC = pal.brick.clone(); brickC.map = pal.brick.map!.clone(); brickC.map.repeat.set(5, 1);
+    this.addBox(new THREE.Vector3(-10, 0, -11.2), new THREE.Vector3(10, 4, -11), new THREE.MeshLambertMaterial({ map: brick }), brickC);
+    for (const [i, bx] of [-3.2, 3.4].entries()) this.addBox(new THREE.Vector3(bx - 0.3, 0, -2.3), new THREE.Vector3(bx + 0.3, 1.0, -1.7), dark, i ? pal.bin2 : pal.bin);
+  }
+
+  /** A gutted house; seen by both cameras except the viewer's cutaway walls and ceiling. */
+  private buildHouse() {
+    const pal = palette(), v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    const tex = (m: THREE.MeshStandardMaterial, rx: number, ry: number) => { const c = m.clone(); c.map = m.map!.clone(); c.map.repeat.set(rx, ry); return c; };
+    // Walls: full height for the fly camera (EYE), cut at H_CUT for the viewer (CHASE).
+    const wall = (x0: number, z0: number, x1: number, z1: number) => {
+      const len = Math.max(x1 - x0, z1 - z0);
+      this.addBox(v(x0, 0, z0), v(x1, H_CEIL, z1), tex(pal.plaster, len / 2, 1.3), null, EYE);
+      const cut = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, H_CUT, z1 - z0), tex(pal.plaster, len / 2, 0.5));
+      cut.position.set((x0 + x1) / 2, H_CUT / 2, (z0 + z1) / 2); cut.castShadow = cut.receiveShadow = true;
+      const cap = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 + 0.002, 0.01, z1 - z0 + 0.002), pal.wallCut);
+      cap.position.set((x0 + x1) / 2, H_CUT, (z0 + z1) / 2);
+      this.scene.add(onLayer(cut, CHASE), onLayer(cap, CHASE));
+    };
+    wall(-H_W - H_T, -12, -H_W, 2); wall(H_W, -12, H_W + H_T, 2);       // side walls
+    wall(-H_W, -3 - H_T / 2, -1.7, -3 + H_T / 2);                        // half partition, left
+    wall(-H_W, -12 - H_T, H_W, -12);                                     // back wall, far behind the target
+    // Ceiling: the front third collapsed with the facade; the panel below hangs from its broken edge.
+    this.addBox(v(-H_W, H_CEIL, -12), v(H_W, H_CEIL + 0.1, -1.1), tex(pal.plaster, 3, 5), null, EYE);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(2 * H_W, 14), tex(pal.floorboards, 3, 6));
+    floor.rotation.x = -Math.PI / 2; floor.position.set(0, 0.004, -5); floor.receiveShadow = true;
+    this.scene.add(floor);
+    // The facade collapsed entirely: only a low rubble line remains (a looming reflex cannot
+    // tell a doorway from an obstacle; a door frame dead ahead reads as a collision).
+    for (const [x0, x1] of [[-H_W, -1.1], [1.1, H_W]]) this.addBox(v(x0, 0, 1.9), v(x1, 0.35, 2.1), pal.plaster);
+    // Hazards at drone height: a ceiling panel hanging into the living room (x varies by seed)
+    // and a toppled wardrobe on the way to the target.
+    const px = 0.2 + this.spec.clutter;
+    this.addBox(v(px - 0.55, 0.75, -1.25), v(px + 0.55, H_CEIL, -1.15), pal.panel);
+    this.addBox(v(-1.3, 0, -6.1), v(0.1, 1.9, -5.6), pal.wood);
+    // Furniture below drone height (seen, not in the way): couch, table, bed, rubble.
+    this.addBox(v(-3.1, 0, -2.6), v(-2.2, 0.8, -0.2), pal.fabric);
+    this.addBox(v(1.6, 0, -2.4), v(2.6, 0.45, -1.6), pal.wood);
+    this.addBox(v(1.6, 0, -11.9), v(3.1, 0.55, -9.8), pal.fabric);
+    const r = rng(this.spec.seed * 7 + 3);
+    for (let i = 0; i < 16; i++) {
+      const x = -3 + 6 * r(), z = -11 + 12 * r(), sz = 0.08 + 0.2 * r();
+      this.addBox(v(x, 0, z), v(x + sz, 0.05 + 0.15 * r(), z + sz * (0.5 + r())), i % 2 ? pal.panel : pal.plaster);
+    }
+  }
+
+  private addBox(min: THREE.Vector3, max: THREE.Vector3, mat: THREE.Material, pretty: THREE.Material | null = null, layer = 0) {
     const size = max.clone().sub(min);
     const m = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), mat);
     m.position.copy(min.clone().add(max).multiplyScalar(0.5));
+    if (pretty) twin(m, pretty); else { m.layers.set(layer); m.castShadow = m.receiveShadow = true; }
     this.scene.add(m);
     this.boxes.push({ min, max, mesh: m });
   }
@@ -315,8 +414,9 @@ export class ReflexLink {
   latest: any = null;
   constructor(private side?: ReflexSideChannel) {}
 
-  // Same origin by default: Vite proxies /ws/reflex to the reflex on :8001.
-  async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/reflex`) {
+  // Vite dev proxies /ws/reflex to the reflex on :8001; the built UI is served by the mission
+  // server on :8000, which has no reflex route, so it connects to :8001 directly.
+  async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${import.meta.env.DEV ? location.host : `${location.hostname}:8001`}/ws/reflex`) {
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = (e) => {
