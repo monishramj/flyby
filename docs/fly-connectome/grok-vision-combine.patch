@@ -1,0 +1,191 @@
+diff --git a/server/app.py b/server/app.py
+index 58749d0..06f578b 100644
+--- a/server/app.py
++++ b/server/app.py
+@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field, ValidationError
+ 
+ from server.config import settings
+ from server.grok.ask import ask
++from server.grok.client import GrokUnavailable
++from server.grok.vision import check_person
+ from server.mission.loop import MissionRun
+ from server.protocol import command_adapter, event
+ from server.store.writer import Writer
+@@ -152,6 +154,23 @@ async def ask_ground_control(body: Question):
+     return await ask(mission.run, body.question, cfg=mission.cfg)
+ 
+ 
++class VisionRequest(BaseModel):
++    lead_id: str = Field(min_length=1, max_length=64)
++    image: str = Field(min_length=32, max_length=settings.VISION_MAX_IMAGE_CHARS)
++
++
++@app.post("/api/vision")
++async def vision(body: VisionRequest):
++    """Advisory person check on the drone's photo at the target; changes no mission state."""
++    try:
++        report = await check_person(body.image, cfg=app.state.mission.cfg)
++    except ValueError as exc:
++        raise HTTPException(422, str(exc)) from exc
++    except GrokUnavailable as exc:
++        raise HTTPException(503, "Grok vision is offline; nothing was changed.") from exc
++    return {"lead_id": body.lead_id, **report}
++
++
+ @app.get("/api/truth")
+ async def truth():
+     """Ground truth for the 3D view's debug toggle; the websocket snapshot stays truth-free."""
+diff --git a/server/config.py b/server/config.py
+index ace957f..4b757db 100644
+--- a/server/config.py
++++ b/server/config.py
+@@ -57,6 +57,8 @@ class Settings(BaseSettings):
+     GROK_PARSE_TIMEOUT_S: float = 10
+     GROK_ORDER_TIMEOUT_S: float = 20  # measured 6–11 s; off the critical path, Approve never waits
+     GROK_ASK_TIMEOUT_S: float = 20
++    GROK_VISION_TIMEOUT_S: float = 15  # advisory person check on the drone's photo; nothing waits on it
++    VISION_MAX_IMAGE_CHARS: int = 2_000_000  # data-URL length cap (~1.5 MB JPEG)
+     ASK_MAX_TOOL_ROUNDS: int = 4
+     SIM_HUMAN_ROUTED_S: float = 20
+     SIM_HUMAN_APPROVE_S: float = 5
+diff --git a/web/src/inspection.ts b/web/src/inspection.ts
+index c17799e..0decfbc 100644
+--- a/web/src/inspection.ts
++++ b/web/src/inspection.ts
+@@ -1,5 +1,5 @@
+ import { mountLiveConnectome } from './flyviz/live';
+-import { runInspection, type InspectOutcome } from './scene/flight';
++import { runInspection, whenVisionSettled, type InspectOutcome } from './scene/flight';
+ import { store, subscribe } from './store';
+ import { onInspectionRequest, send, type InspectionRequest } from './ws';
+ 
+@@ -69,7 +69,8 @@ export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
+     } finally {
+       window.clearTimeout(deadline);
+       busy = false; close.disabled = false;
+-      // Auto-close after a moment to read the outcome, unless a new flight has started.
++      // Auto-close after a moment to read the outcome (and Grok's advisory photo check), unless a new flight has started.
++      await whenVisionSettled();
+       window.setTimeout(() => { if (!busy) panel.hidden = true; }, AUTO_CLOSE_MS);
+     }
+   }
+diff --git a/server/grok/vision.py b/server/grok/vision.py
+new file mode 100644
+index 0000000..dd48312
+--- /dev/null
++++ b/server/grok/vision.py
+@@ -0,0 +1,47 @@
++"""Grok vision: does the drone's close-in photo show a person?
++
++Advisory only. It reports what it sees for the human; it never changes a lead, and no
++mission decision or flight result waits on it (the panel asks after the flight ends).
++"""
++import asyncio
++import re
++import time
++
++from pydantic import BaseModel, Field
++from xai_sdk.chat import image, system, user
++
++from server.config import settings
++from server.grok.client import GrokUnavailable, _connection
++
++DATA_URL = re.compile(r"data:image/(jpeg|png);base64,[A-Za-z0-9+/]+=*")
++SYSTEM = ("You check one camera frame from a search-and-rescue drone in a simulation. "
++          "Report only what is visible in the frame. Say whether a person is visible, how confident "
++          "you are (0 to 1), and describe in one short sentence where they are and their apparent "
++          "posture. Do not recommend actions and do not guess beyond the image.")
++
++
++class VisionReport(BaseModel):
++    person_visible: bool
++    confidence: float = Field(ge=0, le=1)
++    description: str = Field(max_length=300)
++
++
++async def check_person(image_url: str, *, cfg=settings, client=None) -> dict:
++    """Raise ValueError for a malformed image, GrokUnavailable when Grok cannot answer."""
++    if len(image_url) > cfg.VISION_MAX_IMAGE_CHARS or not DATA_URL.fullmatch(image_url):
++        raise ValueError("Expected a JPEG or PNG data URL")
++    started = time.perf_counter()
++    try:
++        async with asyncio.timeout(cfg.GROK_VISION_TIMEOUT_S):
++            async with _connection(cfg, client, cfg.GROK_VISION_TIMEOUT_S) as connection:
++                chat = connection.chat.create(model=cfg.XAI_MODEL, messages=[
++                    system(SYSTEM),
++                    user("Is there a person in this drone camera frame?", image(image_url, detail="high")),
++                ])
++                _, report = await chat.parse(VisionReport)
++    except GrokUnavailable:
++        raise
++    except Exception as exc:
++        raise GrokUnavailable() from exc
++    return {**report.model_dump(), "model": cfg.XAI_MODEL,
++            "ms": round((time.perf_counter() - started) * 1000)}
+diff --git a/tests/test_grok_vision.py b/tests/test_grok_vision.py
+new file mode 100644
+index 0000000..b6f0c28
+--- /dev/null
++++ b/tests/test_grok_vision.py
+@@ -0,0 +1,61 @@
++"""Grok vision reports what the drone's photo shows; it is advisory and changes nothing."""
++import base64
++
++import pytest
++
++from conftest import fast_settings
++from server.grok.client import GrokUnavailable
++from server.grok.vision import VisionReport, check_person
++from test_app import client  # noqa: F401  (fixture)
++from test_grok import FakeClient
++
++JPEG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff\xe0 not a real jpeg, the fake never decodes it").decode()
++
++
++async def test_a_report_comes_back_with_model_and_latency_and_the_image_is_sent():
++    report = VisionReport(person_visible=True, confidence=0.9, description="A person lying under the roof.")
++    client = FakeClient(result=report)
++    out = await check_person(JPEG, cfg=fast_settings(XAI_MODEL="grok-test"), client=client)
++    assert out["person_visible"] is True and out["confidence"] == 0.9 and out["model"] == "grok-test"
++    assert out["ms"] >= 0
++    kwargs, _ = client.chats[0]
++    user_message = kwargs["messages"][1]
++    assert any(part.image_url.image_url == JPEG for part in user_message.content)
++
++
++async def test_malformed_images_are_rejected_before_any_call():
++    client = FakeClient()
++    for bad in ["https://example.com/x.jpg", "data:image/gif;base64,AAAA", "data:image/jpeg;base64,@@@"]:
++        with pytest.raises(ValueError):
++            await check_person(bad, cfg=fast_settings(), client=client)
++    assert client.chats == []
++
++
++async def test_grok_errors_and_missing_credentials_are_reported_as_unavailable():
++    with pytest.raises(GrokUnavailable):
++        await check_person(JPEG, cfg=fast_settings(XAI_MODEL="m"), client=FakeClient(error=RuntimeError("no network")))
++    with pytest.raises(GrokUnavailable):
++        await check_person(JPEG, cfg=fast_settings())  # hermetic: no key, no call
++
++
++async def test_a_slow_grok_times_out():
++    with pytest.raises(GrokUnavailable):
++        await check_person(JPEG, cfg=fast_settings(XAI_MODEL="m", GROK_VISION_TIMEOUT_S=0.05), client=FakeClient(delay=0.5))
++
++
++def test_the_route_reports_offline_grok_and_bad_images(client):  # noqa: F811
++    assert client.post("/api/vision", json={"lead_id": "L-1", "image": JPEG}).status_code == 503
++    assert client.post("/api/vision", json={"lead_id": "L-1", "image": "data:image/gif;base64," + "A" * 40}).status_code == 422
++
++
++def test_the_route_returns_the_report_and_changes_no_state(client, monkeypatch):  # noqa: F811
++    from server import app as app_module
++
++    async def fake(image, *, cfg):
++        return {"person_visible": False, "confidence": 0.8, "description": "Empty concrete floor.", "model": "m", "ms": 5}
++    monkeypatch.setattr(app_module, "check_person", fake)
++    before = client.get("/api/health").json()
++    body = client.post("/api/vision", json={"lead_id": "L-1", "image": JPEG}).json()
++    assert body == {"lead_id": "L-1", "person_visible": False, "confidence": 0.8,
++                    "description": "Empty concrete floor.", "model": "m", "ms": 5}
++    assert client.get("/api/health").json() == before

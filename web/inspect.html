@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FlyBy Carport Inspection</title>
+<title>FlyBy Close-in Inspection</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; background:#111914; color:#e8eee7; font:14px/1.45 Inter, "Segoe UI", Arial, sans-serif; }
@@ -25,13 +25,13 @@
 <body>
 <main>
   <aside>
-    <h1>Carport inspection · simulation</h1>
+    <h1>Close-in inspection · simulation</h1>
     <div class="controls">
       <label>Scenario<select id="scenario"></select></label>
       <label>Seed<input id="seed" type="number" value="0" min="0"></label>
       <label>Camera FOV<select id="fov"><option value="90">90°</option><option value="120">120°</option><option value="60">60°</option></select></label>
       <label class="toggle"><input id="reflex" type="checkbox" checked> Fly reflex on</label>
-      <label class="toggle"><input id="person" type="checkbox" checked> Person under the roof</label>
+      <label class="toggle"><input id="person" type="checkbox" checked> Person at the target</label>
       <button id="start" type="button">Fly</button>
     </div>
     <p id="error"></p>

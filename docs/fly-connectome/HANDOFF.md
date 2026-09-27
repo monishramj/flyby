@@ -60,6 +60,22 @@ send({ type: 'inspect.result', payload: { lead_id, reached, collided, found } })
   ahead of real time. `realtime_factor` < 1 means the machine was slower than real time.
 - `attachReflexStream(stream)` (same module) feeds the live eye/brain views.
 
+## Grok vision person check (advisory)
+
+When a flight reaches its target, `runInspection` takes a colour photo from the drone's own
+camera (gimbal pitched 50° down; the viewer's scene without markers) and POSTs it to
+`/api/vision`; the flight panel shows the photo and Grok's report ("Person visible · 92% ·
+<one sentence>", model, latency). The outcome never waits on it (`vision_requested` only
+says a photo was sent), and the report changes no lead state: Grok reports, the human
+decides. Offline Grok → the card says so. Negative control: untick "person at the target".
+The server half lives in Monish's code, so it ships as `grok-vision-combine.patch` (applies
+to `combine` `57e3ea9`): `server/grok/vision.py` (xai-sdk `user(text, image(data_url,
+detail="high"))` + `chat.parse(VisionReport)`, verified against xai-sdk 1.20.0 source),
+`POST /api/vision`, 2 config constants, `inspection.ts` waits for the card before
+auto-closing, 6 tests (fake client; 174 pass). Built UI verified here with the flight →
+photo → offline card; **not yet run against live Grok** (no key in the cloud). With the key:
+fly `clear` or `debris`, check the card, then untick the person and fly again.
+
 ## Mission timing: the window we need
 
 A 2-waypoint route takes ~7 s of flight when clear and ~10–11 s with one detour; the
@@ -106,6 +122,18 @@ INSPECT_HOVER_S=120 at scale 4). The patch does not implement that ownership han
   not block it, so only debris/beam differ.
 
 ## Known limits (say them, don't hide them)
+
+- The viewer's chase view is dressed (colours, drone model, shadows, trail); the fly camera
+  renders the measured benchmark scene, verified frame-identical (STATUS.md). The inset
+  "Drone camera → fly eye" shows what the fly actually sees.
+- **One flight at a time.** The reflex runs one fly eye per process; two flights at once
+  (e.g. the mission panel and `/inspect.html` in two tabs) corrupt each other's eye state.
+  Close other flying tabs during the demo.
+- Viewer atmosphere (dawn light, dust, distant smoke, the burnt-out house behind the wall,
+  emergency lights) is chase-only; the ruin also sits below the fly's sightline over the
+  4 m wall from every point it flies, so a real camera would not see it either.
+- `house` on `/inspect.html` is experimental: the readout was not fitted indoors and 0/6
+  flights reached the target. Don't use it in the mission demo.
 
 - Thin posts and cables are near the eye's resolution (721 facets; ~3.8° each at 90°).
 - The sagging beam is the weakest case (only its lower edge moves near the centre).

@@ -7,7 +7,7 @@
 //
 // URL: flyviz.html?scenario=debris&seed=0&fov=90&reflex=on&auto=1
 import * as THREE from 'three';
-import { DT, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type Scenario } from '../scene/inspect';
+import { DT, Inspection, MODE, ReflexLink, ALL_SCENARIOS as SCENARIOS, encodeFrame, makeSpec, type Command, type Scenario } from '../scene/inspect';
 import { CircuitView, type ReadoutKind } from './circuit';
 import { EyeView } from './eye';
 import { VizStream } from './stream';

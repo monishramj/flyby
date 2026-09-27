@@ -11,6 +11,33 @@ posts 12/20, beam 4/20), 1/37 false brakes + 2 early brakes. Route flights (entr
 under the roof, 8 flights): 7/8 reached the target; the sagging beam collides.
 Integration with `triage`: `INTEGRATION.md` + `HANDOFF.md` (nothing pushed there).
 
+## Viewer visuals + experimental house scene (2026-09-27)
+
+`web/src/scene/dress.ts`: the chase (viewer) camera now shows a quadcopter with spinning
+props and nav lights, coloured materials (brick, rusted posts, corrugated roof, plywood
+debris, concrete), sun shadows, sky and haze, a casualty figure, waypoint beacons, a
+flight trail with brake/saccade markers, and a smoothed camera. All of it uses three.js
+layers (CHASE viewer-only, EYE fly-only), so **the fly camera's input is unchanged**:
+recaptured `debris:0` and `beam:1` route flights match the pre-change capture in every
+fly frame (515/515, 535/535 identical pixels), every command and S, and the result.
+(A first attempt changed the benchmark seeds through one extra random draw; caught by this
+check and fixed.) Held-out numbers therefore still apply unchanged.
+Atmosphere (same day, `dress.ts`): dawn sky and sun, airborne dust, distant smoke columns,
+and behind the brick wall the burnt-out house the carport belonged to (smoke, charred
+rafters, a fire truck's flashing lights), all chase-only. The ruin also respects the fly's
+real sightline: from any fly-eye point (y 1.2 m, z >= -9.1) the 4 m wall hides a point at
+z <= -11 up to h = 4 + 2.8(-11 - z)/1.9; every top stays below it. Identity check repeated
+(beam:1, debris:0: frame-identical). Note: a concurrent second flight on the same reflex
+made the first debris re-check diverge (one eye per process), so checks run alone.
+`house` (dev page only, marked experimental; not in `SCENARIOS`, bench or mission defaults):
+a gutted open-plan house (collapsed facade, cutaway walls for the viewer, hanging ceiling
+panel, toppled wardrobe), route entry → living room → target. **The readout does not
+transfer indoors:** 6 seeds reflex on: 0/6 reached the target (1 skipped it, 5 collided);
+every flight brakes falsely at take-off, then hits the panel or wardrobe without braking.
+Reflex off (2 seeds): both hit the panel. Earlier designs with a solid front wall or a
+door frame dead ahead failed earlier: a looming reflex reads a doorway as a collision.
+Making it work needs recording house flights and fitting/scoring the readout on them.
+
 ## Handoff to Monish (2026-09-27)
 
 Pushed since the last handoff: backup recording (`inspect.html?record=1` +
