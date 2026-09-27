@@ -3,7 +3,8 @@
 // URL: capture.html?flights=post:0:on,post:0:off&fov=90&every=2[&route=1]
 // Result: window.__capture = { done, flights: [{ spec, reflex_on, result, frames: [...] }] }
 import * as THREE from 'three';
-import { HOVER_S, Inspection, MODE, ReflexLink, encodeFrame, makeSpec, type Command, type Scenario } from './scene/inspect';
+import { ChaseView } from './scene/dress';
+import { HOVER_S, Inspection, MODE, ReflexLink, defaultRoute, encodeFrame, makeSpec, type Command, type Scenario } from './scene/inspect';
 
 const q = new URLSearchParams(location.search);
 const fov = Number(q.get('fov') ?? 90);
@@ -14,7 +15,7 @@ canvas.width = W; canvas.height = H;
 document.body.appendChild(canvas);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setSize(W, H, false);
-const chase = new THREE.PerspectiveCamera(55, W / H, 0.05, 100);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const toB64 = (a: Uint8Array) => { let s = ''; for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]); return btoa(s); };
 
 (window as any).__capture = { done: false, flights: [] };
@@ -26,12 +27,13 @@ async function run() {
   for (const item of (q.get('flights') ?? 'post:0:on').split(',')) {
     const [scenario, seed, onOff] = item.split(':');
     const reflexOn = onOff !== 'off';
-    // route=1: the mission inspection route (entry in front of the carport, then under the roof).
+    const route = defaultRoute(scenario as Scenario);
+    // route=1: the scene's mission route (carport: entry, then under the roof; house: five rooms' worth).
     const spec = q.get('route') === '1'
-      ? makeSpec(Number(seed), scenario as Scenario, fov, { goalZ: -2.5, person: true, waypoints: [
-          { id: 'entry', x: 0, z: 1.5 }, { id: 'target', x: 0, z: -2.5 }] })
+      ? makeSpec(Number(seed), scenario as Scenario, fov, { goalZ: route.at(-1)!.z, person: true, waypoints: route })
       : makeSpec(Number(seed), scenario as Scenario, fov);
     const insp = new Inspection(spec);
+    const chase = new ChaseView(insp.scene, insp.chaseRig);
     (insp.drone.getObjectByName('body') as THREE.Mesh).visible = true;
     episode += 1;
     const frames: any[] = [];
@@ -41,12 +43,10 @@ async function run() {
       const g = insp.goal();
       cmd = await link.request(encodeFrame(episode, insp.k, reflexOn, MODE.live, g.bearing, g.dist, pixels));
       if ((cmd as any).error) throw new Error((cmd as any).error);
+      chase.update({ x: insp.x, z: insp.z, yaw: insp.yaw, speed: insp.speed, t: insp.t, drone: insp.drone,
+                     cmd: insp.t < HOVER_S ? undefined : cmd!.cmd, collided: insp.collided, arrived: insp.arrived });
       if (insp.k % every === 0) {
-        const fwd = new THREE.Vector3(Math.sin(insp.yaw), 0, -Math.cos(insp.yaw));
-        chase.position.set(insp.x - fwd.x * 3.2, 2.6, insp.z - fwd.z * 3.2);
-        chase.lookAt(insp.x + fwd.x * 2, 1.0, insp.z + fwd.z * 2);
-        renderer.setRenderTarget(null);
-        renderer.render(insp.scene, chase);
+        chase.render(renderer, W, H);
         frames.push({
           img: canvas.toDataURL('image/jpeg', 0.7), fpv: toB64(pixels),
           k: insp.k, t: +insp.t.toFixed(2), x: +insp.x.toFixed(3), z: +insp.z.toFixed(3), yaw: +insp.yaw.toFixed(4),
