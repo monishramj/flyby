@@ -71,7 +71,7 @@ a { color: #a7c080; }
 .check { display: flex; gap: .3rem; align-items: center; color: var(--dim); cursor: pointer; }
 .legend { display: flex; gap: .8rem; color: var(--dim); font-size: .72rem; }
 .legend i { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; margin-right: .3rem; }
-.lbl { font: 600 10.5px/1 "SF Mono", ui-monospace, Menlo, Consolas, monospace; letter-spacing: .02em; color: #d3c6aa; background: rgb(0 0 0 / .55); backdrop-filter: blur(3px); padding: .22rem .5rem; border-radius: 999px; box-shadow: 0 0 0 1px rgb(255 255 255 / .1); white-space: nowrap; }
+.lbl { font: 600 10.5px/1 "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; letter-spacing: .02em; color: #d3c6aa; background: rgb(0 0 0 / .55); backdrop-filter: blur(3px); padding: .22rem .5rem; border-radius: 999px; box-shadow: 0 0 0 1px rgb(255 255 255 / .1); white-space: nowrap; }
 .lbl.sector { color: #a7c080; font-size: 12px; } .lbl.sector.crit { color: #e69875; }
 .lbl.landmark { color: #d3c6aa; } .lbl.pin { color: #fff; font-size: 12px; }
 .lbl.wp { font-size: 9.5px; padding: .12rem .34rem; color: var(--dim); }
