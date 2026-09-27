@@ -31,7 +31,7 @@ class Writer:
         self.task = asyncio.create_task(self._worker())
 
     def put(self, collection, document):
-        if collection not in {"runs", "leads", "intel", "incidents", "qa", "proposals"}:
+        if collection not in {"runs", "leads", "intel", "incidents", "qa"}:
             raise ValueError("Unknown collection")
         if not document.get("run_id"):
             raise ValueError("Every document requires run_id")

@@ -9,7 +9,7 @@ from uuid import uuid4
 import numpy as np
 
 from server.config import settings
-from server.grok import assistant, briefs
+from server.grok import briefs
 from server.grok.parse import parse_intel
 from server.incident.store import IncidentStore
 from server.mission import intel_script
@@ -20,6 +20,7 @@ from server.mission.sweep import Sweep
 from server.mission.truth import optimal_action
 from server.triage.decide import Decider
 from server.triage.fallback import ACTIONS, rule
+from server.triage.laya_runtime import render
 from server.triage.state import build_state
 
 # auto_closed is terminal for counting, but a commander can still reopen it and new intel re-decides it.
@@ -27,6 +28,7 @@ log = logging.getLogger(__name__)
 
 TERMINAL = frozenset({"dispatched", "ignored", "auto_closed", "resolved_empty"})
 PENDING = frozenset({"awaiting_approval", "awaiting_human"})
+CREW_ACTIONS = frozenset({"dispatch_ground_team", "close_in_inspect"})  # actions that move people get a Grok order
 REVIEWABLE = PENDING | {"auto_closed"}
 HEARTBEAT_S = 1.0
 
@@ -57,10 +59,8 @@ class MissionRun:
         self._coverage_mark = -1.0
         self._started = self._stopped = self._finished = False
         self._task = None
-        self._assistant_running = False
-        self._assistant_again = None
-        self._assistant_seen: set = set()
-        self.proposals: list[dict] = []
+        self._grok_slots = asyncio.Semaphore(3)  # orders run in parallel, but bounded
+        self._order_tasks: dict[str, asyncio.Task] = {}  # at most one order in flight per lead
 
     # ---- events -------------------------------------------------------------
 
@@ -94,7 +94,10 @@ class MissionRun:
         return state
 
     def public_lead(self, lead):
-        return {key: deepcopy(value) for key, value in lead.items() if key not in ("truth", "human_token")}
+        public = {key: deepcopy(value) for key, value in lead.items() if key not in ("truth", "human_token", "order")}
+        if "order" in lead:
+            public["order"] = self._public_order(lead["order"])
+        return public
 
     def snapshot(self):
         return {
@@ -103,7 +106,6 @@ class MissionRun:
             "leads": [self.public_lead(lead) for lead in self.leads.values()],
             "intel": [deepcopy(row) for row in self.intel_log.values()],
             "incident": self.incident.public(),
-            "proposals": deepcopy(self.proposals),
             "state": self.mission_state(cells=True),
             "config": {"DEMO_SEED": self.cfg.DEMO_SEED, "COVERAGE_CELL_M": self.cfg.COVERAGE_CELL_M,
                        "LIVE_POLICY": self.policy, "PARSE_MODE": self.parse_mode,
@@ -225,6 +227,7 @@ class MissionRun:
             payload["routed_to_human"] = True
         t = base + decision.latency_ms / 1000 if self.fast else self.clock.now
         lead["state"] = state
+        lead["model_text"] = render(state)  # exactly what Laya read, shown under "Why?"
         lead["decision"] = payload
         lead["baseline_rule"] = rule(state, self.cfg)["action"]
         lead["history"].append({**payload, "t": round(t, 3)})
@@ -255,6 +258,8 @@ class MissionRun:
             payload["decision"] = lead["decision"]
         self._emit(emit, payload)
         self._persist_lead(lead)
+        if status in PENDING and lead["decision"]["action"] in CREW_ACTIONS and self._grok_enabled():
+            self._request_order(lead)
         if self.sim_human and status in PENDING:
             delay = self.cfg.SIM_HUMAN_APPROVE_S if status == "awaiting_approval" else self.cfg.SIM_HUMAN_ROUTED_S
             token = lead["human_token"]
@@ -317,11 +322,58 @@ class MissionRun:
             action = str(self.human_rng.choice(others))
         self._apply_human(lead, action, kind="sim_human")
 
+    # ---- Grok crew orders (off the decision path; never change the action) ------
+
+    def _grok_enabled(self):
+        return not self.fast and (self.parse_mode == "grok" or self.grok_client is not None)
+
+    def _current_order(self, lead, action):
+        order = lead.get("order") or {}
+        return order if order.get("text") and order["action"] == action else None
+
+    def _request_order(self, lead):
+        """Re-decisions happen on every intel message; only a change in what the order is built from re-writes it."""
+        facts = briefs.order_facts(lead, self.incident.snapshot(), self.scenario.gazetteer,
+                                   list(self.intel_log.values()), self.cfg)
+        key = briefs.order_key(facts)
+        order = lead.get("order") or {}
+        if order.get("key") == key and not order.get("unavailable"):
+            return  # the current (or in-flight) order still fits this decision
+        superseded = self._order_tasks.pop(lead["lead_id"], None)
+        if superseded is not None:
+            superseded.cancel()
+        self._order_tasks[lead["lead_id"]] = self._spawn(self._prepare_order(lead, facts, key))
+
+    async def _prepare_order(self, lead, facts, key):
+        lead_id, action = lead["lead_id"], lead["decision"]["action"]
+        lead["order"] = {"pending": True, "action": action, "key": key}
+        self._emit("lead.order", {"lead_id": lead_id, "order": self._public_order(lead["order"])})
+        try:
+            async with self._grok_slots:
+                text = await briefs.prepare_order(facts, cfg=self.cfg, client=self.grok_client)
+            order = {"text": text.model_dump(), "action": action, "key": key, "source": "grok"}
+        except Exception:
+            log.warning("Grok order unavailable for %s; the template brief will be used", lead_id, exc_info=True)
+            order = {"unavailable": True, "action": action, "key": key}
+        finally:
+            if self._order_tasks.get(lead_id) is asyncio.current_task():
+                del self._order_tasks[lead_id]
+        if lead["status"] not in PENDING or lead["decision"]["action"] != action:
+            return  # already acted on, or re-decided to a different action while Grok wrote
+        lead["order"] = order
+        self._persist_lead(lead)
+        self._emit("lead.order", {"lead_id": lead_id, "order": self._public_order(order)})
+
+    @staticmethod
+    def _public_order(order):
+        return {key: deepcopy(value) for key, value in order.items() if key != "key"}
+
     async def _dispatch(self, lead):
         picture = self.incident.snapshot()
-        if not self.fast and (self.parse_mode == "grok" or self.grok_client is not None):
-            brief = await briefs.create_brief(lead, picture, gazetteer=self.scenario.gazetteer,
-                                              t=round(self.clock.now, 3), cfg=self.cfg, client=self.grok_client)
+        order = self._current_order(lead, "dispatch_ground_team")
+        if order:  # the order was written before approval, so dispatch makes no network call
+            brief = briefs.assemble_brief(lead, picture, briefs.BriefText(**order["text"]),
+                                          gazetteer=self.scenario.gazetteer, t=round(self.clock.now, 3), source="grok")
         else:
             brief = briefs.template_brief(lead, picture, gazetteer=self.scenario.gazetteer,
                                           t=round(self.clock.now, 3))
@@ -397,32 +449,6 @@ class MissionRun:
         self._emit("intel.parsed", {"intel_id": message["intel_id"], "parse": deepcopy(parse), "ok": ok})
         self._log_intel(message, parse, latency_ms, ok=ok)
         await self.incident.apply(parse, message["intel_id"], round(message["t"], 3))
-        if self.parse_mode == "grok" and not self.fast:
-            self._request_review(message["intel_id"])
-
-    # ---- Grok assistant (proposes only; off the decision path) ---------------
-
-    def _request_review(self, trigger):
-        """One review in flight; intel arriving meanwhile coalesces into a single follow-up."""
-        if self._assistant_running:
-            self._assistant_again = trigger
-            return
-        self._assistant_running = True
-        self._spawn(self._review(trigger))
-
-    async def _review(self, trigger):
-        try:
-            while trigger is not None and not self._stopped:
-                for proposal in await assistant.review(self, trigger=trigger, seen=self._assistant_seen,
-                                                       cfg=self.cfg, client=self.grok_client):
-                    self.proposals.append(proposal)
-                    self._emit("assistant.proposal", deepcopy(proposal))
-                trigger, self._assistant_again = self._assistant_again, None
-        except Exception:
-            # The assistant is advisory: a failure must never touch the mission, but it must be visible.
-            log.exception("Grok assistant review failed")
-        finally:
-            self._assistant_running = False
 
     async def on_incident_update(self, picture):
         """T2.3: a pending lead whose built state changed is decided again."""

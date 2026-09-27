@@ -299,7 +299,7 @@ export function renderMap() {
   leads.forEach(lead => {
     let pin = c.pins.get(lead.lead_id);
     if (!pin) { pin = makePin(lead.lead_id); c.pins.set(lead.lead_id, pin); c.leadGroup.add(pin); }
-    const selected = store.selected === lead.lead_id || store.highlight.includes(lead.lead_id);
+    const selected = store.selected === lead.lead_id;
     pin.position.copy(at(lead.x, lead.y)); pin.scale.setScalar(selected ? 1.6 : 1);
     (pin.userData.mat as THREE.MeshStandardMaterial).color.set(colors[lead.status] || colors[lead.decision?.action || 'ignore']);
     (pin.userData.label as CSS2DObject).visible = selected;

@@ -127,26 +127,15 @@ def dispatch_lead():
             "decision": {"action": "dispatch_ground_team", "urgency": 2, "p_person": 0.81}}
 
 
-async def test_brief_numbers_come_only_from_code_and_digits_are_stripped():
+def test_brief_numbers_come_only_from_code_and_digits_are_stripped():
     text = BriefText(headline="Crew to grid 45 now", what_drone_saw="1 person seen",
                      access_notes="Approach from the south", confidence_statement="Detection only")
-    brief = await briefs.create_brief(dispatch_lead(), {"hazards": [{"type": "fire", "x": 1, "y": 2}]},
-                                     gazetteer=GAZETTEER, t=30.0, cfg=fast_settings(),
-                                     client=FakeClient(result=text))
+    brief = briefs.assemble_brief(dispatch_lead(), {"hazards": []}, text, gazetteer=GAZETTEER, t=30.0, source="grok")
     assert brief["source"] == "grok" and brief["digits_stripped"] is True
     assert not any(character.isdigit() for value in brief["text"].values() for character in value)
     assert brief["text"]["headline"] == "Crew to grid now"
     assert brief["coordinates"] == {"x": 45.25, "y": 55.5} and brief["p_person"] == 0.81
     assert brief["nearest_landmark"] == "elm_school" and brief["time"] == 30.0
-
-
-async def test_a_brief_timeout_falls_back_to_the_template():
-    cfg = fast_settings(GROK_BRIEF_TIMEOUT_S=0.01)
-    brief = await briefs.create_brief(dispatch_lead(), {"hazards": []}, gazetteer=GAZETTEER, t=1.0,
-                                      cfg=cfg, client=FakeClient(delay=0.5))
-    template = briefs.template_brief(dispatch_lead(), {"hazards": []}, gazetteer=GAZETTEER, t=1.0)
-    assert brief["source"] == "template" and brief["text"] == template["text"]
-    assert brief["p_person"] == 0.81, "code still supplies the numbers"
 
 
 async def mission_for_ask(**kwargs):
@@ -222,103 +211,109 @@ async def test_grok_unavailable_without_credentials():
         await parse_intel("anything", GAZETTEER, cfg=fast_settings(XAI_API_KEY="", XAI_MODEL=""))
 
 
-# ---- assistant: Grok proposes, code validates, nothing changes -----------------------------------
 
-async def mission_for_assistant():
-    run = await mission_for_ask()
-    lead = {"lead_id": "L-B", "t_capture": 2.0, "x": 48.0, "y": 59.0, "sector": "S1", "pass": 1,
-            "detector_conf": .3, "box_px": 30.0, "altitude_m": 40, "near_structure": False,
-            "nearest_landmark": "elm_school", "truth": {"is_person": False, "kind": "decoy", "type": "debris"}}
+# ---- Grok crew orders: Laya chose the action, Grok writes how to carry it out ------------------
+
+ORDER = BriefText(headline="Dispatch crew to Elm School", what_drone_saw="A clear person detection",
+                  access_notes="Approach from the west; a downed line is reported to the NE",
+                  confidence_statement="Verify the person on arrival")
+
+
+def order_lead(lead_id="L-O", conf=.8):
+    return {"lead_id": lead_id, "t_capture": 1.0, "x": 45.0, "y": 55.0, "sector": "S1", "pass": 1,
+            "detector_conf": conf, "box_px": 40.0, "altitude_m": 40, "near_structure": False,
+            "nearest_landmark": "elm_school", "truth": {"is_person": True, "visibility": "visible"}}
+
+
+async def settle(run):
+    while run._tasks:
+        await asyncio.gather(*list(run._tasks), return_exceptions=True)  # superseded orders are cancelled
+
+
+def test_order_facts_are_code_computed_and_leak_no_truth():
+    lead = {**dispatch_lead(), "truth": {"is_person": True},
+            "state": {"lead": {"size_band": "medium", "detector_band": "high"},
+                      "context": {"sector_priority": "critical", "near_last_known_point": True}}}
+    picture = {"hazards": [{"type": "downed_line", "x": 75.25, "y": 85.5}, {"type": "fire", "x": 900, "y": 900}]}
+    intel = [{"raw": "two people near elm", "parse": {"reports": [{"sector": "S1"}]}},
+             {"raw": "elsewhere", "parse": {"reports": [{"sector": "S9"}]}}]
+    facts = briefs.order_facts(lead, picture, GAZETTEER, intel, fast_settings())
+    assert facts["hazards"] == [{"type": "downed_line", "direction": "NE", "close": True}], "far hazards are dropped"
+    assert facts["sector_priority"] == "critical" and facts["urgency"] == "high"
+    assert facts["sector_reports"] == ["two people near elm"]
+    assert "truth" not in json.dumps(facts) and "is_person" not in json.dumps(facts)
+
+
+async def test_a_pending_crew_action_gets_an_order_and_dispatch_makes_no_extra_call():
+    client = FakeClient(result=ORDER)
+    run = MissionRun(3, fast_settings(), policy="laya", runtime=FakeRuntime(), grok_client=client)
+    events = []
+    run.subscribe(events.append)
+    lead = order_lead()
     run._register(lead)
     await run._decide(lead)
-    run.intel_log["I1"] = {"intel_id": "I1", "t": 3.0, "raw": "two people at elm school",
-                           "parse": {"reports": [{"landmark": "elm_school", "sector": "S1", "urgency": "high",
-                                                  "source": "firsthand"}], "unparseable": False}}
-    return run
-
-
-async def test_assistant_proposals_are_validated_and_evidence_comes_from_code():
-    from server.grok.assistant import review
-    run = await mission_for_assistant()
-    before = json.dumps({key: run.snapshot()[key] for key in ("leads", "incident")}, sort_keys=True, default=str)
-    link = {"kind": "link_intel", "lead_ids": ["L-A", "L-B"], "intel_id": "I1", "text": "I1 names Elm School, 2 people; L-A and L-B sit there."}
-    script = [SimpleNamespace(content=None, tool_calls=[
-                  call("get_intel", {}, "c1"),
-                  call("propose", link, "c2"),
-                  call("propose", link, "c3"),                                                     # duplicate
-                  call("propose", {"kind": "note", "lead_ids": ["L-ZZ"], "text": "ghost"}, "c4"),  # unknown id
-                  call("propose", {"kind": "possible_duplicate", "lead_ids": ["L-A"], "text": "one"}, "c5"),
-                  call("propose", {"kind": "note", "lead_ids": ["L-B"], "text": "x", "dispatch": True}, "c6")]),
-              SimpleNamespace(tool_calls=[], content="done")]
-    proposals = await review(run, trigger="I1", seen=set(), cfg=fast_settings(), client=FakeClient(script=script))
-    assert [p["kind"] for p in proposals] == ["link_intel"], "only the valid, first-seen proposal survives"
-    proposal = proposals[0]
-    assert proposal["text"] == "I1 names Elm School, people; L-A and L-B sit there." and proposal["digits_stripped"]
-    assert proposal["evidence"]["landmark"] == "elm_school"
-    assert proposal["evidence"]["leads"][0]["distance_to_landmark_m"] == 0.0, "distance computed by code"
-    after = json.dumps({key: run.snapshot()[key] for key in ("leads", "incident")}, sort_keys=True, default=str)
-    assert after == before, "proposing never changes a lead or the incident picture"
+    assert lead["status"] == "awaiting_approval"
+    await settle(run)
+    orders = [e["payload"]["order"] for e in events if e["type"] == "lead.order"]
+    assert orders[0]["pending"] and orders[-1]["text"]["headline"] == "Dispatch crew to Elm School"
+    calls = len(client.chats)
+    assert run.approve("L-O") and lead["status"] == "dispatched"
+    await settle(run)
+    assert len(client.chats) == calls, "the order was written before approval; dispatch calls nothing"
+    assert lead["dispatch"]["source"] == "grok" and lead["dispatch"]["text"]["access_notes"].startswith("Approach")
     await run.stop()
 
 
-async def test_assistant_failure_yields_no_proposals_and_no_change():
-    from server.grok.assistant import review
-    run = await mission_for_assistant()
-    statuses = {key: lead["status"] for key, lead in run.leads.items()}
-    proposals = await review(run, trigger="I1", seen=set(), cfg=fast_settings(),
-                             client=FakeClient(error=RuntimeError("xai down")))
-    assert proposals == []
-    assert {key: lead["status"] for key, lead in run.leads.items()} == statuses
+async def test_no_order_for_actions_that_move_nobody():
+    client = FakeClient(result=ORDER)
+    run = MissionRun(3, fast_settings(), policy="laya", runtime=FakeRuntime(action="ignore"), grok_client=client)
+    lead = order_lead(conf=.6)  # a non-low ignore is routed to a human, but it moves no crew
+    run._register(lead)
+    await run._decide(lead)
+    await settle(run)
+    assert lead["status"] == "awaiting_human" and "order" not in lead and client.chats == []
     await run.stop()
 
 
-async def test_live_intel_in_grok_mode_triggers_a_review_that_emits_proposals():
-    run = await mission_for_assistant()
-    run.parse_mode = "grok"
-    events = []
-    run.subscribe(events.append)
-    script = [SimpleNamespace(content=None, tool_calls=[call("propose", {"kind": "note", "lead_ids": ["L-B"],
-                                                                         "text": "Check L-B against the Elm report."})]),
-              SimpleNamespace(tool_calls=[], content="done")]
-    run.grok_client = FakeClient(script=script)
-    run._request_review("I1")
-    run._request_review("I2")  # coalesces behind the running review instead of starting a second one
-    while run._assistant_running:
-        await asyncio.sleep(0)
-    assert [e["type"] for e in events].count("assistant.proposal") == 1
-    assert run.snapshot()["proposals"][0]["lead_ids"] == ["L-B"]
+async def test_a_re_decision_discards_the_stale_order():
+    client = FakeClient(result=ORDER, delay=0.05)
+    runtime = FakeRuntime()
+    run = MissionRun(3, fast_settings(), policy="laya", runtime=runtime, grok_client=client)
+    lead = order_lead()
+    run._register(lead)
+    await run._decide(lead)
+    runtime.action = "close_in_inspect"
+    await run._decide(lead)  # new intel re-decided it before the first order returned
+    await settle(run)
+    assert lead["order"]["action"] == "close_in_inspect" and lead["order"]["text"]
     await run.stop()
 
 
-async def test_find_leads_near_computes_distances_in_code():
-    from server.grok.assistant import assistant_tools, strip_numbers
-    run = await mission_for_assistant()
-    _, tools = assistant_tools(run, [], set())
-    near = tools["find_leads_near"]("elm_school", 10)
-    assert [row["lead_id"] for row in near] == ["L-A", "L-B"] and near[0]["distance_m"] == 0.0
-    assert "error" in tools["find_leads_near"]("atlantis")
-    assert strip_numbers("I12 and L-D10 in S9: 2 people, 4.5 m") == "I12 and L-D10 in S9: people, m"
+async def test_a_re_decision_with_unchanged_inputs_keeps_the_order():
+    """Intel re-decides every pending lead; an order is only re-written when what it is built from changes."""
+    client = FakeClient(result=ORDER)
+    run = MissionRun(3, fast_settings(), policy="laya", runtime=FakeRuntime(), grok_client=client)
+    lead = order_lead()
+    run._register(lead)
+    await run._decide(lead)
+    await settle(run)
+    first = lead["order"]
+    await run._decide(lead)  # same action, same hazards and reports
+    await settle(run)
+    assert len(client.chats) == 1 and lead["order"] is first
+    assert "key" not in run.public_lead(lead)["order"], "the fingerprint stays on the server"
     await run.stop()
 
 
-async def test_proposals_survive_a_real_writer_and_are_logged(tmp_path):
-    """Regression: the live server has a writer; an unknown collection used to drop every proposal."""
-    from server.store.writer import Writer
-    cfg = fast_settings(LOG_DIR=tmp_path)
-    run = await mission_for_assistant()
-    run.writer = Writer(cfg)
-    await run.writer.start()
-    run.parse_mode = "grok"
-    events = []
-    run.subscribe(events.append)
-    run.grok_client = FakeClient(script=[
-        SimpleNamespace(content=None, tool_calls=[call("propose", {"kind": "note", "lead_ids": ["L-B"], "text": "Check L-B."})]),
-        SimpleNamespace(tool_calls=[], content="done")])
-    run._request_review("I1")
-    while run._assistant_running:
-        await asyncio.sleep(0)
-    assert [e["type"] for e in events].count("assistant.proposal") == 1
-    await run.writer.stop()
-    logged = [json.loads(line) for line in (tmp_path / "proposals.jsonl").read_text().splitlines()]
-    assert logged[0]["proposals"][0]["lead_ids"] == ["L-B"]
+async def test_an_unavailable_order_falls_back_to_the_template():
+    run = MissionRun(3, fast_settings(), policy="laya", runtime=FakeRuntime(),
+                     grok_client=FakeClient(error=RuntimeError("xai down")))
+    lead = order_lead()
+    run._register(lead)
+    await run._decide(lead)
+    await settle(run)
+    assert lead["order"]["unavailable"] and lead["status"] == "awaiting_approval", "the mission is unaffected"
+    assert run.approve("L-O")
+    await settle(run)
+    assert lead["dispatch"]["source"] == "template"
     await run.stop()

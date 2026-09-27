@@ -1,5 +1,5 @@
 import { pct, urgencyLabel } from './queue';
-import { store, type Intel, type Lead, type Proposal } from './store';
+import { store, type Intel, type Lead } from './store';
 
 const clean = (value: string) => value.replace(/[<>&]/g, character => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[character]!));
 
@@ -42,7 +42,7 @@ export function briefHtml(lead: Lead): string {
   if (!brief) return '<p>No brief has been written for this lead.</p>';
   const text = brief.text as Record<string, string>;
   return `<h3>${clean(text.headline)}</h3>
-    <p class="source">${brief.source === 'grok' ? 'Text by Grok' : 'Template text'}${brief.digits_stripped ? ' · digits stripped from model text' : ''} · every number below is inserted by code</p>
+    <p class="source">${brief.source === 'grok' ? 'Crew order by Grok, written before approval' : 'Template text'}${brief.digits_stripped ? ' · digits stripped from model text' : ''} · every number below is inserted by code</p>
     <dl class="facts">
       <div><dt>lead</dt><dd>${brief.lead_id} · pass ${lead.pass}</dd></div>
       <div><dt>position</dt><dd>${brief.coordinates.x.toFixed(1)} m E, ${brief.coordinates.y.toFixed(1)} m N (${brief.sector})</dd></div>
@@ -75,22 +75,11 @@ function linkLeads(text: string): string {
   return text.replace(/L-[A-Za-z0-9]+/g, match => (ids.has(match) ? `<a href="#" data-lead-link="${match}">${match}</a>` : match));
 }
 
-const KINDS: Record<Proposal['kind'], string> = { link_intel: 'Intel ↔ leads', possible_duplicate: 'Possible duplicate', note: 'Look at this' };
-export const dismissed = new Set<string>();
-
-/** Grok proposes; every number shown here is computed by the server, never by the model. */
-export function renderAssistant(root: HTMLElement) {
-  const rows = (store.snapshot?.proposals ?? []).filter(p => !dismissed.has(p.proposal_id)).reverse();
-  root.innerHTML = rows.length
-    ? rows.map(p => {
-      const evidence = p.evidence;
-      const facts = evidence.leads.map(lead => `<span class="chip" data-lead-link="${lead.lead_id}">${lead.lead_id} · ${lead.sector} · ${lead.status.replaceAll('_', ' ')}${lead.distance_to_landmark_m != null ? ` · ${Math.round(lead.distance_to_landmark_m)} m from ${(evidence.landmark ?? '').replaceAll('_', ' ')}` : ''}</span>`).join('');
-      return `<li class="${store.highlight.join() === p.lead_ids.join() ? 'on' : ''}">
-        <header><b>${KINDS[p.kind]}</b>${p.intel_id ? ` <small>${p.intel_id}</small>` : ''}<time>t+${Math.round(p.t)}s</time></header>
-        <p>${clean(p.text)}</p>
-        <div class="chips">${facts}${evidence.max_separation_m != null ? `<span class="chip muted">${evidence.max_separation_m} m apart</span>` : ''}</div>
-        <footer><button class="primary" data-accept="${p.proposal_id}">Show leads</button><button class="ghost" data-dismiss="${p.proposal_id}">Dismiss</button></footer>
-      </li>`;
-    }).join('')
-    : `<li class="empty">${store.snapshot?.config.PARSE_MODE === 'grok' ? 'Watching intel. Suggestions appear here; they never act on their own.' : 'The assistant runs when intel is parsed by Grok (PARSE_MODE=grok).'}</li>`;
+/** One line so the closed Context drawer still says whether it's worth opening. */
+export function contextSummary(): string {
+  const snapshot = store.snapshot;
+  if (!snapshot) return '';
+  const hot = Object.entries(snapshot.incident.sector_priority).filter(([, level]) => level === 'critical').map(([sector]) => sector);
+  const hazards = new Set(snapshot.incident.hazards.map(hazard => hazard.type)).size;
+  return [`${snapshot.intel.length} reports`, `${hazards} hazard${hazards === 1 ? '' : 's'}`, hot.length ? `${hot.join(', ')} critical` : ''].filter(Boolean).join(' · ');
 }

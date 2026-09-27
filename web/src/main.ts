@@ -1,6 +1,6 @@
 import './style.css';
 import { mountMap, renderMap, setCameraMode, type CameraMode } from './map';
-import { briefHtml, dismissed, renderAssistant, renderIncident, renderIntel } from './panels';
+import { briefHtml, contextSummary, renderIncident, renderIntel } from './panels';
 // Ask Ground Control is disabled in the UI; the /api/ask backend is intact. Restore renderAsk to re-enable.
 // import { renderAsk } from './panels';
 import { bindQueue, renderQueue } from './queue';
@@ -22,30 +22,25 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 </header>
 <nav class="tabs"><button data-tab="mission" class="on">Mission</button><button data-tab="results">Results</button></nav>
 <main id="tab-mission" class="mission">
-  <section class="view">
-    <canvas id="map" aria-label="3D mission view"></canvas>
-    <div id="labels"></div>
-    <div class="hud tl"><b>Search area</b> <small id="mission-meta"></small></div>
-    <div class="hud tr">
-      <span class="seg"><button data-cam="orbit" class="on">Orbit</button><button data-cam="follow">Follow drone</button><button data-cam="top">Top-down</button></span>
-      <label class="check"><input id="truth" type="checkbox" /> show truth</label>
-    </div>
-    <div class="hud bl legend"><span><i style="background:#cf653c"></i>camera footprint</span><span><i style="background:#54c88c"></i>covered</span><span><i style="background:#7fc3ac"></i>planned sweep</span></div>
-  </section>
-  <div class="dock">
-    <section class="panel incident-panel"><h2>Incident</h2><dl class="incident" id="incident"></dl></section>
-    <section class="panel queue">
-      <h2>Triage queue <small id="queue-meta"></small></h2>
-      <div id="queue"></div>
+  <div class="stage">
+    <section class="view">
+      <canvas id="map" aria-label="3D mission view"></canvas>
+      <div id="labels"></div>
+      <div class="hud tl"><b>Search area</b> <small id="mission-meta"></small></div>
+      <div class="hud tr">
+        <span class="seg"><button data-cam="orbit" class="on">Orbit</button><button data-cam="follow">Follow drone</button><button data-cam="top">Top-down</button></span>
+        <label class="check"><input id="truth" type="checkbox" /> show truth</label>
+      </div>
+      <div class="hud bl legend"><span><i style="background:#cf653c"></i>camera footprint</span><span><i style="background:#54c88c"></i>covered</span><span><i style="background:#7fc3ac"></i>planned sweep</span></div>
     </section>
-    <section class="panel feed">
-      <h2>Intel feed</h2>
-      <ul id="intel"></ul>
-    </section>
-    <section class="panel assistant">
-      <h2>Grok assistant <small>suggests only · you decide</small></h2>
-      <ul id="assistant"></ul>
-    </section>
+    <!-- Background, not work: closed by default so the queue owns attention. -->
+    <details class="context" id="context">
+      <summary>Context <small id="context-meta"></small></summary>
+      <div class="context-body">
+        <section><h2>Incident</h2><dl class="incident" id="incident"></dl></section>
+        <section><h2>Intel feed</h2><ul class="feed" id="intel"></ul></section>
+      </div>
+    </details>
     <!-- Ask Ground Control (disabled)
     <section class="panel ask">
       <h2>Ask Ground Control</h2>
@@ -54,6 +49,10 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </section>
     -->
   </div>
+  <aside class="work">
+    <h2>Work <small id="queue-meta"></small></h2>
+    <div id="queue"></div>
+  </aside>
 </main>
 <main id="tab-results" class="results" hidden></main>
 <dialog id="brief"><div id="brief-body"></div><form method="dialog"><button class="primary">Close</button></form></dialog>`;
@@ -74,23 +73,6 @@ function select(leadId: string) {
 }
 
 bindQueue(queueRoot, select, openBrief);
-element('assistant').addEventListener('click', event => {
-  const target = event.target as HTMLElement;
-  const accept = target.closest('[data-accept]') as HTMLElement | null;
-  const dismiss = target.closest('[data-dismiss]') as HTMLElement | null;
-  const link = target.closest('[data-lead-link]') as HTMLElement | null;
-  const proposal = store.snapshot?.proposals?.find(p => p.proposal_id === (accept ?? dismiss)?.dataset[accept ? 'accept' : 'dismiss']);
-  if (accept && proposal) {
-    // Highlighting is the only effect: no lead changes state until the commander approves or overrides it.
-    store.highlight = store.highlight.join() === proposal.lead_ids.join() ? [] : proposal.lead_ids;
-    store.selected = store.highlight[0] ?? '';
-    notify('selected');
-  } else if (dismiss && proposal) {
-    dismissed.add(proposal.proposal_id);
-    if (store.highlight.join() === proposal.lead_ids.join()) store.highlight = [];
-    notify('selected');
-  } else if (link) select(link.dataset.leadLink!);
-});
 mountMap(canvas, element('labels'), leadId => select(leadId));
 document.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(button => {
   button.onclick = () => {
@@ -164,8 +146,13 @@ function renderStatus() {
   ].filter(Boolean).join(' · ');
   if (!snapshot || !state) return;
   const counts = snapshot.leads.reduce<Record<string, number>>((total, lead) => ({ ...total, [lead.status]: (total[lead.status] ?? 0) + 1 }), {});
-  element('mission-meta').textContent = `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.finished ? 'sweep complete' : state.running ? 'flying' : 'paused'}`;
-  element('queue-meta').textContent = `${(counts.awaiting_human ?? 0) + (counts.awaiting_approval ?? 0)} waiting · ${counts.dispatched ?? 0} dispatched · ${counts.auto_closed ?? 0} auto-closed · ${counts.ignored ?? 0} ignored`;
+  // The clock keeps ticking for inspections and re-images still in flight, but the search itself is over: freeze its timer there.
+  const searched = snapshot.config.SWEEP_DURATION_S;
+  element('mission-meta').textContent = state.t >= searched || state.finished
+    ? `search complete in ${Math.round(Math.min(state.t, searched))}s · ${state.coverage_pct.toFixed(0)}% covered`
+    : `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.running ? 'flying' : 'paused'}`;
+  element('queue-meta').textContent = `${counts.dispatched ?? 0} dispatched`;
+  element('context-meta').textContent = contextSummary();
 }
 
 let frame = 0;
@@ -182,7 +169,6 @@ subscribe(type => {
     renderQueue(queueRoot);
     renderIntel(element('intel'));
     renderIncident(element('incident'));
-    renderAssistant(element('assistant'));
   }
   if (type === 'dispatch.created' && store.dispatched) {
     const lead = store.snapshot?.leads.find(item => item.lead_id === store.dispatched);
@@ -194,6 +180,5 @@ window.addEventListener('resize', scheduleDraw);
 renderStatus();
 renderQueue(queueRoot);
 renderIntel(element('intel'));
-renderAssistant(element('assistant'));
 // renderAsk(element('ask'), exchanges);
 connect();

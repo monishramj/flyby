@@ -18,6 +18,7 @@ Results JSON schema written by batch/run_eval.py (results/summary.json):
       "under_structure_time_to_dispatch_s": {...},
       "subjects": {"placed", "visible_partial", "dispatched", "found_share"},
       "action_accuracy": {"decision", "final"},
+      "human_load": {"flags", "needed_judgment", "one_click", "no_human", "people_closed_without_human"},
       "dispatch": {"precision", "recall"},
       "routing_rate": float, "fallback_rate": float, "redecisions": int,
       "latency_ms": {"p50", "p95"},
@@ -121,6 +122,19 @@ def _status_time(lead, status):
     return None
 
 
+def human_load(leads: list[dict]) -> dict:
+    """Sub-problem 2 directly: of every flag, how many reached a human, and how."""
+    seen = [{entry["status"] for entry in lead.get("status_history", [])} for lead in leads]
+    judgment = [lead for lead, names in zip(leads, seen) if "awaiting_human" in names]
+    one_click = [lead for lead, names in zip(leads, seen) if "awaiting_approval" in names and "awaiting_human" not in names]
+    untouched = [lead for lead, names in zip(leads, seen) if not names & {"awaiting_human", "awaiting_approval"}]
+    return {"flags": len(leads), "needed_judgment": len(judgment), "one_click": len(one_click),
+            "no_human": len(untouched),
+            # the price of not looking: real people that no human ever saw
+            "people_closed_without_human": sum(bool(lead["is_person"]) and lead["status"] in ("auto_closed", "ignored")
+                                               for lead in untouched)}
+
+
 def arm_metrics(leads: list[dict], subjects: list[dict], runs: int, cfg=settings) -> dict:
     """leads: one row per lead across seeds. subjects: every placed subject with its t0."""
     zero = {(row["seed"], row["object_id"]): row for row in subjects}
@@ -160,6 +174,7 @@ def arm_metrics(leads: list[dict], subjects: list[dict], runs: int, cfg=settings
         },
         "dispatch": {"precision": _share([lead["is_person"] for lead in dispatched]),
                      "recall": round(len(true_dispatches) / len(subjects), 3) if subjects else None},
+        "human_load": human_load(leads),
         "routing_rate": _share([decision["routed_to_human"] for decision in decisions]),
         "fallback_rate": _share([decision["used_fallback"] for decision in decisions]),
         "redecisions": sum(max(0, len(lead.get("history", [])) - 1) for lead in leads),

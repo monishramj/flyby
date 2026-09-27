@@ -19,8 +19,7 @@ HackGT 13 · Georgia Tech · Sept 25–27, 2026. Submissions are due **Sunday 8:
 - **Simulated search.** A drone sweeps a flooded neighborhood, and a detector noise model produces leads with known ground truth.
 - **Laya decisions.** For each lead, Laya (an open-weights, Jev-compatible decision model running locally) returns an action, an urgency, and P(person), each with a probability. Leads below a confidence threshold go to a human.
 - **Grok intel.** Grok turns messy radio and text intel into a structured incident picture. Code merges it, and it feeds the context Laya decides on. When new intel changes a pending lead's context, that lead is re-decided, so the queue re-ranks.
-- **Dispatch.** A human approves every dispatch, and Grok writes the crew brief. Code inserts every number in the brief.
-- **Grok assistant.** When intel arrives, Grok reviews the mission with read-only tools (intel, leads, leads near a landmark) and proposes findings: intel that matches specific leads, likely duplicates, auto-closed leads worth a second look. Code validates every id and computes every distance; a proposal only highlights leads. (The Ask Ground Control chat is disabled in the UI; its backend remains.)
+- **Crew orders.** Laya decides *what*; when a dispatch or inspection enters the queue, Grok writes *how*: an order (approach, hazards to avoid and from which direction, what to verify) from the incident picture, with every direction and number computed by code. Grok never changes the action. A human approves every dispatch with one click, and the order is already written, so dispatch makes no network call. (The Ask Ground Control chat is disabled in the UI; its backend remains.)
 
 **How we prove it worked** (all in simulation, with declared assumptions):
 
@@ -34,9 +33,9 @@ HackGT 13 · Georgia Tech · Sept 25–27, 2026. Submissions are due **Sunday 8:
 - Laya triage with a rule-based fallback and routing to a human
 - **Re-decision** of pending leads when new intel changes their context
 - Grok intel parsing into a schema, merged deterministically into an in-memory incident picture
-- Grok dispatch briefs (numbers inserted by code)
-- Grok assistant: bounded tool loop that proposes, never acts
-- Ground-control UI: 2D map, lead queue with approve and override, intel feed with parsed chips, decision log, chat
+- Grok crew orders, written while a lead waits for approval (numbers inserted by code)
+- Ground-control UI: 3D map beside one Work column (queue with approve, override and "Why?"; reviewable auto-closed bin); incident and intel in a closed Context drawer
+- Human-load metric: of every flag, how many needed judgment, one click, or no human
 - MongoDB Atlas logging, with a local JSONL fallback
 - Batch evaluation and a results tab
 
@@ -73,7 +72,7 @@ decision log · Ask chat ·    ws/http Incident picture (in memory; live copy)
 results                               ▲ Grok intel parse (async) + deterministic merge
                                      State builder → decide(): Laya → rule on error
                                      Re-decide pending leads on context change
-                                     Lead lifecycle · approvals · Grok briefs
+                                     Lead lifecycle · approvals · Grok crew orders
                                      Ask Ground Control: Grok + 4 read-only tools
                                      Mongo writer (async queue → Atlas | JSONL)
 ```
@@ -167,7 +166,7 @@ referenced by your step first.
 | `LAYA_TIMEOUT_MS` | 500 | Reset to ≈3× measured p95 |
 | `RHO` | 0.9 | Share of intel messages pointing at a real subject |
 | `INTEL_COUNT` | 12–15 |  |
-| `GROK_PARSE_TIMEOUT_S` / `GROK_BRIEF_TIMEOUT_S` / `GROK_ASK_TIMEOUT_S` | 10 / 8 / 20 |  |
+| `GROK_PARSE_TIMEOUT_S` / `GROK_ORDER_TIMEOUT_S` / `GROK_ASK_TIMEOUT_S` | 10 / 20 / 20 | Crew orders measured at 6–11 s |
 | `ASK_MAX_TOOL_ROUNDS` | 4 |  |
 | `SIM_HUMAN_ROUTED_S` / `SIM_HUMAN_APPROVE_S` / `HANDOFF_S` | 20 / 5 / 60 |  |
 | `SIM_HUMAN_ACC` | 0.9 | Batch human picks the optimal action with this probability; otherwise a random different action |

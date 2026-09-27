@@ -52,7 +52,7 @@ command_adapter = TypeAdapter(Annotated[MissionControl | LeadApprove | LeadOverr
 
 
 class ServerEvent(BaseModel):
-    type: Literal["mission.snapshot", "mission.state", "lead.new", "lead.decided", "lead.status", "intel.new", "intel.parsed", "incident.update", "dispatch.created", "inspect.request", "assistant.proposal", "error"]
+    type: Literal["mission.snapshot", "mission.state", "lead.new", "lead.decided", "lead.status", "intel.new", "intel.parsed", "incident.update", "dispatch.created", "inspect.request", "lead.order", "error"]
     payload: dict
 
 
