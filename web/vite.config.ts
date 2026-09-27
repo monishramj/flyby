@@ -20,6 +20,7 @@ export default defineConfig({
         bench: resolve(import.meta.dirname, 'bench.html'),
         capture: resolve(import.meta.dirname, 'capture.html'),
         connectome: resolve(import.meta.dirname, 'connectome.html'),
+        flyviz: resolve(import.meta.dirname, 'flyviz.html'),
       },
     },
   },
