@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { dressScene, groundTexture, loadModels, truthVisual } from './models';
+import { dressScene, groundTexture, loadModels, model, truthVisual, type ModelName } from './models';
 import { notify, store } from './store';
 
 export const colors: Record<string, string> = { dispatch_ground_team: '#859966', reimage_zoom: '#dbbc7f', close_in_inspect: '#7fbbb3', ignore: '#859289', dispatched: '#56663f', awaiting_human: '#e69875' };
@@ -338,7 +338,9 @@ function syncTruth(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   if (!want || !store.truth) return;
   store.truth.subjects.forEach(p => {
     const colour = VIS_COLOR[p.visibility] ?? '#fff';
-    const body = truthVisual('subject', colour); body.position.copy(at(p.x, p.y, .1)); c.truthGroup.add(body);
+    const person = model((['manA', 'womanB', 'manC'] as ModelName[])[Number(p.id.slice(1)) % 3], 1.75, 'height');
+    const body = person ?? new THREE.Mesh(new THREE.CapsuleGeometry(0.6, 1.1, 4, 8), new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.4 }));
+    body.position.copy(at(p.x, p.y, person ? 0.1 : 1.2)); if (person) person.scale.setScalar(2.2); c.truthGroup.add(body);
     const ring = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.2, 24), new THREE.MeshBasicMaterial({ color: colour, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.copy(at(p.x, p.y, 0.25)); c.truthGroup.add(ring);
     const l = label(`${p.id} · ${p.visibility.replace('_', ' ')}`, 'truth'); l.position.copy(at(p.x, p.y, 5)); c.truthGroup.add(l);

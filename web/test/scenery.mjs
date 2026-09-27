@@ -50,7 +50,7 @@ for (const seed of [0, 7, 104]) {
 }
 assert.notEqual(signatures[0], signatures[1]);
 assert.equal(JSON.stringify(scene), original, 'renderer must not mutate mission data');
-for (const kind of ['subject', 'animal', 'warm_spot', 'debris', 'person_shaped_junk']) {
+for (const kind of ['animal', 'warm_spot', 'debris', 'person_shaped_junk']) {
   const visual = truthVisual(kind, '#aabbcc');
   assert.deepEqual(visual.position.toArray(), [0, 0, 0], 'caller controls truth anchor');
   assert.ok(visual.children.length > 0);

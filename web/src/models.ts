@@ -16,6 +16,7 @@ const FILES = {
   barrel: 'survival/barrel', crate: 'survival/box-large', planksPile: 'survival/resource-planks', panel: 'survival/metal-panel',
   dumpster: 'urban/detail-dumpster-closed', pallet: 'urban/pallet', planks: 'urban/planks', pole: 'urban/detail-light-single',
   barrier: 'urban/detail-barrier-strong-damaged',
+  manA: 'people/character-male-a', womanB: 'people/character-female-b', manC: 'people/character-male-c',
 } as const;
 export type ModelName = keyof typeof FILES;
 const cache = new Map<ModelName, THREE.Object3D>();
@@ -337,16 +338,7 @@ export function truthVisual(kind: string, color: string) {
   const part = (geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number) => {
     const m = new THREE.Mesh(geo, material); m.position.set(x, y, z); m.castShadow = true; group.add(m); return m;
   };
-  if (kind === 'subject') {
-    part(new THREE.CapsuleGeometry(.23, .45, 4, 12), mat, 0, 1.05, 0);
-    part(new THREE.SphereGeometry(.18, 12, 10), new THREE.MeshStandardMaterial({ color: '#b4967c', roughness: 1 }), 0, 1.62, 0);
-    for (const side of [-1, 1]) {
-      part(new THREE.CapsuleGeometry(.085, .57, 4, 8), dark, side * .13, .4, 0);
-      part(new THREE.CapsuleGeometry(.075, .47, 4, 8), mat, side * .3, 1, 0).rotation.z = side * .15;
-    }
-    // Keep the existing enlarged truth display readable from the mission camera.
-    group.scale.setScalar(2.2);
-  } else if (kind === 'animal') {
+  if (kind === 'animal') {
     part(new THREE.CapsuleGeometry(.2, .55, 4, 8), dark, 0, .45, 0).rotation.z = Math.PI / 2;
     part(new THREE.SphereGeometry(.18, 8, 6), dark, .4, .62, 0);
     for (const x of [-.25, .25]) for (const z of [-.13, .13]) part(new THREE.CylinderGeometry(.04, .04, .3, 6), dark, x, .15, z);

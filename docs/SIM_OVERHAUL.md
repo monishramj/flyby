@@ -14,6 +14,7 @@ Decisions:
 - Buildings, people, truth decoys, landmarks, water regions, roads, sectors, and mission paths retain their mission data. Buildings retain exact footprints and overhead shelter at their centres. Decorative debris and vegetation may change.
 - Decorative wreckage never enters the detector or truth data. The detector operates on server-generated objects, not rendered pixels.
 - Existing vehicle/boat/prop assets are reused and weathered; buildings, vegetation, drone detailing, and truth visuals are rebuilt locally. Small debris uses three instanced batches and buildings merge geometry by material.
+- On `combine-sim-upgrade`, truth subjects keep the existing GLTF people models (`people/character-*`, now weathered like other assets); only decoys use the procedural truth visuals.
 - UI panels, controls, and operational overlays retain their existing behavior.
 
 Validation commands and output (from the worktree root):
