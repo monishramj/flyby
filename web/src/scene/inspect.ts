@@ -315,8 +315,9 @@ export class ReflexLink {
   latest: any = null;
   constructor(private side?: ReflexSideChannel) {}
 
-  // Same origin by default: Vite proxies /ws/reflex to the reflex on :8001.
-  async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/reflex`) {
+  // Vite dev proxies /ws/reflex to the reflex on :8001; the built UI is served by the mission
+  // server on :8000, which has no reflex route, so it connects to :8001 directly.
+  async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${import.meta.env.DEV ? location.host : `${location.hostname}:8001`}/ws/reflex`) {
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = (e) => {

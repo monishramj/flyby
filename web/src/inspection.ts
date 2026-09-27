@@ -3,6 +3,8 @@ import { runInspection, type InspectOutcome } from './scene/flight';
 import { store, subscribe } from './store';
 import { onInspectionRequest, send, type InspectionRequest } from './ws';
 
+const AUTO_CLOSE_MS = 2500;
+
 /** One visible flight per browser; busy requests retain the mission's timer. */
 export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
   const panel = document.createElement('section');
@@ -67,6 +69,8 @@ export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
     } finally {
       window.clearTimeout(deadline);
       busy = false; close.disabled = false;
+      // Auto-close after a moment to read the outcome, unless a new flight has started.
+      window.setTimeout(() => { if (!busy) panel.hidden = true; }, AUTO_CLOSE_MS);
     }
   }
   onInspectionRequest(request => { void inspect(request); });
