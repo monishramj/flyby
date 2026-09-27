@@ -160,3 +160,14 @@ def test_brake_fires_before_expanding_disc_fills_frame():
     frames = approach()
     cmds = [ctl.step(HOVER + k, *ro.update(eye.step(f)[0]), True)["cmd"] for k, f in enumerate(frames)]
     assert "brake" in cmds, "no brake before the disc filled the frame"
+
+
+def test_learned_weights_score_and_side():
+    n = len(Readout(COL_X, COL_Y).units.centers)
+    w = np.zeros((3, n)); w[1] = 1.0  # horizontal pathway only
+    ro = Readout(COL_X, COL_Y, weights={"w": w.ravel().tolist(), "scale": [1.0] * (3 * n), "b": -0.1})
+    S0, _ = ro.update(np.zeros((4, len(COL_X))))
+    assert S0 == -0.1
+    for _ in range(20):
+        S, dLR = ro.update(radial_drive(cx=-0.55, vertical=False, radius=0.5))
+    assert ro.pathway == "learned" and S > 0 and dLR > 0

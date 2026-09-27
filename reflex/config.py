@@ -32,6 +32,7 @@ WARMUP_S = 2.0  # Measured: 0.5s leaves 0.241 drift; 2s leaves <0.00026 (CPU).
 REST_WINDOW_S = 0.2
 VIZ_HZ = 10
 THRESHOLDS_PATH = ROOT / "bench" / "thresholds.json"
+READOUT_WEIGHTS_PATH = ROOT / "bench" / "readout_weights.json"  # tools/fit_readout.py
 BENCH_FRAMES_DIR = ROOT / "bench" / "frames"
 CLOSED_LOOP_PATH = ROOT / "bench" / "closed_loop.jsonl"
 LAYOUT_PATH = ROOT / "data" / "flyvis_layout.json"

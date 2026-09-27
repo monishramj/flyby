@@ -23,11 +23,12 @@ import numpy as np
 from reflex.controller import Controller, load_theta
 from reflex.frames import Frame, FrameError, Mode, decode_frame
 from reflex.hexeye import load_layout
-from reflex.looming import Readout
+from reflex.looming import Readout, load_weights
 
 BENCH_MODES = (Mode.BENCH_RECORD, Mode.BENCH_CLOSED)
 _LAYOUT = load_layout()
 COL_X, COL_Y = np.asarray(_LAYOUT["col_x"]), np.asarray(_LAYOUT["col_y"])
+READOUT_WEIGHTS = load_weights()
 THETA, THETA_CALIBRATED = load_theta()
 log = logging.getLogger("reflex")
 
@@ -58,7 +59,7 @@ def health() -> dict:
     eye = getattr(app.state, "eye", None)
     return {
         "service": "reflex", "status": "ready" if eye else "no_model", "model_ready": eye is not None,
-        "theta": THETA, "theta_calibrated": THETA_CALIBRATED, "error": getattr(app.state, "eye_error", None),
+        "theta": THETA, "theta_calibrated": THETA_CALIBRATED, "readout": "learned" if READOUT_WEIGHTS else "default", "error": getattr(app.state, "eye_error", None),
     }
 
 
@@ -91,7 +92,7 @@ class Session:
         self.current: Episode | None = None
 
     def _new_episode(self, episode: int, bracketed: bool, params: dict | None = None) -> Episode:
-        return Episode(episode, bracketed, Readout(COL_X, COL_Y), Controller(self.theta), params or {})
+        return Episode(episode, bracketed, Readout(COL_X, COL_Y, weights=READOUT_WEIGHTS), Controller(self.theta), params or {})
 
     async def on_frame(self, frame: Frame) -> dict:
         ep = self._validate(frame)
