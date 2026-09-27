@@ -40,7 +40,7 @@ We dropped the simulated manual-reviewer comparison: its 51× came mostly from a
 - Grok crew orders, written while a lead waits for approval (numbers inserted by code)
 - Ground-control UI: 3D map beside one Work column (queue with approve, override and "Why?"; reviewable auto-closed bin); incident and intel in a closed Context drawer
 - Human-load metric: of every flag, how many needed judgment, one click, or no human
-- MongoDB Atlas logging, with a local JSONL fallback
+- MongoDB Atlas logging (batched write-behind, local JSONL fallback that replays into Atlas), and Atlas Vector Search over every past flag: what the most similar flags turned out to be
 - Batch evaluation and a results tab
 
 **Deferred (build only if everything above is done):** a 3D view of the mission, and extra charts.
@@ -59,7 +59,7 @@ We dropped the simulated manual-reviewer comparison: its 51× came mostly from a
 | Python 3.12 + `uv`, FastAPI, uvicorn, WebSockets | Server `:8000` | doc |
 | **Laya** (Convai Innovations, Apache-2.0, \~421M params) | Typed decisions (`choice` / `score` / `noul`) with per-option probabilities in one forward pass; Jev-compatible `system_one` shape | **doc:** API shape, \~1.7 GB weights, \~2 GB RAM, \~140 ms per 3-question call reported for the Node/ONNX port on an Apple-silicon CPU, 512-token state cap. **smoke (T0.2):** Python runtime, latency, and a quick accuracy sanity check |
 | **Grok** via `xai-sdk` | Structured outputs (Pydantic) and function calling | **doc:** both supported. **smoke (T0.3):** model id, credit code `SPACEXAI_HACK_GT_20260925` |
-| MongoDB Atlas + PyMongo (async client) | Persistence, chat stats | **smoke (T0.4):** reachable from venue Wi-Fi |
+| MongoDB Atlas + PyMongo (async client) | Persistence, chat stats, Vector Search over past flags | **smoke (T0.4):** reachable from venue Wi-Fi |
 | Vite + TypeScript (vanilla) + `chart.js` | UI | doc |
 | numpy, pandas, pyarrow, matplotlib, pytest, httpx | Metrics and tests | doc |
 
@@ -84,7 +84,7 @@ results                               ▲ Grok intel parse (async) + determinist
 ### Hard rules
 
 1. **Fast decision path.** Going from a lead to a decision never waits on Grok, never reads Mongo, and never calls the network. It reads the incident picture from memory only.
-2. **Mongo is write-behind.** All writes go through a queue, and nothing awaits them. The one read is the `get_decision_stats` chat tool, which is off the decision path.
+2. **Mongo is write-behind.** All writes go through a queue, and nothing awaits them. Each batch drains the queue as one ordered `bulk_write` per collection. The reads are the `get_decision_stats` chat tool and `GET /api/similar/{lead_id}` (Atlas Vector Search), both off the decision path.
 3. **Grok never decides.** Grok proposes schema-checked incident updates, and code merges them. Grok writes brief text, but code inserts every number. Grok's chat tools are read-only.
 4. **One config.** Every constant lives in `server/config.py`.
 5. **Deterministic.** The same `(seed, config)` gives the same run, apart from latency values and any timeouts they cause.
@@ -124,7 +124,7 @@ flyby-triage/
            mission/ incident/ triage/ grok/ store/
   web/     index.html src/ (ws, store, map, queue, intel, log, ask, results)
   batch/   run_eval.py metrics.py
-  tools/   laya_smoke.py grok_smoke.py atlas_smoke.py laya_check.py demo_check.py
+  tools/   laya_smoke.py grok_smoke.py atlas_smoke.py atlas_setup.py atlas_replay.py laya_check.py demo_check.py
   data/    gazetteer.json intel_templates.json
   results/ logs/ tests/
 ```
@@ -272,12 +272,12 @@ On pass 2 the zoom resolves both partial visibility and small size.
 - The last-known point is the most recent `firsthand` report. If there is none, it's the most recent report that names a landmark.
 - A retraction removes the most recent earlier report that matches its sector or landmark.
 
-### 4.7 Mongo collections (every document carries `run_id`)
+### 4.7 Mongo collections (every document carries `run_id`; `tools/atlas_setup.py` adds a `run_id` validator and unique upsert-key indexes)
 
 | Collection | Contents |
 | --- | --- |
 | `runs` | seed, kind (live/batch), policy, config, started_at |
-| `leads` | t_capture, pos, sector, pass, truth, state, decision history, baseline_rule, status history, human, dispatch |
+| `leads` | seed, t_capture, pos, sector, pass, truth, state, decision history, baseline_rule, status history, human, dispatch; `vector` (8 numbers from the truth-free state) for the `lead_vectors` vector search index, filtered on `seed` so a mission never sees its own seed's answers |
 | `intel` | t, raw, oracle_parse, grok_parse, latency, ok |
 | `incidents` | latest picture (upserted by `run_id`) |
 | `qa` | question, tool_calls, answer, latency |
@@ -926,6 +926,8 @@ uv run python -m tools.grok_eval              # live Grok: order latency, intel 
 uv run python -m tools.laya_finetune          # scorer retrain experiment -> results/finetune.json
 uv run python -m tools.grok_smoke             # live xAI parse + tool round trip
 uv run python -m tools.atlas_smoke            # write-behind proof; reports Atlas or JSONL
+uv run python -m tools.atlas_setup            # once per cluster: validators, indexes, vector search index
+uv run python -m tools.atlas_replay           # push the local JSONL spool into Atlas after an outage
 ```
 
 Gate outcomes and the frozen constants they justify are recorded in [docs/GATES.md](docs/GATES.md).

@@ -86,10 +86,15 @@ async def verify(cfg):
     writer = Writer(cfg)
     await writer.start()
     writer.put("runs", {"run_id": "demo-check", "kind": "check"})
+    await writer.queue.join()
+    similar = await writer.similar({"lead": {"detector_conf": .5, "box_px": 30}}, cfg.DEMO_SEED)
     await writer.stop()
     report["persistence"] = {"ok": True, "atlas": writer.available,
                              "target": "atlas" if writer.available else f"jsonl in {cfg.LOG_DIR}",
                              "mongo_writes": writer.mongo_writes, "local_writes": writer.local_writes}
+    report["vector_search"] = {"ok": not similar["unavailable"] and similar["n"] > 0, **similar}
+    if not report["vector_search"]["ok"]:
+        report["vector_search"]["impact"] = "no similar-past-flags lookup; run tools.atlas_setup and tools.atlas_replay"
 
     files = {name: (cfg.RESULTS_DIR / name).is_file() for name in ("summary.json", "raw.parquet", "subjects.parquet")}
     report["results"] = {"ok": all(files.values()), "files": files}

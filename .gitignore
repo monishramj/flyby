@@ -6,5 +6,5 @@ __pycache__/
 web/node_modules/
 web/dist/
 /models/
-logs/*.jsonl
+logs/*.jsonl*
 .DS_Store
