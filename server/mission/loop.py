@@ -142,6 +142,7 @@ class MissionRun:
                        "LIVE_POLICY": self.policy, "PARSE_MODE": self.parse_mode,
                        "TAU_ROUTE": self.cfg.TAU_ROUTE, "MAX_PASSES": self.cfg.MAX_PASSES,
                        "LIVE_TIME_SCALE": self.cfg.LIVE_TIME_SCALE, "SWEEP_DURATION_S": self.sweep.duration,
+                       "INSPECT_HOVER_S": self.cfg.INSPECT_HOVER_S,
                        "ALT_M": self.cfg.ALT_M, "FOV_DEG": self.cfg.FOV_DEG,
                        "FOOTPRINT_M": self.sweep.footprint_m, "SWEEP_PATH": self.sweep.path,
                        "MISSION": self.sweep.mission},
@@ -256,8 +257,13 @@ class MissionRun:
                               "before_seq": before_seq, "status": "active"})
         self._capture_gen += 1  # a pending sweep capture waits for the drone to come back
         if kind == "inspect":
-            self.clock.call_at(visit["arrive_t"], lambda: self._emit("inspect.request", {"lead_id": lead_id}))
-            self.clock.call_at(visit["done_t"], lambda: self._resolve_inspection(lead_id, None))
+            token = lead["human_token"]
+            # person only draws the simulated scene; the reflex sees rendered pixels, never truth.
+            # The browser gets 2 s less than the hover so its answer lands before the truth fallback.
+            request = {"lead_id": lead_id, "person": lead["truth"]["is_person"],
+                       "maxWallS": round(self.cfg.INSPECT_HOVER_S / self.cfg.LIVE_TIME_SCALE - 2, 3)}
+            self.clock.call_at(visit["arrive_t"], lambda: self._emit("inspect.request", request))
+            self.clock.call_at(visit["done_t"], lambda: self._resolve_inspection(lead_id, None, token=token))
         else:
             self.clock.call_at(visit["done_t"], lambda: self._on_reimage(lead_id))
         self.clock.call_at(visit["resume_t"], self._end_visit)
@@ -468,21 +474,33 @@ class MissionRun:
         self._emit("dispatch.created", {"lead_id": lead["lead_id"], "brief": brief,
                                         "pin": {"x": lead["x"], "y": lead["y"]}})
 
-    def inspect_result(self, lead_id, found, collided=False):
+    def inspect_result(self, lead_id, found, collided=False, *, reached=True):
         """Optional external hook; only a live run accepts an outside answer."""
         if self.fast:
             return False
-        return self._resolve_inspection(lead_id, {"found": bool(found), "collided": bool(collided)}) is not False
+        return self._resolve_inspection(lead_id, {"found": found, "collided": bool(collided),
+                                                "reached": bool(reached)}) is not False
 
-    def _resolve_inspection(self, lead_id, external):
+    def _resolve_inspection(self, lead_id, external, *, token=None):
         lead = self.leads.get(lead_id)
         if lead is None or lead["status"] != "inspecting":
             return False
-        found = lead["truth"]["is_person"] if external is None else external["found"]
+        if token is not None and lead["human_token"] != token:
+            return False  # an older visit must not resolve a newly approved retry
+        reached = external is None or external["reached"]
+        collided = bool(external and external["collided"])
+        found = (lead["truth"]["is_person"] if external is None or external["found"] is None
+                 else external["found"]) if reached and not collided else None
         lead["inspection"] = {"found": found, "source": "external" if external else "truth",
-                              "collided": bool(external and external["collided"]),
+                              "reached": reached,
+                              "collided": collided,
                               "t": round(self.clock.now, 3)}
         lead["inspection_found"] = found
+        if not reached or collided:
+            lead["inspection"]["reason"] = "Inspection incomplete; needs a human."
+            lead["decision"] = {**lead["decision"], "routed_to_human": True}
+            self._set_status(lead, "awaiting_human")
+            return True
         if not found:
             self._set_status(lead, "resolved_empty")
             return True
@@ -541,8 +559,8 @@ class MissionRun:
         self._emit("incident.update", self.incident.public())
         self._persist_incident(picture)
         for lead in list(self.leads.values()):
-            if lead["status"] not in REVIEWABLE:
-                continue
+            if lead["status"] not in REVIEWABLE or lead.get("decision", {}).get("source") == "inspection":
+                continue  # a drone that looked in person outranks a model re-read of the same flag
             state = self._build_state(lead)
             if state == lead.get("state"):
                 continue

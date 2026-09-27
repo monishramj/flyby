@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     REIMAGE_CONF_SHIFT: dict[str, float] = {"subject": 0.20, "decoy": -0.10}
     TRANSIT_SPEED_MPS: float = 12   # the drone cruises to a lead faster than it surveys
     ZOOM_HOVER_S: float = 10        # hover for the zoomed second photo
-    INSPECT_HOVER_S: float = 40     # descend and look under cover
+    INSPECT_HOVER_S: float = 80     # descend and look under cover; 20 s wall at x4 fits a ~10 s fly-reflex debris flight
     TAU_ROUTE: float = 0.50
     TAU_CLOSE: float = 0.60  # Laya must be this sure to auto-close; at 0.50 it closed 9 of 87 held-out people, at 0.60 one
     # Measured share of flags that were real people, by camera band and cover (docs/GATES.md, 1,191 states).

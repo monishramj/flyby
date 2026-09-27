@@ -112,8 +112,8 @@ built state, it is re-decided (new decision appended to its history; queue re-so
 
 - Dispatch and inspection always need a human click. Nothing is closed silently: `auto_closed` leads stay listed, can be reopened, and are re-decided when new intel changes their context.
 - A lead can be re-imaged at most once. At pass `MAX_PASSES` (= 2), a `reimage_zoom` decision routes the lead to a human instead of re-imaging again.
-- Leads that are dispatched, ignored, reimaging, or inspecting are never re-decided.
-- **Optional external hook:** when an inspection starts, the server emits `inspect.request {lead_id}`. If an external client answers `inspect.result {lead_id, found, collided}` before the timer runs out, that answer wins. Nothing in this README requires a client to exist.
+- Leads that are dispatched, ignored, reimaging, or inspecting are never re-decided, and neither is a lead whose decision came from a completed inspection.
+- **Optional external hook:** when an inspection starts, the server emits `inspect.request {lead_id, person, maxWallS}`. `person` only draws the simulated scene, and `maxWallS` is 2 s under the hover time. If an external client answers `inspect.result {lead_id, reached, collided, found}` before the timer runs out, that answer wins. A collision or an unreached target goes to `awaiting_human`. The web UI's client is the fly-reflex inspection panel (`web/src/inspection.ts`, needs `reflex.server`; see [docs/fly-connectome/HANDOFF.md](docs/fly-connectome/HANDOFF.md)). Nothing else requires a client to exist.
 
 ### Repo layout (minimum; agents may add internal modules)
 
@@ -165,7 +165,7 @@ referenced by your step first.
 | `SMALL_BOX_PX` | 20 |  |
 | `MAX_PASSES` | 2 |  |
 | `TRANSIT_SPEED_MPS` / `ZOOM_HOVER_S` / `REIMAGE_BOX_MULT` / `REIMAGE_CONF_SHIFT` | 12 / 10 / 3.0 / +0.20 subjects, −0.10 decoys | A reimage is a real drone visit; the sweep pauses |
-| `INSPECT_HOVER_S` | 40 | Close-in inspection is a drone visit too |
+| `INSPECT_HOVER_S` | 80 | Close-in inspection is a drone visit too; 20 s wall at ×4 fits the fly-reflex flight |
 | `TAU_ROUTE` | 0.60 | Tuned in T2.4 |
 | `LAYA_TIMEOUT_MS` | 500 | Reset to ≈3× measured p95 |
 | `RHO` | 0.9 | Share of intel messages pointing at a real subject |
@@ -297,7 +297,7 @@ On pass 2 the zoom resolves both partial visibility and small size.
 | `intel.parsed` | `{intel_id, parse, ok}` |
 | `incident.update` | Latest picture |
 | `dispatch.created` | `{lead_id, brief, pin}` |
-| `inspect.request` | `{lead_id}` (optional hook) |
+| `inspect.request` | `{lead_id, person, maxWallS}` (optional hook) |
 
 **WebSocket `/ws/mission`, web → server:**
 
@@ -306,7 +306,7 @@ On pass 2 the zoom resolves both partial visibility and small size.
 | `mission.control` | `{cmd, seed?}` where `cmd` is `start`, `pause`, or `reset` |
 | `lead.approve` | `{lead_id}` |
 | `lead.override` | `{lead_id, action}` |
-| `inspect.result` | `{lead_id, found, collided}` (optional hook) |
+| `inspect.result` | `{lead_id, reached, collided, found}` (optional hook; `reached` defaults true, `found` may be null) |
 
 **HTTP:**
 

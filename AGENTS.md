@@ -13,3 +13,5 @@ referenced by your step first.
 - Report: files changed, commands + output, decisions made, deviations, open issues.
 
 The active implementation is the supplied FlyBy Triage plan, T0–T7. The user authorized replacing the former application on triage. Do not modify main. Work only within assigned file ownership when collaborating.
+
+The fly-reflex inspection (reflex/, web/src/scene, web/src/flyviz) comes from fly/connectome; see docs/fly-connectome/HANDOFF.md.

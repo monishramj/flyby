@@ -46,6 +46,7 @@ export function reason(lead: Lead): string {
 
 /** Why a lead reached a human, in the terms of the routing rule (loop._decide / decide.Decider). */
 function routedBecause(lead: Lead): string {
+  if (lead.inspection?.reached === false || lead.inspection?.collided) return 'The inspection was incomplete or collided; this lead still needs a human.';
   const decision = lead.decision!;
   const top = Math.max(...Object.values(decision.probs));
   const tau = store.snapshot?.config.TAU_ROUTE ?? 0.5;

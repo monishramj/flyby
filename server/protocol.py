@@ -24,7 +24,8 @@ class Override(LeadId):
 
 
 class InspectResult(LeadId):
-    found: bool
+    reached: bool = True  # legacy clients treated their answer as a completed visit
+    found: bool | None = None
     collided: bool
 
 

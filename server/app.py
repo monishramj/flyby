@@ -87,7 +87,7 @@ class Mission:
         elif kind == "lead.override":
             self.run.override(payload.lead_id, payload.action)
         elif kind == "inspect.result":
-            self.run.inspect_result(payload.lead_id, payload.found, payload.collided)
+            self.run.inspect_result(payload.lead_id, payload.found, payload.collided, reached=payload.reached)
 
 
 @asynccontextmanager

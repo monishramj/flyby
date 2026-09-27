@@ -8,3 +8,9 @@ web/dist/
 /models/
 logs/*.jsonl*
 .DS_Store
+
+# Fly reflex runtime artifacts (weights from tools.prepare_flyvis, bench recordings).
+data/checkpoints/
+bench/frames/
+bench/closed_loop.jsonl
+.cache/

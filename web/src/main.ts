@@ -7,6 +7,7 @@ import { bindQueue, renderQueue } from './queue';
 import { renderResults } from './results';
 import { notify, store, subscribe, type Lead, type Detour, type MissionItem, type MissionState } from './store';
 import { connect, send } from './ws';
+import { mountInspectionPanel } from './inspection';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 <header class="top">
@@ -219,4 +220,5 @@ renderStatus();
 renderQueue(queueRoot);
 renderIntel(element('intel'));
 // renderAsk(element('ask'), exchanges);
+mountInspectionPanel();
 connect();

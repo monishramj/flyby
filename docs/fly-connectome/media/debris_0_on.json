@@ -1,0 +1,68 @@
+{
+  "label": "simulation",
+  "name": "debris_0_on",
+  "mimeType": "video/webm;codecs=vp9",
+  "wall_s": 13.236,
+  "bytes": 2124112,
+  "outcome": {
+    "lead_id": "dev-1790489963775",
+    "reached": true,
+    "collided": false,
+    "found": true,
+    "t": 10.3,
+    "frames": 515,
+    "min_clearance_m": 0.56,
+    "late_replies": 0,
+    "reflex_ok": true,
+    "waypoints": [
+      {
+        "id": "entry",
+        "status": "reached"
+      },
+      {
+        "id": "target",
+        "status": "reached"
+      }
+    ],
+    "realtime_factor": 0.86
+  },
+  "timeline": [
+    {
+      "wall_s": 0,
+      "state": "starting",
+      "hud": ""
+    },
+    {
+      "wall_s": 0.1227999999821186,
+      "state": "hover",
+      "hud": "hover\n      t0.0 s\n      speed0.00 m/s\n      waypoint1 / 2 \u00b7 4.5 m\n      looming S0.00"
+    },
+    {
+      "wall_s": 1.2675,
+      "state": "none",
+      "hud": "none\n      t1.0 s\n      speed0.00 m/s\n      waypoint1 / 2 \u00b7 4.5 m\n      looming S-0.04"
+    },
+    {
+      "wall_s": 5.280699999988079,
+      "state": "brake",
+      "hud": "brake\n      t4.4 s\n      speed1.42 m/s\n      waypoint2 / 2 \u00b7 4.0 m\n      looming S1.05"
+    },
+    {
+      "wall_s": 5.893,
+      "state": "saccade left",
+      "hud": "saccade left\n      t4.9 s\n      speed0.00 m/s\n      waypoint2 / 2 \u00b7 3.7 m\n      looming S-0.26"
+    },
+    {
+      "wall_s": 6.440599999994039,
+      "state": "none",
+      "hud": "none\n      t5.4 s\n      speed0.04 m/s\n      waypoint2 / 2 \u00b7 3.7 m\n      looming S0.31"
+    },
+    {
+      "wall_s": 12.02279999998212,
+      "state": "reached target",
+      "hud": "reached target\n      t10.3 s\n      speed1.50 m/s\n      waypoint2 / 2 \u00b7 0.5 m\n      looming S0.24"
+    }
+  ],
+  "mp4_bytes": 778502,
+  "mp4": "debris_0_on.mp4"
+}

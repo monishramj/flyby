@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlyBy fly viz</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #05070b; color: #c7cfdb; font: 13px/1.45 Inter, "Segoe UI", Arial, sans-serif; }
+    header { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 16px; background: #0c1119; border-bottom: 1px solid #1f2a3a; }
+    header h1 { font-size: 15px; margin: 0; color: #e8edf5; }
+    header label { display: flex; gap: 6px; align-items: center; }
+    select, input, button { background: #141a24; color: #e8edf5; border: 1px solid #2b3a4f; border-radius: 5px; padding: 3px 7px; font: inherit; }
+    input[type=number] { width: 60px; }
+    button#fly { background: #e0a33c; color: #1b1307; font-weight: 600; border: 0; padding: 4px 14px; }
+    button:disabled { opacity: .5; }
+    #status, #layoutInfo { color: #8c98ab; font-variant-numeric: tabular-nums; }
+    main { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 14px; padding: 14px 16px; align-items: start; }
+    section { background: #0a0e15; border: 1px solid #1f2a3a; border-radius: 8px; padding: 10px; min-width: 0; }
+    section h2 { font-size: 13px; margin: 0 0 8px; color: #e8edf5; font-weight: 600; }
+    section h2 small { color: #8c98ab; font-weight: 400; }
+    #fpv { width: 192px; height: 192px; image-rendering: pixelated; display: block; border: 1px solid #1f2a3a; }
+    .circuit { grid-column: 1 / -1; }
+    .fv-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+    .fv-tabs button { padding: 2px 10px; font-size: 12px; }
+    .fv-tabs button.on { background: #e0a33c; color: #1b1307; border-color: #e0a33c; }
+    .fv-eye canvas { display: block; }
+    .fv-legend { color: #8c98ab; font-size: 11.5px; margin-top: 6px; max-width: 100%; }
+    .fv-eye .fv-legend { max-width: 380px; }
+    .fv-trace-s { height: 250px; position: relative; }
+    .fv-trace-d { height: 130px; position: relative; }
+    .fv-circuit svg { width: 100%; height: auto; display: block; }
+    @media (max-width: 1100px) { main { grid-template-columns: minmax(0, 1fr); } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>FlyBy · fly eye, looming trace, circuit (live reflex data)</h1>
+    <label>scenario <select id="scenario"></select></label>
+    <label>seed <input id="seed" type="number" min="0" step="1" /></label>
+    <label><input id="reflexOn" type="checkbox" /> reflex on</label>
+    <button id="fly" disabled>Fly</button>
+    <span id="status">connecting to /ws/reflex…</span>
+    <span id="layoutInfo"></span>
+  </header>
+  <main>
+    <section>
+      <h2>Camera frame <small>(96×96, sent to the reflex)</small></h2>
+      <canvas id="fpv" width="96" height="96"></canvas>
+    </section>
+    <section>
+      <h2>Fly eye <small>721 flyvis columns at (col_x, col_y)</small></h2>
+      <div id="eyeHost"></div>
+    </section>
+    <section>
+      <h2>Looming trace <small>last 10 s of frame time</small></h2>
+      <div id="traceHost"></div>
+    </section>
+    <section class="circuit">
+      <h2>Circuit <small>flyvis cell types → our readout → command</small></h2>
+      <div id="circuitHost"></div>
+    </section>
+  </main>
+  <script type="module" src="/src/flyviz/page.ts"></script>
+</body>
+</html>
