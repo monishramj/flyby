@@ -289,7 +289,7 @@ On pass 2 the zoom resolves both partial visibility and small size.
 | Message | Payload |
 | --- | --- |
 | `mission.snapshot` | Scene for rendering |
-| `mission.state` | `{t, drone, coverage_pct, coverage_cells}`, 10 Hz |
+| `mission.state` | `{t, drone, coverage_pct, coverage_cells, mode: AUTO\|GUIDED\|HOLD, mission_current, guided: {kind, lead_id, x, y, alt, hold_s, phase}\|null, detours: [{n, kind, lead_id, x, y, alt, hold_s, before_seq, status: active\|done} \| {kind, lead_id, x, y, alt, status: queued}]}`, 10 Hz; the snapshot config carries `MISSION` (numbered items: camera trigger + sweep waypoints) |
 | `lead.new` | `{lead_id, x, y, sector, pass}` |
 | `lead.decided` | `{lead_id, decision, status}` (also sent on re-decision) |
 | `lead.status` | `{lead_id, status}` |

@@ -278,6 +278,10 @@ async def test_the_drone_reroutes_to_reimage_and_the_sweep_resumes_later():
         assert all(lead["pass"] == 2 for lead in run.leads.values() if lead["history"] and len(lead["history"]) > 1
                    and lead["history"][0]["action"] == "reimage_zoom")
         assert run.drone.visit is None and not run._visits and run._search_done()
+        detours = run.mission_state()["detours"]
+        assert detours and all(d["status"] == "done" for d in detours), "every reimage shows up as a flown GUIDED waypoint"
+        assert [d["n"] for d in detours] == list(range(1, len(detours) + 1))
+        assert all(3 <= d["before_seq"] <= len(run.sweep.mission) for d in detours)
     finally:
         await run.stop()
 

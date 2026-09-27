@@ -14,8 +14,8 @@ from server import app as app_module
 
 SNAPSHOT_KEYS = {"run_id", "seed", "scene", "leads", "intel", "incident", "state", "config", "services"}
 SCENE_KEYS = {"area_m", "sector_grid", "gazetteer", "houses", "water", "trees"}
-STATE_KEYS = {"t", "drone", "coverage_pct", "coverage_cells", "running", "finished"}
-CONFIG_KEYS = {"DEMO_SEED", "COVERAGE_CELL_M", "LIVE_POLICY", "PARSE_MODE"}
+STATE_KEYS = {"t", "drone", "coverage_pct", "coverage_cells", "running", "finished", "mode", "mission_current", "guided", "detours"}
+CONFIG_KEYS = {"DEMO_SEED", "COVERAGE_CELL_M", "LIVE_POLICY", "PARSE_MODE", "MISSION"}
 LEAD_KEYS = {"lead_id", "x", "y", "sector", "pass", "detector_conf", "box_px", "nearest_landmark",
              "status", "history", "t_capture"}
 DECISION_KEYS = {"action", "probs", "urgency", "p_person", "latency_ms", "used_fallback",

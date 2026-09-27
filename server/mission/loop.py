@@ -48,6 +48,7 @@ class MissionRun:
         self._captures, self._next_capture, self._capture_gen = self.sweep.captures(), 0, 0
         self.capture_times: dict[str, float] = {}  # when each capture actually happened (visits delay them)
         self._visits: list[tuple[str, str]] = []   # (lead_id, "reimage" | "inspect") waiting for the drone
+        self._detours: list[dict] = []             # GUIDED waypoints flown so far, inserted before the mission item they interrupted
         self._search_end = 0.0                     # last capture or visit return; final once the search is done
         self.noise = Noise(self.scenario, np.random.default_rng(seed + 1))
         self.intel = intel_script.generate(self.scenario, np.random.default_rng(seed + 2))
@@ -94,6 +95,10 @@ class MissionRun:
         state = {"t": round(t, 3), "drone": self.drone.position(t),
                  "coverage_pct": round(self.sweep.coverage_pct(swept), 2),
                  "drone_task": {"kind": visit["kind"], "lead_id": visit["lead_id"]} if visit else None,
+                 "mode": "GUIDED" if visit else "HOLD" if self._search_done() else "AUTO",
+                 "mission_current": self.sweep.current_seq(swept),
+                 "guided": self._guided(visit, t),
+                 "detours": self._detour_list(),
                  "search_done": self._search_done(),
                  "search_end_t": round(self._search_end, 3) if self._search_done() else None,
                  "running": self._started and not self.clock.paused and not self._finished,
@@ -102,6 +107,22 @@ class MissionRun:
             self._coverage_mark = covered
             state["coverage_cells"] = self.sweep.coverage(swept)["coverage_cells"]
         return state
+
+    def _guided(self, visit, t):
+        """The ad-hoc GUIDED target a visit flies to, as a GCS "fly to here" would send it."""
+        if not visit:
+            return None
+        _, x, y = visit["legs"][1]
+        phase = "out" if t < visit["arrive_t"] else "hover" if t < visit["done_t"] else "back"
+        return {"kind": visit["kind"], "lead_id": visit["lead_id"], "x": x, "y": y, "alt": self.cfg.ALT_M,
+                "hold_s": round(visit["done_t"] - visit["arrive_t"], 3), "phase": phase}
+
+    def _detour_list(self):
+        """Flown and active GUIDED waypoints, then the ones still queued (likeliest person first, the order they will fly)."""
+        queued = sorted(self._visits, key=lambda item: -self.leads[item[0]].get("person_chance", 0))
+        return deepcopy(self._detours) + [{"kind": kind, "lead_id": lead_id, "x": self.leads[lead_id]["x"],
+                                           "y": self.leads[lead_id]["y"], "alt": self.cfg.ALT_M, "status": "queued"}
+                                          for lead_id, kind in queued]
 
     def public_lead(self, lead):
         public = {key: deepcopy(value) for key, value in lead.items() if key not in ("truth", "human_token", "order")}
@@ -122,7 +143,8 @@ class MissionRun:
                        "TAU_ROUTE": self.cfg.TAU_ROUTE, "MAX_PASSES": self.cfg.MAX_PASSES,
                        "LIVE_TIME_SCALE": self.cfg.LIVE_TIME_SCALE, "SWEEP_DURATION_S": self.sweep.duration,
                        "ALT_M": self.cfg.ALT_M, "FOV_DEG": self.cfg.FOV_DEG,
-                       "FOOTPRINT_M": self.sweep.footprint_m, "SWEEP_PATH": self.sweep.path},
+                       "FOOTPRINT_M": self.sweep.footprint_m, "SWEEP_PATH": self.sweep.path,
+                       "MISSION": self.sweep.mission},
             "services": {"policy": self.policy, "parse_mode": self.parse_mode,
                          "persistence": "atlas" if self.writer and self.writer.available else "local"},
         }
@@ -227,7 +249,11 @@ class MissionRun:
         lead_id, kind = max(self._visits, key=lambda item: self.leads[item[0]].get("person_chance", 0))
         self._visits.remove((lead_id, kind))
         lead = self.leads[lead_id]
+        before_seq = self.sweep.current_seq(self.drone.sweep_time(t))
         visit = self.drone.plan_visit(t, lead, kind)
+        self._detours.append({"n": len(self._detours) + 1, "kind": kind, "lead_id": lead_id, "x": lead["x"], "y": lead["y"],
+                              "alt": self.cfg.ALT_M, "hold_s": round(visit["done_t"] - visit["arrive_t"], 3),
+                              "before_seq": before_seq, "status": "active"})
         self._capture_gen += 1  # a pending sweep capture waits for the drone to come back
         if kind == "inspect":
             self.clock.call_at(visit["arrive_t"], lambda: self._emit("inspect.request", {"lead_id": lead_id}))
@@ -238,6 +264,7 @@ class MissionRun:
 
     def _end_visit(self):
         self.drone.finish_visit()
+        self._detours[-1]["status"] = "done"
         self._search_end = self.clock.now
         if self._visits:
             self._start_visit(self.clock.now)

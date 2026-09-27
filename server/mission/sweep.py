@@ -22,6 +22,9 @@ class Sweep:
         self._points = np.array(points, dtype=float)
         self._times = np.r_[0., np.cumsum(np.linalg.norm(np.diff(self._points, axis=0), axis=1) / cfg.SWEEP_SPEED_MPS)]
         self.duration = float(self._times[-1])
+        # The plan as a GCS would upload it (MAVLink MISSION_ITEM_INT, simplified): camera trigger, then waypoints.
+        self.mission = [{"seq": 1, "command": "DO_SET_CAM_TRIGG_DIST", "param1": cfg.CAPTURE_SPACING_M}] + [
+            {"seq": i + 2, "command": "NAV_WAYPOINT", "x": x, "y": y, "alt": cfg.ALT_M} for i, (x, y) in enumerate(points)]
         self._captures = []
         for lane in range(n_lanes):
             start, end = self._points[2 * lane:2 * lane + 2]
@@ -45,6 +48,10 @@ class Sweep:
     def position_at(self, t: float) -> dict:
         return {"x": float(np.interp(t, self._times, self._points[:, 0])),
                 "y": float(np.interp(t, self._times, self._points[:, 1]))}
+
+    def current_seq(self, t: float) -> int:
+        """MISSION_CURRENT: the waypoint the drone is flying toward at sweep time t."""
+        return min(int(np.searchsorted(self._times, t, side="right")), len(self._times) - 1) + 2
 
     def captures(self) -> list[dict]:
         return deepcopy(self._captures)

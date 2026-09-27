@@ -146,3 +146,20 @@ def test_a_visit_takes_the_drone_off_the_sweep_and_pauses_it():
     drone.finish_visit()
     assert drone.offset == 2 * leg + cfg.ZOOM_HOVER_S
     assert drone.position(20 + drone.offset) == home, "it resumes exactly where it left"
+
+
+def test_the_mission_lists_numbered_waypoints_and_holds_the_current_one_while_guided():
+    from server.mission.sweep import Drone
+    cfg = Settings()
+    sweep = Sweep(cfg)
+    assert [item["command"] for item in sweep.mission[:2]] == ["DO_SET_CAM_TRIGG_DIST", "NAV_WAYPOINT"]
+    assert len(sweep.mission) == 1 + len(sweep.path) and [i["seq"] for i in sweep.mission] == list(range(1, len(sweep.mission) + 1))
+    assert sweep.current_seq(0) == 3, "starts at the first waypoint, flying to the second"
+    assert sweep.current_seq(sweep.duration + 99) == len(sweep.mission)
+    drone = Drone(sweep, cfg)
+    t = sweep.duration / 3
+    before = sweep.current_seq(drone.sweep_time(t))
+    drone.plan_visit(t, {"lead_id": "L-1", "x": 150, "y": 150}, "inspect")
+    assert sweep.current_seq(drone.sweep_time(t + 30)) == before, "GUIDED leaves the mission's current item alone"
+    target = sweep.mission[before - 1]
+    assert (target["x"], target["y"]) == (sweep.path[before - 2]["x"], sweep.path[before - 2]["y"])

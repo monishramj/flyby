@@ -5,7 +5,7 @@ import { briefHtml, contextSummary, renderIncident, renderIntel } from './panels
 // import { renderAsk } from './panels';
 import { bindQueue, renderQueue } from './queue';
 import { renderResults } from './results';
-import { notify, store, subscribe, type Lead } from './store';
+import { notify, store, subscribe, type Lead, type Detour, type MissionItem, type MissionState } from './store';
 import { connect, send } from './ws';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -50,10 +50,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     -->
   </div>
   <aside class="work">
-    <h2>Work <small id="queue-meta"></small></h2>
-    <div class="jump top"><button data-jump="up" tabindex="-1"></button></div>
-    <div id="queue"></div>
-    <div class="jump bottom"><button data-jump="down" tabindex="-1"></button></div>
+    <nav class="side-tabs"><button data-side="work" class="on">Work <small id="queue-meta"></small></button><button data-side="mission">Mission <span id="fmode" class="fmode"></span></button></nav>
+    <div id="side-work">
+      <div class="jump top"><button data-jump="up" tabindex="-1"></button></div>
+      <div id="queue"></div>
+      <div class="jump bottom"><button data-jump="down" tabindex="-1"></button></div>
+    </div>
+    <div id="side-mission" class="mission-pane" hidden><p id="guided-row" class="guided-row"></p><div id="mission-items"></div></div>
   </aside>
 </main>
 <main id="tab-results" class="results" hidden></main>
@@ -106,6 +109,14 @@ element('demo').onclick = () => {
   window.setTimeout(() => send({ type: 'mission.control', payload: { cmd: 'start' } }), 250);
 };
 
+document.querySelectorAll<HTMLButtonElement>('[data-side]').forEach(button => {
+  button.onclick = () => {
+    document.querySelectorAll('[data-side]').forEach(other => other.classList.toggle('on', other === button));
+    element('side-work').hidden = button.dataset.side !== 'work';
+    element('side-mission').hidden = button.dataset.side !== 'mission';
+  };
+});
+
 document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach(button => {
   button.onclick = () => {
     document.querySelectorAll('[data-tab]').forEach(other => other.classList.toggle('on', other === button));
@@ -154,8 +165,32 @@ function renderStatus() {
   element('mission-meta').textContent = searchEnd != null
     ? `search complete in ${Math.round(searchEnd)}s · ${state.coverage_pct.toFixed(0)}% covered${task}`
     : `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.running ? 'flying' : 'paused'}${task}`;
+  renderMissionList(snapshot.config.MISSION, state);
   element('queue-meta').textContent = `${counts.dispatched ?? 0} dispatched`;
   element('context-meta').textContent = contextSummary();
+}
+
+const COMMAND: Record<string, string> = { NAV_WAYPOINT: 'WAYPOINT', DO_SET_CAM_TRIGG_DIST: 'CAM_TRIGG_DIST' };
+let missionKey = '';
+// The mission as a GCS lists it, with each GUIDED detour inserted before the item it interrupted; queued ones wait before the current item.
+function renderMissionList(items: MissionItem[], state: MissionState) {
+  const mode = state.mode ?? 'AUTO', g = state.guided, current = state.mission_current ?? 0, detours = state.detours ?? [];
+  const fmode = element('fmode'); fmode.textContent = mode; fmode.className = `fmode ${mode.toLowerCase()}`;
+  const key = JSON.stringify([current, g?.phase, detours.map(d => d.status + d.lead_id), items.length]);
+  if (key === missionKey) return;
+  missionKey = key;
+  element('guided-row').innerHTML = g ? `<b>GUIDED</b> → ${g.lead_id} ${g.kind} · hold ${g.hold_s}s · ${g.phase === 'back' ? 'returning to resume AUTO' : g.phase === 'out' ? 'flying out' : 'hovering'}`
+    : mode === 'HOLD' ? 'Search complete, holding.' : `<b>AUTO</b> → waypoint ${current}`;
+  const detourRow = (d: Detour) => `<tr class="detour ${d.status}"><td>${d.n ? `G${d.n}` : 'G'}</td><td>GUIDED ${d.kind} → ${d.lead_id}</td><td>${d.alt}</td>`
+    + `<td>${d.hold_s != null ? `hold ${d.hold_s}s` : ''}</td><td>${d.status === 'active' ? g?.phase ?? 'active' : d.status}</td></tr>`;
+  const rows = items.map(item => {
+    const inserted = detours.filter(d => d.status !== 'queued' && d.before_seq === item.seq).map(detourRow).join('')
+      + (item.seq === current ? detours.filter(d => d.status === 'queued').map(detourRow).join('') : '');
+    const state = item.seq === current ? (mode === 'GUIDED' ? 'paused' : mode === 'HOLD' ? 'reached' : 'flying to') : item.seq < current ? 'reached' : '';
+    return inserted + `<tr class="${item.seq === current ? 'on' : item.seq < current ? 'done' : ''}"><td>${item.seq}</td><td>${COMMAND[item.command] ?? item.command}</td>`
+      + `<td>${item.alt ?? ''}</td><td>${item.command === 'DO_SET_CAM_TRIGG_DIST' ? `${item.param1}m` : ''}</td><td>${state}</td></tr>`;
+  }).join('');
+  element('mission-items').innerHTML = `<table class="mission-table"><thead><tr><th>#</th><th>Command</th><th>Alt</th><th>Param</th><th>State</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 let frame = 0;

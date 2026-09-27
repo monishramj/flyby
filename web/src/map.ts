@@ -16,7 +16,7 @@ const VIS_COLOR: Record<string, string> = { visible: '#5fd08a', partial: '#e3c04
 interface Ctx {
   renderer: THREE.WebGLRenderer; labels: CSS2DRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; controls: OrbitControls;
   world: THREE.Group; leadGroup: THREE.Group; truthGroup: THREE.Group; hazardGroup: THREE.Group;
-  drone: THREE.Group; rotors: THREE.Object3D[]; cam: THREE.Group; lkp: THREE.LineLoop;
+  drone: THREE.Group; rotors: THREE.Object3D[]; cam: THREE.Group; lkp: THREE.LineLoop; wps: Map<number, HTMLElement>; guided: THREE.Mesh; detours: THREE.Group; detourKey: string;
   coverage: { tex: THREE.DataTexture; n: number; count: number } | null;
   sectorLabels: Record<string, HTMLElement>; houseMats: THREE.Material[];
   runId: string; hazardKey: string; truthKey: string; mode: CameraMode; droneTarget: THREE.Vector3; last: THREE.Vector3;
@@ -174,7 +174,11 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   const [world, leadGroup, truthGroup, hazardGroup] = [1, 2, 3, 4].map(() => new THREE.Group());
   scene.add(world, leadGroup, truthGroup, hazardGroup);
   const lkp = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: '#c96b43', dashSize: 3, gapSize: 2 })); lkp.visible = false; scene.add(lkp);
-  ctx = { renderer, labels, scene, camera, controls, world, leadGroup, truthGroup, hazardGroup, drone, rotors, cam: new THREE.Group(), lkp,
+  // GUIDED target: where the drone breaks off to for a reimage or close-in inspect.
+  const guided = new THREE.Mesh(new THREE.RingGeometry(5, 6.5, 32), new THREE.MeshBasicMaterial({ color: '#dbbc7f', side: THREE.DoubleSide, depthWrite: false }));
+  guided.rotation.x = -Math.PI / 2; guided.visible = false; scene.add(guided);
+  const detours = new THREE.Group(); scene.add(detours);
+  ctx = { renderer, labels, scene, camera, controls, world, leadGroup, truthGroup, hazardGroup, drone, rotors, cam: new THREE.Group(), lkp, wps: new Map(), guided, detours, detourKey: '',
     coverage: null, sectorLabels: {}, houseMats: [], runId: '', hazardKey: '', truthKey: '', mode: 'orbit',
     droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null, foam: [], clouds: null };
   // Models stream in after first paint; the scene is rebuilt with them once they arrive.
@@ -243,7 +247,7 @@ export function setCameraMode(mode: CameraMode) {
 }
 
 function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
-  dispose(c.world); dispose(c.leadGroup); dispose(c.truthGroup); dispose(c.hazardGroup);
+  dispose(c.world); dispose(c.leadGroup); dispose(c.truthGroup); dispose(c.hazardGroup); dispose(c.detours); c.detourKey = '';
   c.pins.clear(); c.sectorLabels = {}; c.houseMats = []; c.truthKey = ''; c.hazardKey = ''; c.coverage = null;
   const { scene, config } = s, area = scene.area_m, cell = config.COVERAGE_CELL_M;
   const margin = 80, painted = groundTexture(scene, s.seed, margin, BEACH_M);
@@ -325,6 +329,11 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
     const l = label(point.label || name.replaceAll('_', ' '), 'landmark'); l.position.copy(at(point.x, point.y, 12)); c.world.add(l);
   });
   c.world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(config.SWEEP_PATH.map(p => at(p.x, p.y, 0.3))), new THREE.LineBasicMaterial({ color: '#7fc3ac', transparent: true, opacity: 0.35 })));
+  c.wps.clear();
+  config.MISSION.forEach(item => {
+    if (item.x == null || item.y == null) return;
+    const l = label(String(item.seq), 'wp'); l.position.copy(at(item.x, item.y, 3)); c.world.add(l); c.wps.set(item.seq, l.element);
+  });
 
   dispose(c.cam); c.cam.add(buildCamera(config.ALT_M, config.FOOTPRINT_M));
   const start = at(s.state.drone.x, s.state.drone.y, config.ALT_M);
@@ -408,6 +417,18 @@ export function renderMap() {
       const l = label(h.type.replaceAll('_', ' '), 'hazard'); l.position.copy(at(h.x, h.y, 12)); c.hazardGroup.add(l);
     });
   }
+  c.wps.forEach((el, seq) => { el.classList.toggle('on', seq === state.mission_current); el.classList.toggle('done', seq < (state.mission_current ?? 0)); });
+  const g = state.guided;
+  c.guided.visible = Boolean(g);
+  if (g) c.guided.position.copy(at(g.x, g.y, 0.5));
+  const detours = state.detours ?? [], detourKey = JSON.stringify(detours.map(d => [d.n, d.status, d.lead_id]));
+  if (c.detourKey !== detourKey) {
+    dispose(c.detours); c.detourKey = detourKey;
+    detours.forEach(d => {
+      const l = label(`${d.n ? `G${d.n}` : 'G'} · ${d.lead_id} ${d.kind}`, `guided ${d.status}`); l.position.copy(at(d.x, d.y, 22)); c.detours.add(l);
+    });
+  }
+
   const lk = incident.last_known_point;
   c.lkp.visible = Boolean(lk);
   if (lk) {
