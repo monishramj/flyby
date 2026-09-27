@@ -72,6 +72,8 @@ class StubEye:
 def eye(monkeypatch):
     stub = StubEye()
     monkeypatch.setattr(reflex_server.app.state, "eye", stub, raising=False)
+    # protocol tests use the default readout, independent of fitted bench/readout_weights.json
+    monkeypatch.setattr(reflex_server, "READOUT_WEIGHTS", None)
     return stub
 
 

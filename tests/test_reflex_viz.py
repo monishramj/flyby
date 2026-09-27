@@ -72,6 +72,8 @@ class VizStubEye(StubEye):
 def eye(monkeypatch):
     stub = VizStubEye(q=1.0)  # S crosses theta, so commands change during the run
     monkeypatch.setattr(reflex_server.app.state, "eye", stub, raising=False)
+    # protocol tests use the default readout, independent of fitted bench/readout_weights.json
+    monkeypatch.setattr(reflex_server, "READOUT_WEIGHTS", None)
     return stub
 
 
