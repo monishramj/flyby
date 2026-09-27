@@ -6,6 +6,7 @@
 // than real time, but every command is on time (never a stale reply).
 import * as THREE from 'three';
 import { ChaseView } from './dress';
+import { askVision } from './vision';
 import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, defaultRoute, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
 
 export interface InspectRequest {
@@ -17,6 +18,7 @@ export interface InspectRequest {
   reflexOn?: boolean;
   maxWallS?: number;     // stop the flight after this many wall-clock seconds (mission timer safety)
   waypoints?: Waypoint[]; // scene coordinates (x right, z forward is negative); last = target
+  vision?: boolean;      // at the target, photograph and ask Grok vision (advisory; default true)
 }
 
 export interface InspectOutcome {
@@ -28,6 +30,7 @@ export interface InspectOutcome {
   realtime_factor: number; // simulated s per wall-clock s (< 1: the reflex is slower than 50 Hz)
   reflex_ok: boolean;    // false if the reflex was unreachable (flown without it)
   waypoints: { id: string; status: WaypointStatus }[]; // pending = not attempted before the flight ended
+  vision_requested: boolean; // a photo went to Grok vision; its report never changes this outcome
 }
 
 const CSS = `
@@ -40,6 +43,11 @@ const CSS = `
 .flyby-insp .state.act{background:#e0a33c;color:#1b1307}.flyby-insp .state.bad{background:#ef6a5b;color:#fff}.flyby-insp .state.good{background:#6cc48a;color:#0d1b12}
 .flyby-insp .row{display:flex;justify-content:space-between;border-bottom:1px solid #344337;padding:2px 0;font-variant-numeric:tabular-nums}
 .flyby-insp .row span{color:#9fb09c}
+.flyby-insp .vision{display:grid;gap:4px;padding:6px;border-radius:8px;background:#141c16;border:1px solid #344337}
+.flyby-insp .vision img{width:100%;border-radius:4px;display:block}
+.flyby-insp .vision .vt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#9fb09c;margin:0}
+.flyby-insp .vision .vr{font-weight:700;margin:0}.flyby-insp .vision .vr.yes{color:#6cc48a}.flyby-insp .vision .vr.no{color:#e0a33c}.flyby-insp .vision .vr.off{color:#9fb09c}
+.flyby-insp .vision .vd{font-size:12px;margin:0;color:#e8eee7}.flyby-insp .vision .vm{font-size:10px;margin:0;color:#7f907c}
 @media (max-width:640px){.flyby-insp{grid-template-columns:1fr}}`;
 
 function hashSeed(s: string): number {
@@ -49,6 +57,31 @@ function hashSeed(s: string): number {
 }
 
 let reflexLink: ReflexLink | null = null;
+let visionSettled: Promise<void> = Promise.resolve();
+/** Resolves once the last flight's Grok vision report (if any) is shown; panels can wait on it before closing. */
+export function whenVisionSettled(): Promise<void> { return visionSettled; }
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+
+/** Photo at the target → Grok vision → card in the flight aside. Never awaited by the outcome. */
+function visionCard(aside: HTMLElement, leadId: string, photo: string) {
+  const card = document.createElement('div');
+  card.className = 'vision';
+  card.innerHTML = `<p class="vt">Drone camera at target → Grok vision</p><img alt="Drone photo at the target" src="${photo}">
+    <p class="vr off">checking for a person…</p><p class="vd"></p><p class="vm">advisory only · the flight result and the lead's status do not depend on it</p>`;
+  aside.appendChild(card);
+  const vr = card.querySelector<HTMLElement>('.vr')!, vd = card.querySelector<HTMLElement>('.vd')!, vm = card.querySelector<HTMLElement>('.vm')!;
+  visionSettled = askVision(leadId, photo).then((r) => {
+    vr.className = `vr ${r.person_visible ? 'yes' : 'no'}`;
+    vr.textContent = `${r.person_visible ? 'Person visible' : 'No person visible'} · ${Math.round(r.confidence * 100)}%`;
+    vd.textContent = r.description;
+    vm.textContent = `${r.model} · ${(r.ms / 1000).toFixed(1)} s · advisory only: nothing was changed`;
+  }).catch((e) => {
+    vr.textContent = 'Grok vision unavailable';
+    vd.innerHTML = esc(String(e.message ?? e));
+    vm.textContent = 'no report; the flight result stands on its own';
+  });
+}
 let episodeCounter = Math.floor(Math.random() * 1e6) * 100;
 let sideChannel: ReflexSideChannel | null = null;
 
@@ -146,6 +179,8 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   }
   drawHud();
   const r = insp.result();
+  const visionRequested = (req.vision ?? true) && insp.arrived;
+  if (visionRequested) visionCard(host.querySelector<HTMLElement>('aside')!, req.lead_id, insp.photo(renderer));
   const wallS = (performance.now() - started) / 1000;
   return {
     lead_id: req.lead_id, reached: r.arrived, collided: r.collided,
@@ -153,5 +188,6 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
     t: r.t, frames: r.frames, min_clearance_m: r.min_clearance_m,
     late_replies: 0, reflex_ok: link !== null, waypoints: r.waypoints,
     realtime_factor: +(r.t / Math.max(wallS, 1e-3)).toFixed(2),
+    vision_requested: visionRequested,
   };
 }

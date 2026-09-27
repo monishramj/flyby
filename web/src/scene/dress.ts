@@ -6,7 +6,8 @@
 // Geometry and collisions are shared; only materials, lights and decoration differ.
 import * as THREE from 'three';
 
-export const CHASE = 1, EYE = 2;
+// OVERLAY (3): viewer-only markers (trail, event markers, beacons), kept out of the drone's photo.
+export const CHASE = 1, EYE = 2, OVERLAY = 3;
 
 export function onLayer<T extends THREE.Object3D>(o: T, layer: number): T {
   o.traverse((c) => c.layers.set(layer));
@@ -190,6 +191,11 @@ export function addChaseEnvironment(scene: THREE.Scene, opts: { shadowSpan?: num
   scene.add(onLayer(sun, CHASE));
 }
 
+export interface ChaseRig {
+  back: number; up: number; ahead: number; lookY: number;
+  roof?: { halfX: number; zMin: number; zMax: number; below: number };
+}
+
 type Mark = 'brake' | 'saccade_left' | 'saccade_right' | 'reached' | 'collided';
 
 /** Viewer camera that follows the drone smoothly, plus the flight trail and event markers. */
@@ -204,14 +210,14 @@ export class ChaseView {
   private init = false;
   private fog = new THREE.Fog(0xd8c6b0, 12, 55);
 
-  constructor(private scene: THREE.Scene, private rig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 }) {
-    this.camera.layers.enable(CHASE);
+  constructor(private scene: THREE.Scene, private rig: ChaseRig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 }) {
+    this.camera.layers.enable(CHASE); this.camera.layers.enable(OVERLAY);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(3 * 4000), 3));
     geo.setDrawRange(0, 0);
     this.trail = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.85 }));
     this.trail.frustumCulled = false;
-    scene.add(onLayer(this.trail, CHASE));
+    scene.add(onLayer(this.trail, OVERLAY));
     scene.add(this.marks);
   }
 
@@ -229,7 +235,7 @@ export class ChaseView {
     }
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 1.2, 6), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 }));
     pole.position.y = 0.6; g.add(pole);
-    this.marks.add(onLayer(g, CHASE));
+    this.marks.add(onLayer(g, OVERLAY));
   }
 
   /** Call once per simulated frame. cmd: the reflex command in force; t: sim time (s). */
@@ -253,7 +259,10 @@ export class ChaseView {
     const body = d.drone.getObjectByName('body');
     if (body) body.rotation.x = THREE.MathUtils.lerp(body.rotation.x, -Math.min(0.25, d.speed * 0.1), 0.1);
     const fwd = new THREE.Vector3(Math.sin(d.yaw), 0, -Math.cos(d.yaw));
-    const wantPos = new THREE.Vector3(d.x - fwd.x * this.rig.back, this.rig.up, d.z - fwd.z * this.rig.back);
+    let up = this.rig.up;
+    const cx = d.x - fwd.x * this.rig.back, cz = d.z - fwd.z * this.rig.back, r = this.rig.roof;
+    if (r && Math.abs(cx) < r.halfX && cz < r.zMax && cz > r.zMin) up = r.below; // stay under a roof, not inside it
+    const wantPos = new THREE.Vector3(cx, up, cz);
     const wantLook = new THREE.Vector3(d.x + fwd.x * this.rig.ahead, this.rig.lookY, d.z + fwd.z * this.rig.ahead);
     const k = this.init ? 1 - Math.exp(-dtS / 0.35) : 1; // ~0.35 s smoothing: saccades read as turns, not cuts
     this.pos.lerp(wantPos, k); this.look.lerp(wantLook, k); this.init = true;

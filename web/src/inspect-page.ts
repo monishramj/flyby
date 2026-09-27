@@ -26,7 +26,7 @@ $<HTMLButtonElement>('start').addEventListener('click', async () => {
     fovDeg: Number($<HTMLSelectElement>('fov').value),
     reflexOn: $<HTMLInputElement>('reflex').checked,
     person: $<HTMLInputElement>('person').checked,
-    maxWallS: 30,
+    maxWallS: Number(query.get('maxwall')) || 30, // ?maxwall=300 on slow (software-rendering) machines
   });
   let finishRecording: ReturnType<typeof recordInspection> | undefined;
   if (query.get('record') === '1') {

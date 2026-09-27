@@ -3,7 +3,7 @@
 // Heading 0 faces −z; + yaw turns right (toward +x). Camera image: x right, y up,
 // sent with row 0 = top. Constants mirror reflex/config.py where they overlap.
 import * as THREE from 'three';
-import { CHASE, EYE, addAtmosphere, addChaseEnvironment, addRuin, makeDrone, makePerson, onLayer, palette, twin } from './dress';
+import { CHASE, EYE, OVERLAY, type ChaseRig, addAtmosphere, addChaseEnvironment, addRuin, makeDrone, makePerson, onLayer, palette, twin } from './dress';
 
 export const FRAME_R = 96;
 // The camera renders at SUPERSAMPLE× resolution with MSAA, then is area-averaged to
@@ -139,7 +139,7 @@ export class Inspection {
   private boxes: Box[] = [];
   private debris: Box | null = null;
   /** Viewer chase-camera placement for this scene (see dress.ts ChaseView). */
-  chaseRig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 };
+  chaseRig: ChaseRig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 };
   private rgba = new Uint8Array(CAM_R * CAM_R * 4);
 
   constructor(readonly spec: EpisodeSpec) {
@@ -154,7 +154,7 @@ export class Inspection {
     addChaseEnvironment(s);
     addAtmosphere(s, new THREE.Vector3(-5, 0.1, -12), new THREE.Vector3(5, 3.5, 8));
     if (spec.scenario !== 'house') addRuin(s);
-    this.chaseRig = spec.scenario === 'house' ? { back: 3.4, up: 4.0, ahead: 1.4, lookY: 0.5 } : { back: 2.8, up: 2.7, ahead: 2.0, lookY: 1.1 };
+    this.chaseRig = spec.scenario === 'house' ? { back: 3.4, up: 4.0, ahead: 1.4, lookY: 0.5 } : { back: 2.8, up: 2.7, ahead: 2.0, lookY: 1.1, roof: { halfX: 2.2, zMin: -5.8, zMax: 1.0, below: 1.9 } };
 
     // Concrete-like ground: 2 cm grain with broad stains (texture spans 5 m).
     const groundTex = noiseTexture(11, 512, 128, 22, 2, 18, 64); groundTex.repeat.set(12, 12);
@@ -178,7 +178,7 @@ export class Inspection {
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 12, 1, true),
         new THREE.MeshBasicMaterial({ color: last ? 0x6cc48a : 0xe0a33c, transparent: true, opacity: 0.25, depthWrite: false }));
       beam.position.set(w.x, 1.1, w.z); beam.name = `beacon-${i}`;
-      s.add(onLayer(beam, CHASE));
+      s.add(onLayer(beam, OVERLAY));
     }
     if (spec.person) {
       const figure = makePerson(); figure.position.set(spec.goalX, 0, spec.goalZ - 0.3);
@@ -381,6 +381,34 @@ export class Inspection {
     const out = new Uint8Array(FRAME_R * FRAME_R);
     for (let i = 0; i < out.length; i++) out[i] = Math.round(sum[i] / (SUPERSAMPLE * SUPERSAMPLE));
     return out;
+  }
+
+  /**
+   * A colour still from the drone's own camera, gimbal pitched down, for the person check.
+   * It sees the viewer's scene (colours, casualty figure) without markers or the drone itself;
+   * the fly eye's 96x96 grayscale input is a separate, unchanged render.
+   */
+  photo(renderer: THREE.WebGLRenderer, w = 640, h = 480): string {
+    const cam = new THREE.PerspectiveCamera(72, w / h, 0.05, 80);
+    cam.layers.set(0); cam.layers.enable(CHASE);
+    cam.position.set(this.x, DRONE_Y - 0.05, this.z);
+    cam.rotation.set(-50 * Math.PI / 180, -this.yaw, 0, 'YXZ');
+    cam.updateMatrixWorld();
+    const rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 });
+    rt.texture.colorSpace = THREE.SRGBColorSpace;
+    const body = this.drone.getObjectByName('body')!, wasVisible = body.visible;
+    body.visible = false;
+    renderer.setRenderTarget(rt);
+    renderer.render(this.scene, cam);
+    const px = new Uint8Array(w * h * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
+    renderer.setRenderTarget(null);
+    body.visible = wasVisible; rt.dispose();
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const img = new ImageData(w, h);
+    for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4); // WebGL rows are bottom-up
+    c.getContext('2d')!.putImageData(img, 0, 0);
+    return c.toDataURL('image/jpeg', 0.85);
   }
 
   done(): boolean {
