@@ -76,5 +76,16 @@ Laya's `ignore` auto-closes only on a low detector band; auto-closed leads are r
 the time, so part of the laya arm's edge is the simulated operator, not Laya. First-decision
 accuracy (before any human) is 0.44 for laya vs 0.42 for the rule.
 
+**Human load (sub-problem 2).** A manual reviewer handles every flag. Of 209 flags:
+
+| Arm | Needed judgment | One-click approval | No human | Real people closed with no human look |
+| --- | --- | --- | --- | --- |
+| rule | 32 | 62 | 115 | 27 |
+| laya | 111 | 60 | 38 | 7 |
+
+The rule hands a human far fewer flags but silently closes 27 real people; Laya closes 7 but
+sends 53% of flags for judgment, because its probabilities are flat. Present this as the
+trade-off it is.
+
 `under_structure` subjects are reported separately (median 394.1 s, laya arm): overhead
 review cannot see them at all, so they are excluded from the primary comparison.

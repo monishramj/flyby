@@ -97,7 +97,7 @@ const check = (name, condition, detail = '') => {
 };
 
 check('header renders', text('status').includes('live'), text('status'));
-check('mission meta renders', /t\+\d+s/.test(text('mission-meta')), text('mission-meta'));
+check('mission meta renders', /t\+\d+s|search complete in \d+s/.test(text('mission-meta')), text('mission-meta'));
 check('queue meta renders', /dispatched/.test(text('queue-meta')), text('queue-meta'));
 check('overview has simulation time and measured coverage', /\d+:\d\d/.test(text('metric-time')) && /\d+%/.test(text('metric-coverage')));
 check('review count agrees between overview and queue', text('metric-pending') === text('pending-badge'));
@@ -144,34 +144,65 @@ if (briefButton) {
   results.push('skip brief modal — no dispatched lead is still in the queue');
 }
 
-// Auto-closed leads stay visible and reopenable.
-check('auto-closed bin lists closed leads', count('#queue .closed-bin li') > 0, `${count('#queue .closed-bin li')} closed`);
+// Auto-closed leads live in their own tab at the top of the Work column, reviewable and reopenable.
 {
-  const reopen = window.document.querySelector('#queue .closed-bin [data-override]');
+  const tabs = () => [...window.document.querySelectorAll('#queue [data-tab-work]')];
+  check('work column has Needs you / Auto-closed tabs', tabs().length === 2 && /Needs you \(\d+\)/.test(tabs()[0].textContent) &&
+    /Auto-closed \(\d+\)/.test(tabs()[1].textContent), tabs().map(node => node.textContent.trim()).join(' | '));
+  tabs()[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  check('auto-closed tab lists closed leads', count('#queue .closed-list li') > 0 && count('#queue .card') === 0, `${count('#queue .closed-list li')} closed`);
+  const reopen = window.document.querySelector('#queue .closed-list [data-override]');
   reopen.value = 'dispatch_ground_team';
   reopen.dispatchEvent(new window.Event('change', { bubbles: true }));
   await tick();
   check('reopening an auto-closed lead sends lead.override', sent.at(-1).type === 'lead.override' &&
     sent.at(-1).payload.action === 'dispatch_ground_team', JSON.stringify(sent.at(-1)));
+  tabs()[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await tick();
+  check('back on Needs you, the cards return', count('#queue .card') > 0);
 }
 
-// Grok assistant proposals render with code-supplied evidence and never send a command.
+// Layout: the queue is the work surface; incident and intel are background, closed by default.
+check('work column holds the queue', Boolean(window.document.querySelector('.work #queue')));
+check('context drawer holds intel and incident, closed', Boolean(window.document.querySelector('#context #intel')) &&
+  Boolean(window.document.querySelector('#context #incident')) && !window.document.getElementById('context').open,
+  text('context-meta'));
+
+// Cards explain themselves in plain words.
 {
-  const leadIds = window.document.querySelectorAll('#queue [data-lead]');
-  const ids = [...leadIds].slice(0, 2).map(node => node.dataset.lead);
-  socket.onmessage({ data: JSON.stringify({ type: 'assistant.proposal', payload: {
-    proposal_id: 'I1-1', kind: 'link_intel', lead_ids: ids, intel_id: 'I1', text: 'These leads sit at the reported landmark.',
-    digits_stripped: false, t: 12, evidence: { landmark: 'elm_school', leads: ids.map(id => ({ lead_id: id, sector: 'S1', status: 'auto_closed', detector_conf: .3, distance_to_landmark_m: 4.2 })) } } }) });
+  const first = window.document.querySelector('#queue .card');
+  check('cards give a code-written reason', first.querySelector('.reason').textContent.trim().length > 0,
+    first.querySelector('.reason').textContent.trim());
+  check('cards label the camera score', /Camera \d+%/.test(first.querySelector('.facts').textContent), first.querySelector('.facts').textContent.trim());
+  first.querySelector('[data-why]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await tick();
-  check('assistant panel renders a proposal', count('#assistant [data-accept]') === 1, text('assistant').slice(0, 60));
-  check('assistant evidence shows code distances', text('assistant').includes('4 m from elm school'));
+  const why = window.document.querySelector('#queue .card .why')?.textContent ?? '';
+  check('Why? labels every action bar', ['Dispatch crew', 'Reimage (zoom)', 'Close-in inspect', 'Ignore'].every(name => why.includes(name)) && /\d+%/.test(why));
+  check('Why? explains the numbers and marks P(person) experimental', why.includes('Camera score') && why.includes('experimental'));
+  check('Why? shows what Laya read', why.includes('What Laya read') && why.includes('The detector is'));
+}
+
+// Grok writes the crew order for a pending dispatch; Approve sends the ordinary approval.
+{
+  const lead = window.document.querySelectorAll('#queue .card')[0].dataset.lead;
+  const send = (type, payload) => socket.onmessage({ data: JSON.stringify({ type, payload }) });
+  send('lead.status', { lead_id: lead, status: 'awaiting_approval' });
+  const card = () => window.document.querySelector(`#queue .card[data-lead="${lead}"]`);
+  const action = card().querySelector('.action').textContent.includes('Dispatch') ? 'dispatch_ground_team' : 'close_in_inspect';
+  send('lead.order', { lead_id: lead, order: { pending: true, version: 1, action } });
+  await tick();
+  check('order shows while Grok writes it', card().querySelector('.order.pending') !== null);
+  send('lead.order', { lead_id: lead, order: { version: 1, action, source: 'grok', text: {
+    headline: 'Crew to Elm School', what_drone_saw: 'Clear person', access_notes: 'Approach from the west; downed line to the NE', confidence_statement: 'Verify on arrival' } } });
+  await tick();
+  check('Grok order renders on its card', card().querySelector('.order').textContent.includes('Approach from the west'));
+  check('approve says it carries the order', /with order/.test(card().querySelector('[data-approve]').textContent));
   const before = sent.length;
-  window.document.querySelector('#assistant [data-accept]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  card().querySelector('[data-approve]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await tick();
-  check('accepting a proposal only highlights leads', sent.length === before && count('#queue .card.highlight, #queue .closed-bin li.selected') > 0);
-  window.document.querySelector('#assistant [data-dismiss]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await tick();
-  check('dismissing removes the proposal', count('#assistant [data-accept]') === 0 && sent.length === before);
+  check('approving with an order sends exactly lead.approve', sent.length === before + 1 &&
+    sent.at(-1).type === 'lead.approve' && sent.at(-1).payload.lead_id === lead, JSON.stringify(sent.at(-1)));
 }
 
 // Controls must map to the documented commands.
@@ -199,8 +230,11 @@ await new Promise(resolve => window.setTimeout(resolve, 60));
 const resultsRoot = window.document.getElementById('tab-results');
 check('results tab renders metric cards', resultsRoot.querySelectorAll('.cards article').length > 0,
   `${resultsRoot.querySelectorAll('.cards article').length} arms`);
-check('results tab renders both charts', resultsRoot.querySelectorAll('canvas').length === 2);
+check('results tab renders its charts', resultsRoot.querySelectorAll('canvas').length === 3);
+check('results lead with the validating numbers', resultsRoot.firstElementChild.classList.contains('kpis') && resultsRoot.querySelectorAll('.kpi').length === 4,
+  [...resultsRoot.querySelectorAll('.kpi h4')].map(node => node.textContent).join(' | '));
 check('results tab shows declared assumptions', resultsRoot.textContent.includes('Declared assumptions'));
+check('results tab shows the human load', /Flags that needed you/.test(resultsRoot.textContent) && /manual review: all \d+/.test(resultsRoot.textContent));
 check('results tab shows a speedup', /\d+(\.\d+)?×/.test(resultsRoot.textContent));
 
 console.log(results.join('\n'));

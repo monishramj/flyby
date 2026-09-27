@@ -1,6 +1,6 @@
 import './style.css';
 import { mountMap, renderMap, setCameraMode, type CameraMode } from './map';
-import { briefHtml, dismissed, renderAssistant, renderIncident, renderIntel } from './panels';
+import { briefHtml, contextSummary, renderIncident, renderIntel } from './panels';
 // Ask Ground Control is disabled in the UI; the /api/ask backend is intact. Restore renderAsk to re-enable.
 // import { renderAsk } from './panels';
 import { bindQueue, renderQueue } from './queue';
@@ -29,6 +29,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="metric"><span>Dispatched</span><strong id="metric-dispatched">—</strong><small>approved leads</small></div>
 </section>
 <main id="tab-mission" class="mission">
+  <div class="stage">
   <section class="view">
     <canvas id="map" aria-label="3D mission view"></canvas>
     <div id="labels"></div>
@@ -41,30 +42,20 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="map-help">Drag to orbit <span>·</span> Scroll to zoom</div>
     <div class="map-loading" id="map-loading" role="status">Connecting to ground station<span>The search area will appear when mission data arrives.</span></div>
   </section>
-  <section class="panel queue">
-    <div class="queue-heading"><span class="eyebrow">DECISION DESK</span><h2>Triage queue <span id="pending-badge">0</span></h2><small id="queue-meta">Waiting for mission data</small></div>
+  <details class="context" id="context">
+    <summary>Incident context <small id="context-meta"></small></summary>
+    <div class="context-body">
+      <section><h2>Incident picture</h2><dl class="incident" id="incident"></dl></section>
+      <section class="feed"><h2>Radio & intel</h2><ul id="intel"></ul></section>
+    </div>
+  </details>
+  </div>
+  <aside class="panel queue work">
+    <div class="queue-heading"><span class="eyebrow">DECISION DESK</span><h2>Work queue <span id="pending-badge">0</span></h2><small id="queue-meta">Waiting for mission data</small></div>
     <div class="queue-guide">Human review first · then urgency & confidence</div>
     <div id="queue"></div>
     <div class="queue-footnote">Select a lead to locate it on the map.<div class="system-status" id="status"></div></div>
-  </section>
-  <div class="dock">
-    <section class="panel incident-panel"><h2><span class="panel-index">01</span> Incident picture</h2><dl class="incident" id="incident"></dl></section>
-    <section class="panel feed">
-      <h2><span class="panel-index">02</span> Radio & intel</h2>
-      <ul id="intel"></ul>
-    </section>
-    <section class="panel assistant">
-      <h2><span class="panel-index">03</span> Grok assistant <small>Advisory</small></h2>
-      <ul id="assistant"></ul>
-    </section>
-    <!-- Ask Ground Control (disabled)
-    <section class="panel ask">
-      <h2>Ask Ground Control</h2>
-      <ul id="ask"></ul>
-      <form id="ask-form"><input id="ask-input" placeholder="What is still unresolved near Elm?" autocomplete="off" /><button class="primary">Ask</button></form>
-    </section>
-    -->
-  </div>
+  </aside>
 </main>
 <main id="tab-results" class="results" hidden></main>
 <dialog id="brief"><div id="brief-body"></div><form method="dialog"><button class="primary">Close</button></form></dialog>`;
@@ -85,23 +76,6 @@ function select(leadId: string) {
 }
 
 bindQueue(queueRoot, select, openBrief);
-element('assistant').addEventListener('click', event => {
-  const target = event.target as HTMLElement;
-  const accept = target.closest('[data-accept]') as HTMLElement | null;
-  const dismiss = target.closest('[data-dismiss]') as HTMLElement | null;
-  const link = target.closest('[data-lead-link]') as HTMLElement | null;
-  const proposal = store.snapshot?.proposals?.find(p => p.proposal_id === (accept ?? dismiss)?.dataset[accept ? 'accept' : 'dismiss']);
-  if (accept && proposal) {
-    // Highlighting is the only effect: no lead changes state until the commander approves or overrides it.
-    store.highlight = store.highlight.join() === proposal.lead_ids.join() ? [] : proposal.lead_ids;
-    store.selected = store.highlight[0] ?? '';
-    notify('selected');
-  } else if (dismiss && proposal) {
-    dismissed.add(proposal.proposal_id);
-    if (store.highlight.join() === proposal.lead_ids.join()) store.highlight = [];
-    notify('selected');
-  } else if (link) select(link.dataset.leadLink!);
-});
 mountMap(canvas, element('labels'), leadId => select(leadId));
 document.querySelectorAll<HTMLButtonElement>('[data-cam]').forEach(button => {
   button.onclick = () => {
@@ -178,7 +152,12 @@ function renderStatus() {
   element('map-loading').hidden = Boolean(snapshot);
   if (!snapshot || !state) return;
   const counts = snapshot.leads.reduce<Record<string, number>>((total, lead) => ({ ...total, [lead.status]: (total[lead.status] ?? 0) + 1 }), {});
-  element('mission-meta').textContent = `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.finished ? 'sweep complete' : state.running ? 'flying' : 'paused'}`;
+  const searched = snapshot.config.SWEEP_DURATION_S;
+  const searchComplete = state.t >= searched || state.finished;
+  element('mission-meta').textContent = searchComplete
+    ? `search complete in ${Math.round(Math.min(state.t, searched))}s · ${state.coverage_pct.toFixed(0)}% covered`
+    : `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.running ? 'flying' : 'paused'}`;
+  element('context-meta').textContent = contextSummary();
   element('queue-meta').textContent = `${(counts.awaiting_human ?? 0) + (counts.awaiting_approval ?? 0)} waiting · ${counts.dispatched ?? 0} dispatched · ${counts.auto_closed ?? 0} auto-closed · ${counts.ignored ?? 0} ignored`;
   const pending = (counts.awaiting_human ?? 0) + (counts.awaiting_approval ?? 0);
   element('metric-time').textContent = `${String(Math.floor(state.t / 60)).padStart(2, '0')}:${String(Math.floor(state.t % 60)).padStart(2, '0')}`;
@@ -188,7 +167,7 @@ function renderStatus() {
   element('metric-pending').classList.toggle('attention', pending > 0);
   element('pending-badge').textContent = String(pending);
   element('metric-dispatched').textContent = String(counts.dispatched ?? 0);
-  element('operation-state').textContent = state.finished ? 'Sweep complete' : state.running ? 'Search in progress' : 'Search paused';
+  element('operation-state').textContent = searchComplete ? 'Search complete · resolving leads' : state.running ? 'Search in progress' : 'Search paused';
   element('area-size').textContent = `${snapshot.scene.area_m} × ${snapshot.scene.area_m} m`;
 }
 
@@ -207,7 +186,6 @@ subscribe(type => {
     renderQueue(queueRoot);
     renderIntel(element('intel'));
     renderIncident(element('incident'));
-    renderAssistant(element('assistant'));
   }
   if (type === 'dispatch.created' && store.dispatched) {
     const lead = store.snapshot?.leads.find(item => item.lead_id === store.dispatched);
@@ -219,6 +197,5 @@ window.addEventListener('resize', scheduleDraw);
 renderStatus();
 renderQueue(queueRoot);
 renderIntel(element('intel'));
-renderAssistant(element('assistant'));
 // renderAsk(element('ask'), exchanges);
 connect();

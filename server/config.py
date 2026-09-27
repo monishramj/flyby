@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     DETECTOR_HIGH: float = 0.75
     NEAR_LKP_M: float = 100
     HAZARD_RADIUS_M: float = 50
+    ORDER_HAZARD_M: float = 150    # hazards this close can still shape a crew's approach
+    ORDER_LANDMARK_M: float = 80   # landmarks named in a crew order
     MAX_PASSES: int = 2
     T_REIMAGE_S: float = 60
     REIMAGE_BOX_MULT: float = 3.0
@@ -47,11 +49,9 @@ class Settings(BaseSettings):
     RHO: float = 0.9
     INTEL_COUNT: tuple[int, int] = (12, 15)
     GROK_PARSE_TIMEOUT_S: float = 10
-    GROK_BRIEF_TIMEOUT_S: float = 8
+    GROK_ORDER_TIMEOUT_S: float = 20  # measured 6–11 s; off the critical path, Approve never waits
     GROK_ASK_TIMEOUT_S: float = 20
     ASK_MAX_TOOL_ROUNDS: int = 4
-    GROK_ASSISTANT_TIMEOUT_S: float = 30
-    ASSISTANT_MAX_TOOL_ROUNDS: int = 6
     SIM_HUMAN_ROUTED_S: float = 20
     SIM_HUMAN_APPROVE_S: float = 5
     HANDOFF_S: float = 60

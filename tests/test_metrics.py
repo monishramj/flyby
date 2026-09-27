@@ -54,6 +54,8 @@ async def test_a_one_seed_evaluation_produces_every_reported_metric(tmp_path):
                 "action_accuracy", "dispatch", "routing_rate", "fallback_rate", "redecisions",
                 "latency_ms", "calibration"):
         assert key in arm
+    load = arm["human_load"]
+    assert load["needed_judgment"] + load["one_click"] + load["no_human"] == load["flags"] == arm["leads"]
     assert summary["assumptions"]["review_s"] == list(cfg.REVIEW_S)
     assert summary["assumptions"]["human_detection_probability"] == 1.0
     assert summary["assumptions"]["detector_noise"]["visible"] == {"p_detect": .9, "mu_conf": .75}
@@ -86,3 +88,14 @@ def laya_is_not_loaded(monkeypatch):
     """The batch tests must never touch the real 800 MB checkpoint."""
     import server.triage.laya_runtime as runtime_module
     monkeypatch.setattr(runtime_module, "load", lambda cfg=None: FakeRuntime())
+
+
+def test_human_load_counts_each_flag_once_and_names_people_nobody_saw():
+    from batch.metrics import human_load
+    row = lambda *names, person=False, status="ignored": {
+        "status_history": [{"status": n} for n in names], "is_person": person, "status": status}
+    load = human_load([row("captured", "awaiting_human", "awaiting_approval", "dispatched", status="dispatched"),
+                       row("captured", "awaiting_approval", "dispatched", status="dispatched"),
+                       row("captured", "auto_closed", person=True, status="auto_closed"),
+                       row("captured", "reimaging", "auto_closed", status="auto_closed")])
+    assert load == {"flags": 4, "needed_judgment": 1, "one_click": 1, "no_human": 2, "people_closed_without_human": 1}
