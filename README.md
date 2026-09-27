@@ -1,12 +1,39 @@
 # FlyBy
 
-Local repository for our hackathon project. **Steps 0.1, 0.4, 6.1, 6.3 and 6.4 are implemented:
-the reflex server runs the fly eye per frame and brakes (threshold not yet calibrated). The live reflex and mission pipeline are pending.**
+Local repository for FlyBy, a simulated drone search-and-rescue hackathon project.
+Ground control lives on triage; this branch owns the fly-reflex lane.
 
 - **[Start here: fly-connectome agent handoff](docs/fly-connectome/README.md)**
 - [Build status and next checkpoint](docs/fly-connectome/STATUS.md)
 - [Team split and integration agreement](docs/TEAM.md)
 - [Local setup](docs/SETUP.md)
+
+## Fly-brain reflex
+
+A simulated inspection camera drives the pretrained, connectome-constrained flyvis
+visual system. Its T4/T5 motion activity feeds our looming readout and a controller
+that brakes, turns, and returns toward the next waypoint. The browser shows the
+flight and live model activity mapped onto connectome neurons.
+**Everything after the T4/T5 motion cells is engineered, not flyvis cells.**
+
+```sh
+uv sync --extra fly                                  # CPU PyTorch only in this venv
+uv run --extra fly python -m tools.prepare_flyvis    # once: verified 3.4 MB weights
+uv run --extra fly python -m reflex.server           # :8001 (forces CPU itself)
+cd web && npm ci && npm run dev                      # :5173, proxies /ws/reflex and /reflex
+```
+
+Honest numbers from [the handoff](docs/fly-connectome/HANDOFF.md), verbatim
+(carport, 90° camera, 1.5 m/s, pretrained eye):
+
+- **Detection, held-out flights** (100 flights never used for tuning): stopped in time for
+  36/63 collisions; 1/37 false brakes plus 2 brakes > 2.5 s early. By obstacle, in time:
+  falling debris 20/20, posts 12/20, sagging beam 4/20.
+- **Route flights, closed loop** (entry → under the roof, efference copy on; 8 flights,
+  seeds 0–2, not a held-out benchmark): 7/8 reached the target, including both
+  debris flights (brake, turn, 0.56 m clearance, back to the target in ~10 s);
+  the sagging-beam flight collided. Reflex-off comparison on this route: the post does
+  not block it, so only debris/beam differ.
 
 The original supplied build specification follows below. Its Run section is
 the target workflow; use docs/SETUP.md for commands supported by this scaffold.

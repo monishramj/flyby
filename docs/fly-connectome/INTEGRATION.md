@@ -1,89 +1,103 @@
-# Integrating the fly reflex with the triage demo (`triage` → `main`)
+# Integrating the fly reflex with triage
 
-Reviewed against `origin/triage` at `895250c` on 2026-09-27 (read-only; nothing
-pushed to `triage` or `main`).
+Reviewed bases: triage `68033b6`, fly `53fed3c`, plus the lockstep rendering fix
+`d80fb80`. The rehearsal remains local on `rehearsal/triage-fly`; never push that
+branch or merge/push into main or triage from this task.
 
-## How the two halves fit
+## Review artifact
 
-The demo is the overhead search from the `triage` branch: the drone sweeps, Laya
-decides, and Grok maintains the picture. When a lead near a structure is approved
-for **close-in inspection**, the mission emits `inspect.request`. The browser then
-flies that inspection in our carport scene, with the fly reflex in the loop, and
-answers with `inspect.result`. Leads not flown in the scene still resolve on the
-mission's `T_INSPECT_S` timer.
+`rehearsal-triage.patch` is a **single git-format patch of the resolved snapshot**,
+parented to triage `68033b6`. It includes the fly assets, every merge resolution,
+and the updated mission prototype. It is not just the last commit: ordinary
+`git format-patch` skips merge commits and would lose their resolutions.
+See the adjacent patch metadata for the exact source commit and tree check.
+Apply it only to a new review branch at that base, using `git am <patch-path>`.
+Do not apply it blindly over a newer checkout. Nothing from the mission prototype
+is installed into server/ or the ground-station UI on fly/connectome.
 
+## Browser and result contract
+
+The mission emits `inspect.request` **on arrival at the lead**, after transit.
+The patched UI opens one panel, mounts the live connectome once, and calls:
+
+```ts
+const outcome = await runInspection(panel, { lead_id, person, maxWallS: 27 });
+// Display outcome.waypoints: [{id, status}], and outcome.realtime_factor.
+const { reached, collided, found } = outcome;
+send({ type: 'inspect.result', payload: { lead_id, reached, collided, found } });
 ```
-mission (:8000) ──inspect.request {lead_id}──▶ browser ──frames──▶ reflex (:8001)
-       ▲                                         │  ◀──commands──
-       └──────inspect.result {lead_id, …}────────┘
-```
 
-## Our side (done on `fly/connectome`)
+Send only those four payload fields: server payloads reject extra fields, so
+sending the whole outcome (frames, timing, waypoints, etc.) is invalid.
+The panel accepts `maxWallS` in its mount options or the request; default 27 s.
+It no longer derives an 8.5 s limit from the mission's old timer. Its watchdog
+allows another 0.5 s for setup/result delivery. Busy requests keep the mission timer;
+results after a reset or disconnect are discarded. One browser controls the flight.
 
-- `web/src/scene/flight.ts` exports the one call the mission UI needs:
-  ```ts
-  import { runInspection } from './scene/flight';
-  const outcome = await runInspection(panelElement, { lead_id, person });
-  // outcome: { lead_id, reached, collided, found, t, frames, min_clearance_m, late_replies, reflex_ok }
-  ```
-  It renders the chase view, the drone camera and a small HUD into `panelElement`.
-  The flight stops after `maxWallS` (default 18 s) to fit the mission window.
-  If the reflex is not running, it still flies (without the reflex) and reports
-  `reflex_ok: false`.
-- The reflex is reached **through the same origin**. `web/vite.config.ts` proxies
-  `/ws/reflex` and `/reflex/*` to :8001, ahead of the triage proxies for `/ws`
-  and `/api` to :8000. Our `vite.config.ts` already includes the triage proxies.
-- `reflex/` no longer imports the root `runtime.py`, which `triage` deletes;
-  it uses `reflex/threads.py`. The isolation test and reflex config tests moved to
-  `tests/test_reflex_isolation.py` and `tests/test_reflex_config.py`, which
-  `triage` does not touch.
-- The reflex stays a separate process: no server imports, no DB, no network.
+The patch changes `InspectResult` to `reached: bool = True`,
+`found: bool | None = None`, and `collided: bool`. Legacy clients remain accepted.
+A collision **always** returns to `awaiting_human`, even if reached is true or
+omitted. A not-reached result also returns to `awaiting_human`. Only a completed,
+collision-free visit can resolve empty or offer dispatch. When found is null on
+such a visit, simulation truth supplies the answer. This is not visual recognition.
+The per-visit token guard prevents an older fallback timer from resolving a retry.
 
-## Needed on the mission side (proposals for Monish)
+## Monish must finish the mission deadline before using the longer flight
 
-1. **Wire the request (`web/src/main.ts`, `web/src/ws.ts`).** On
-   `inspect.request`, open a panel, `await runInspection(...)`, then send
-   `{type: 'inspect.result', payload: {lead_id, found, collided}}`. Add that
-   command to the `Command` type in `ws.ts`. Fly one inspection at a time and
-   let the others fall back to the timer.
-2. **Result semantics (`server/protocol.py`, `server/mission/loop.py`).**
-   Today `found` overrides truth. A crashed or blocked inspection would therefore
-   mark a real person's lead empty. Proposal:
-   `InspectResult {lead_id, reached: bool, collided: bool, found: bool | None}`.
-   If `reached`, use `found`, or truth when `None`. If not reached, return the
-   lead to a human (e.g. `awaiting_human`, "inspection incomplete"), not
-   `resolved_empty`. Log `collided` in the lead and the metrics.
-3. **Request context (`inspect.request`).** Add `{structure: "carport" | "house",
-   person: bool}` so the scene can draw the person under the roof. `person`
-   comes from simulation truth; the reflex never sees it, only the rendered scene.
-4. **Timer.** `T_INSPECT_S = 90` sim-s at `LIVE_TIME_SCALE = 4` is 22.5 s of wall
-   time. A flight is capped at 18 s, plus the time to open the panel. Suggest
-   pausing the fallback timer while a browser flight is running, or raising it for
-   the flown lead.
-5. **Scale and look.** The mission's carport is `CARPORT_SIZE_M = (24, 18)`. Our
-   inspection carport is 2.8 × 5 m, matching README Step 6.2. Either treat the
-   scene as a close-in section of that structure, or align the sizes. After the
-   merge we can build our carport from the triage Kenney assets
-   (`structure-metal-roof`, `metal-panel`, `planks`, …) so both views match.
-6. **One machine.** Laya and flyvis both run on the Mac's CPU. Set thread
-   counts for both and measure them together before promising 50 Hz.
+These locations refer to triage `68033b6`; find the named functions if lines move.
 
-## Merge rehearsal (fly/connectome `e41de42` + triage `895250c`, local only, re-run after these changes)
-
-Conflicts and how to resolve them:
-
-| File | Resolution |
+| File / location | Required integration |
 | --- | --- |
-| `README.md`, `AGENTS.md` | Keep triage's; add a short fly-reflex section linking `docs/fly-connectome/` |
-| `docs/SETUP.md`, `docs/TEAM.md` (deleted in triage) | Keep ours, updated for the triage commands |
-| `reflex/config.py`, `reflex/server.py` (deleted in triage) | **Keep ours** |
-| `reflex/__init__.py`, `bench/__init__.py` | Keep ours (now non-empty, so a deletion shows as a conflict instead of a silent delete) |
-| `tests/test_config.py` (deleted here, changed in triage) | Take triage's; our reflex tests are in `tests/test_reflex_config.py` |
-| `tests/test_reflex_isolation.py` (git sees it as renamed from `test_scaffold.py`, which triage deletes) | **Keep ours** |
-| `runtime.py` (deleted in triage, unused by us now) | Let it go |
-| `web/vite.config.ts` (both added) | Take ours (it is triage's proxies plus ours) |
-| `uv.lock` | Regenerate with `uv lock` after merging `pyproject.toml` (it merged cleanly and keeps the `fly` extra) |
-| `web/package.json` | Merged cleanly; keep triage's `jsdom` and ranges |
+| `server/mission/loop.py:233–234`, `_start_visit` | Keep request emission on arrival. For a browser-owned visit, wait for inspect.result instead of calling the truth fallback at done_t. Add a hard cap around 30 wall seconds; a claimed visit timing out must become awaiting_human. A claim/ownership handshake is still needed to distinguish a flown lead from a timer-only lead. |
+| `server/config.py:46`, `INSPECT_HOVER_S` | The current value is 40 sim seconds, only 10 wall seconds at scale 4. A temporary demo alternative is `INSPECT_HOVER_S=120` (30 wall seconds at scale 4). Set this before starting the mission. Do not run a 27-second browser flight with the default 10-second fallback. |
+| `server/protocol.py:26`, `InspectResult` | Apply the patch's optional reached/found fields; retain the explicit reached flag in all new clients. |
+| `server/app.py:90`, inspect.result handling | Forward reached to the mission result handler, as in the patch. |
+| `server/mission/loop.py:449`, `_resolve_inspection` | Apply the patch's collision/not-reached human-review branch and retry token guard. |
+| `web/src/inspection.ts`, request handler (new in patch) | Pass a maxWallS below the mission cap; display each waypoint status. Do not reintroduce the 8.5-second cap. |
 
-After merging, run `uv lock`, `uv sync --extra fly`, the full pytest suite and
-`npm run build`, then fly one `inspect.request` end to end.
+The deadline handshake is **not implemented** by this patch. The environment
+setting above is the bounded demo option. Request context is also still pending:
+triage sends lead_id only, so person is undefined, the scene does not draw that
+person, and found is null. Add a simulation-only person/structure field if desired.
+The reflex must still see only rendered camera frames, never truth labels.
+
+## Actual merge conflicts and resolutions
+
+The first merge had 12 conflicted paths; merging the later waypoint/eye/efference
+commits was clean. 'Triage' and 'fly' below identify sides, not Git ours/theirs.
+
+| File | Triage side | Fly side | Chosen resolution and reason |
+| --- | --- | --- | --- |
+| `AGENTS.md` | Triage T0–T7 rules | Fly rules | Keep triage rules, append local rehearsal boundaries and fly handoff link. |
+| `README.md` | Current triage specification | Original fly specification | Keep triage and add a short fly handoff link. |
+| `bench/__init__.py` | Deleted | Fly package marker | Keep fly so bench assets remain a package. |
+| `docs/SETUP.md` | Deleted | Old scaffold/fly setup | Restore and rewrite for the three-process combined setup. |
+| `docs/TEAM.md` | Deleted | Original team agreement | Restore with current branch ownership and local-only review rules. |
+| `reflex/__init__.py` | Deleted | Fly package marker | Keep fly service package. |
+| `reflex/config.py` | Deleted | Working fly settings | Keep fly; required by the separate service. |
+| `reflex/server.py` | Deleted | Working reflex WebSocket service | Keep fly; preserves CPU isolation. |
+| `tests/test_config.py` | Updated triage config tests | Deleted/renamed to reflex-specific tests | Keep triage's version; keep separate reflex tests. |
+| `tests/test_reflex_isolation.py` | Deleted original scaffold test | Renamed isolation test | Keep fly's static isolation test. |
+| `uv.lock` | Triage dependencies | Fly optional dependencies | Regenerate from cleanly merged pyproject.toml. |
+| `web/vite.config.ts` | Mission proxies | Mission + reflex proxies and page entries | Keep fly's combined configuration. |
+
+Other fixes after the clean merge: add @types/node for triage's type-check of
+vite.config.ts; restore ignore rules for fly runtime artifacts. Let triage's
+runtime.py deletion stand: the reflex uses reflex/threads.py.
+
+The wrap-up restores the **original main scaffold tests on fly/connectome**.
+They are not the current triage tests: when merging the wrap-up later, preserve
+triage's test_config.py and let Monish reconcile test_scaffold.py's old /health
+expectation with triage's /api/health. Do not replace triage tests with scaffold tests.
+
+## What changed in the demo instructions
+
+Use one merged checkout and Vite as the browser origin; it proxies mission :8000
+and reflex :8001. A standalone mission static server does not proxy the reflex.
+inspect.html, connectome.html and flyviz.html are all production build entries.
+The scene now follows entry → target in lockstep and exposes per-waypoint outcomes.
+The default scene wall cap is 40 s; inspect.html passes 30 s and the rehearsal
+panel passes 27 s. The old T_INSPECT_S=90 and 18-second-flight descriptions are stale.
+Earlier local end-to-end timings in STATUS refer to the pre-waypoint revision and
+must not be presented as timings for this updated patch.
+

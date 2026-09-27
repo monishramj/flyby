@@ -1,0 +1,53 @@
+{
+  "label": "simulation",
+  "name": "clear_0_on",
+  "mimeType": "video/webm;codecs=vp9",
+  "wall_s": 10.361199999988079,
+  "bytes": 1478042,
+  "outcome": {
+    "lead_id": "dev-1790490113773",
+    "reached": true,
+    "collided": false,
+    "found": true,
+    "t": 6.74,
+    "frames": 337,
+    "min_clearance_m": 0.411,
+    "late_replies": 0,
+    "reflex_ok": true,
+    "waypoints": [
+      {
+        "id": "entry",
+        "status": "reached"
+      },
+      {
+        "id": "target",
+        "status": "reached"
+      }
+    ],
+    "realtime_factor": 0.74
+  },
+  "timeline": [
+    {
+      "wall_s": 0,
+      "state": "starting",
+      "hud": ""
+    },
+    {
+      "wall_s": 0.1092999999821186,
+      "state": "hover",
+      "hud": "hover\n      t0.0 s\n      speed0.00 m/s\n      waypoint1 / 2 \u00b7 4.5 m\n      looming S0.00"
+    },
+    {
+      "wall_s": 1.4912999999821186,
+      "state": "none",
+      "hud": "none\n      t1.0 s\n      speed0.00 m/s\n      waypoint1 / 2 \u00b7 4.5 m\n      looming S-0.03"
+    },
+    {
+      "wall_s": 9.14259999999404,
+      "state": "reached target",
+      "hud": "reached target\n      t6.7 s\n      speed1.50 m/s\n      waypoint2 / 2 \u00b7 0.5 m\n      looming S0.22"
+    }
+  ],
+  "mp4_bytes": 548419,
+  "mp4": "clear_0_on.mp4"
+}

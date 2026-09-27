@@ -35,8 +35,10 @@ reflex crashes on Windows); use a separate venv for GPU training.
 
 ```ts
 import { runInspection } from './scene/flight';
-const outcome = await runInspection(panel, { lead_id, person, waypoints?, maxWallS? });
-send({ type: 'inspect.result', payload: outcome });
+const outcome = await runInspection(panel, { lead_id, person, waypoints, maxWallS: 27 });
+const { reached, collided, found } = outcome;
+send({ type: 'inspect.result', payload: { lead_id, reached, collided, found } });
+// Display outcome.waypoints separately; server payloads reject extra fields.
 ```
 
 - `waypoints`: `[{id, x, z}]` in the scene's metres (x right, forward is −z; the drone
@@ -68,13 +70,20 @@ of ~30 s wall), or raise `INSPECT_HOVER_S` to ≥ 120 sim-s (30 s wall at ×4). 
 
 ## Starting point for the merge
 
-The local rehearsal (Codex, on the Windows laptop, **not pushed**): branch
-`rehearsal/triage-fly`, prototype patch commit `31510af`. It merged `triage` +
-`fly/connectome` (12 conflicts resolved; 153 tests and the production build pass) and ran
-a real mission → `inspect.request` → live flight → `inspect.result` loop. Start from it
-(push it or copy the patch). It predates waypoints: update its panel to read
-`outcome.waypoints` and remove its 8.5 s cap once the mission timing above is changed.
-Conflict resolutions are listed in `INTEGRATION.md`.
+The local branch remains `rehearsal/triage-fly` (head `a72eb03`, Windows laptop);
+never push it. `rehearsal-triage.patch` beside this file is a `git diff` against triage
+`68033b6` of only the 20 files the rehearsal resolved or changed (conflict resolutions
+plus the mission prototype: server/app.py, mission/loop.py, protocol.py, web/src/
+inspection.ts, main.ts, ws.ts, store.ts, queue.ts, style.css, scene/flight.ts,
+package/uv locks, docs). To reproduce: merge `fly/connectome` into `triage`, then take
+these 20 files from the patch; every other fly file comes unchanged from `fly/connectome`.
+The panel now reads waypoints/realtime_factor and accepts maxWallS (27 s default).
+Result compatibility: reached defaults true for old clients, found defaults null;
+a collision or not-reached result always needs a human. The retry token and reset
+checks remain. The updated rehearsal passed 159 tests (7 slow deselected) and
+TypeScript/build checks. See INTEGRATION.md before applying: **the mission deadline
+still needs changing** (wait for the result with a ~30 s cap, or temporarily set
+INSPECT_HOVER_S=120 at scale 4). The patch does not implement that ownership handshake.
 
 ## Honest numbers (carport, 90° camera, 1.5 m/s, pretrained eye)
 
