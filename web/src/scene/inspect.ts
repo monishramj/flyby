@@ -33,6 +33,7 @@ export interface EpisodeSpec {
   seed: number; scenario: Scenario; fovDeg: number;
   startX: number; startZ: number; heading: number; goalX: number; goalZ: number;
   beamSag: number; debris: { x: number; tFall: number } | null;
+  person: boolean; // a person lying at the goal (mission inspections)
 }
 
 export function rng(seed: number): () => number {
@@ -46,7 +47,8 @@ export function rng(seed: number): () => number {
   };
 }
 
-export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120): EpisodeSpec {
+export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120,
+                         opts: { goalZ?: number; person?: boolean } = {}): EpisodeSpec {
   const r = rng(seed * 31 + SCENARIOS.indexOf(scenario));
   const u = (a: number, b: number) => a + (b - a) * r();
   const side = r() < 0.5 ? -1 : 1;
@@ -64,7 +66,7 @@ export function makeSpec(seed: number, scenario: Scenario, fovDeg = 120): Episod
   return {
     seed, scenario, fovDeg, startX, startZ,
     heading: u(-2, 2) * Math.PI / 180,
-    goalX: startX, goalZ: -8,
+    goalX: startX, goalZ: opts.goalZ ?? -8, person: opts.person ?? false,
     beamSag: scenario === 'beam' ? u(0.95, 1.3) : u(0, 0.3),
     debris: scenario === 'debris' ? { x: startX + u(-0.15, 0.15), tFall: tArrive - 2.5 / CRUISE_MPS - fallS + u(-0.3, 0.3) } : null,
   };
@@ -142,6 +144,13 @@ export class Inspection {
 
     const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.05, 24), new THREE.MeshLambertMaterial({ color: 0xffffff }));
     goal.position.set(spec.goalX, 0.03, spec.goalZ); s.add(goal);
+    if (spec.person) {
+      const skin = new THREE.MeshLambertMaterial({ color: 0xc9a27e }), cloth = new THREE.MeshLambertMaterial({ color: 0x2f5d8a });
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 1.1, 4, 12), cloth);
+      body.rotation.z = Math.PI / 2; body.position.set(spec.goalX, 0.18, spec.goalZ - 0.3); s.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), skin);
+      head.position.set(spec.goalX + 0.8, 0.2, spec.goalZ - 0.3); s.add(head);
+    }
 
     if (spec.debris) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(2 * DEBRIS_HALF.x, 2 * DEBRIS_HALF.y, 2 * DEBRIS_HALF.z), new THREE.MeshLambertMaterial({ map: noiseTexture(53, 64, 120, 40, 8) }));
@@ -273,7 +282,8 @@ export class ReflexLink {
   private pending: ((msg: any) => void)[] = [];
   latest: any = null;
 
-  async open(url = 'ws://127.0.0.1:8001/ws/reflex') {
+  // Same origin by default: Vite proxies /ws/reflex to the reflex on :8001.
+  async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/reflex`) {
     this.ws = new WebSocket(url);
     this.ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);

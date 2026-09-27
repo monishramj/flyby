@@ -14,7 +14,7 @@ import platform
 import time
 
 from reflex import config as cfg
-from runtime import set_threads
+from reflex.threads import set_threads
 
 
 def configure_environment():

@@ -4,7 +4,7 @@ README Steps 6.1 and 6.4. The eye loads and warms up once at startup; each
 episode resets it to that warmed state.
 """
 
-from runtime import set_threads
+from reflex.threads import set_threads
 from reflex.config import BENCH_FRAMES_DIR, CLOSED_LOOP_PATH, CPU_THREADS, PORT, REFLEX_DEVICE
 
 set_threads(CPU_THREADS)
