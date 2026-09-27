@@ -40,6 +40,22 @@ function label(text: string, cls: string) {
   return new CSS2DObject(el);
 }
 
+// When labels collide on screen, the one earlier in this list wins; the rest hide for that frame.
+const PRIORITY = ['pin', 'guided', 'hazard', 'on', 'truth', 'landmark', 'crit', 'sector', 'wp'];
+const rank = (el: HTMLElement) => PRIORITY.findIndex(cls => el.classList.contains(cls));
+
+function declutter(root: HTMLElement) {
+  // CSS2DRenderer owns `display` (culling); we only touch `visibility`, so hidden labels keep their rect.
+  const els = [...root.querySelectorAll<HTMLElement>('.lbl')].filter(el => el.style.display !== 'none').sort((a, b) => rank(a) - rank(b));
+  const placed: DOMRect[] = [];
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    const hit = placed.some(p => r.left < p.right && r.right > p.left && r.top < p.bottom && r.bottom > p.top);
+    el.style.visibility = hit ? 'hidden' : '';
+    if (!hit) placed.push(r);
+  }
+}
+
 // A quadcopter drawn ~3x real size so it stays readable from the orbit camera.
 function buildDrone() {
   const g = new THREE.Group(), rotors: THREE.Object3D[] = [];
@@ -231,7 +247,7 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
     if (ctx.clouds) ctx.clouds.offset.x += dt * .0006;
     if (ctx.mode === 'follow') { const shift = ctx.drone.position.clone().sub(ctx.controls.target); ctx.controls.target.add(shift); ctx.camera.position.add(shift); }
     ctx.controls.update();
-    ctx.renderer.render(ctx.scene, ctx.camera); ctx.labels.render(ctx.scene, ctx.camera);
+    ctx.renderer.render(ctx.scene, ctx.camera); ctx.labels.render(ctx.scene, ctx.camera); declutter(ctx.labels.domElement);
   };
   loop();
   return true;
