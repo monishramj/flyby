@@ -12,6 +12,59 @@ Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
+## Steps 7.2 + 7.3 panels: eye, looming trace, circuit (2026-09-27, Windows)
+
+New, fly-lane files only: `web/src/flyviz/eye.ts`, `trace.ts`, `circuit.ts`, `page.ts`,
+`web/flyviz.html` (dev page). All three panels draw only from `VizStream` (eye.layout +
+latest deviations + 10 s ring of S/dLR/cmd); they redraw on rAF only when a new viz packet arrived.
+
+- **eye.ts**: 721 flat-topped hexes at (col_x, col_y), y up; hex size from the measured
+  column spacing (the lattice is anisotropic: vertical step 0.0667, diagonal 0.0734).
+  Tabs: receptors (mean R1–R6 deviation per column, grey), motion (strongest rectified
+  T4/T5 subtype per column, hue = its `subtype_dir` direction, legend lists subtypes),
+  looming (outward − inward rectified T4+T5 by the column's own position, diverging).
+  The looming layer is computed in the browser without adaptation/EMA and is labelled
+  "not the reflex's cone score". Colour scales follow a decaying recent peak (shown).
+- **trace.ts**: Chart.js S over the last 10 s of frame time, θ line from `S_theta` (none
+  drawn if null), dLR subplot, markers at onsets of brake / saccade_left / saccade_right /
+  arrived from the viz header cmd (10 Hz resolution).
+- **circuit.ts**: SVG, all 65 types (R1–R8 | L1–L5, Lawf1/2, Am, C2, C3 | ON Mi1 Tm3 Mi4
+  Mi9, OFF Tm1 Tm2 Tm4 Tm9 | T4a–d, T5a–d | 31 others dimmed). Edges: strongest 3 inputs
+  per column type from `type_edges` (thickness log weight, colour sign). Brightness = mean
+  |deviation| per type. Dashed box "Our readout — not flyvis cells": Cone, 7 LPLC2-style
+  units, S = max(cone/θc, 1 + units − θu) (text chosen from reflex `/health` readout =
+  learned/default, matching `reflex/looming.py`). Cone/unit values are not streamed, so
+  they stay unlit; S (header), Brake and Turn (header cmd) are live.
+- **Driver** (`page.ts`): opens `/ws/reflex` via scene/inspect.ts `ReflexLink` (imported,
+  not edited) and flies one closed-loop carport inspection (`Inspection`, `makeSpec`)
+  in live mode (frame mode 0), lockstep (each frame waits for its reply, paced to at
+  most real time). The 96×96 frame sent is shown beside the eye. URL
+  `flyviz.html?scenario=debris&seed=0&fov=90&reflex=on&auto=1`; `window.__flyviz` holds counters.
+
+Checks: `npx tsc --noEmit -p .` exit 0. Live: `python -m reflex.server` (pretrained model,
+CPU, readout learned, θ = 1.0 calibrated) + Vite dev, desktop app built-in browser
+(~1500 px wide, rAF not vsync-capped). debris seed 0, fov 90, reflex on, twice (same
+result both times: no collision, not arrived, timed out at 25.02 s sim, 1251 frames, min
+clearance 0.606 m, 6 brake onsets each):
+
+| run | replies/s | wall s | viz received | panel redraws | panel Hz (wall) | rAF fps | p50 / p95 / p99 / max ms | gaps > 50 ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 35.9 | 34.8 | 251 (k 0→1250) | 250 | 7.18 | 141.5 | 6.9 / 7.1 / 7.2 / 236 | 2 |
+| 2 | 36.3 | 34.4 | 251 | 250 | 7.26 | 144.0 | 6.9 / 7.1 / 7.2 / 13.9 | 0 |
+
+Viz = exactly 10 per second of frame time; panels lag real time only because the
+lockstep reflex runs at ~0.72× real time. One eye.layout per connection, 0 dropped viz.
+Run 1's two stalls (236, 188 ms) coincided with my screenshots/tab clicks; run 2 was not
+touched. Screenshots checked: receptors mirror the frame (dark debris at right edge,
+darker ground half); during a left saccade the motion layer is mostly "right" (red),
+as expected for yaw-left image flow; trace shows θ line, brake/saccade markers; circuit
+Brake/Turn light with the header cmd. All servers stopped.
+
+Open: `flyviz.html` is dev-only (not in vite.config.ts build inputs; not edited). Not yet
+placed in the Fly tab / inspect overlay (Step 7.2 layout). The first S sample after
+episode start is large (~8.5, during the 1 s hover when the controller ignores looming),
+which compresses the S axis for 10 s. Debris seed 0 never arrives (repeated brakes).
+
 ## Live 3D connectome view moved out of scene/ (2026-09-27, Windows)
 
 File ownership: `web/src/scene/*` belongs to the cloud session, so the live view now
