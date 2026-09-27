@@ -57,7 +57,7 @@ const at = (x: number, y: number, h = 0) => new THREE.Vector3(x, h, -y);
 
 /** Mud, sediment drag lines, roads, sand and the inundation limit, painted once per scene. */
 export function groundTexture(scene: Scene, seed: number, margin: number, beach: number) {
-  const size = 1024, span = scene.area_m + margin * 2, px = size / span, rand = rng(seed ^ 0x51f0);
+  const size = 2048, span = scene.area_m + margin * 2, px = size / span, rand = rng(seed ^ 0x51f0);
   const canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
   const g = canvas.getContext('2d');
   if (!g) return null;
@@ -82,11 +82,30 @@ export function groundTexture(scene: Scene, seed: number, margin: number, beach:
     g.strokeStyle = `rgba(${55 + rand() * 30},${48 + rand() * 20},${35 + rand() * 15},.5)`; g.lineWidth = (0.6 + rand() * 1.5) * px;
     g.beginPath(); g.moveTo(X(x0), Y(y)); g.lineTo(X(x0 - len), Y(y + (rand() - .5) * len * .25)); g.stroke();
   }
-  const sand = g.createLinearGradient(X(scene.area_m - 12), 0, X(scene.area_m + margin), 0);
-  sand.addColorStop(0, 'rgba(160,146,110,0)'); sand.addColorStop(.25, '#a8997a'); sand.addColorStop(1, '#c8b98f');
-  g.fillStyle = sand; g.fillRect(X(scene.area_m - 12), 0, size, size);
-  g.fillStyle = '#8f8467'; g.fillRect(X(scene.area_m + beach - 5), 0, 5 * px, size);
-  g.clearRect(X(scene.area_m + beach), 0, size, size); // east of the shoreline is sea
+  // Beach: dry pale sand grading to dark wet sand at the waterline, with grain, wind ripples and a strandline of weed.
+  const shoreX = X(scene.area_m + beach), sandFrom = X(scene.area_m - 12), dryEnd = X(scene.area_m + beach - 16);
+  const sand = g.createLinearGradient(sandFrom, 0, shoreX, 0);
+  sand.addColorStop(0, 'rgba(176,160,120,0)'); sand.addColorStop(.18, '#b3a37e'); sand.addColorStop(.62, '#d2c39a'); sand.addColorStop(.86, '#a89870'); sand.addColorStop(1, '#6f6248');
+  g.fillStyle = sand; g.fillRect(sandFrom, 0, size, size);
+  const wet = g.createLinearGradient(dryEnd, 0, shoreX, 0);
+  wet.addColorStop(0, 'rgba(70,60,42,0)'); wet.addColorStop(1, 'rgba(58,50,36,.55)');
+  g.fillStyle = wet; g.fillRect(dryEnd, 0, size, size);
+  for (let i = 0; i < 16000; i++) {
+    const x = sandFrom + rand() * (shoreX - sandFrom), light = rand() < .5;
+    g.fillStyle = light ? `rgba(240,228,196,${.1 + rand() * .2})` : `rgba(90,78,56,${.08 + rand() * .18})`;
+    g.fillRect(x, rand() * size, 1 + rand() * 1.6, 1 + rand() * 1.2);
+  }
+  g.lineWidth = Math.max(1, .5 * px);
+  for (let i = 0; i < 220; i++) {  // ripples run along the shore (north-south), longer where the sand is drier
+    const x = sandFrom + rand() * (dryEnd - sandFrom), y = rand() * size, len = (8 + rand() * 30) * px;
+    g.strokeStyle = `rgba(${rand() < .5 ? '120,106,78' : '236,224,190'},${.12 + rand() * .14})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rand() - .5) * 3, y + len); g.stroke();
+  }
+  for (let i = 0; i < 260; i++) {  // strandline: dark weed and shell flecks where the last tide stopped
+    const x = dryEnd - 4 * px + (rand() - .5) * 8 * px, y = rand() * size;
+    g.fillStyle = rand() < .8 ? `rgba(${40 + rand() * 25},${44 + rand() * 20},${28},.7)` : 'rgba(245,238,222,.8)';
+    g.beginPath(); g.ellipse(x, y, (1 + rand() * 3) * px, (.5 + rand() * 1.2) * px, rand() * 3, 0, Math.PI * 2); g.fill();
+  }
+  g.clearRect(shoreX, 0, size, size); // east of the shoreline is sea
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   return { tex, limit };
 }

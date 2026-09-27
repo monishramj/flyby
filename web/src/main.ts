@@ -14,8 +14,8 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div class="controls">
     <label>seed <input id="seed" type="number" min="0" value="0" /></label>
     <button id="start" class="primary">Start</button>
-    <button id="pause">Pause</button>
-    <button id="reset">Reset</button>
+    <button id="pause" class="ghost">Pause</button>
+    <button id="reset" class="ghost">Reset</button>
     <button id="demo" class="accent">Demo</button>
   </div>
   <div class="status" id="status"></div>
@@ -51,7 +51,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
   <aside class="work">
     <h2>Work <small id="queue-meta"></small></h2>
+    <div class="jump top"><button data-jump="up" tabindex="-1"></button></div>
     <div id="queue"></div>
+    <div class="jump bottom"><button data-jump="down" tabindex="-1"></button></div>
   </aside>
 </main>
 <main id="tab-results" class="results" hidden></main>

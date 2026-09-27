@@ -46,9 +46,12 @@ window.WebSocket = class {
 };
 window.fetch = async (url, options) => {
   if (String(url).includes('/api/ask')) return { ok: true, json: async () => fixture.ask };
-  if (String(url).includes('summary.json')) {
-    const summary = JSON.parse(readFileSync(new URL('../../results/summary.json', import.meta.url)));
-    return { ok: true, json: async () => summary };
+  const result = String(url).match(/\/api\/results\/([\w.]+)$/);
+  if (result) {
+    try {
+      const data = JSON.parse(readFileSync(new URL(`../../results/${result[1]}`, import.meta.url)));
+      return { ok: true, json: async () => data };
+    } catch { return { ok: false, status: 404, json: async () => ({}) }; }
   }
   return { ok: false, status: 404, json: async () => ({}) };
 };
@@ -139,14 +142,31 @@ if (briefButton) {
 
 // Auto-closed leads live in their own tab at the top of the Work column, reviewable and reopenable.
 // The strict close gate means a short recording may close nothing, so two are closed here.
+if (count('#queue .closed-list li') === 0 && !window.document.querySelector('#queue [data-tab-work="closed"]')) {
+  check('with nothing auto-closed there is no Auto-closed filter', !window.document.querySelector('#queue [data-tab-work="closed"]'));
+}
 for (const lead of fixture.events.filter(e => e.type === 'lead.new').slice(-2).map(e => e.payload)) {
   socket.onmessage({ data: JSON.stringify({ type: 'lead.status', payload: { lead_id: lead.lead_id, status: 'auto_closed' } }) });
 }
 await tick();
 {
-  const tabs = () => [...window.document.querySelectorAll('#queue [data-tab-work]')];
-  check('work column has Needs you / Auto-closed tabs', tabs().length === 2 && /Needs you \(\d+\)/.test(tabs()[0].textContent) &&
-    /Auto-closed \(\d+\)/.test(tabs()[1].textContent), tabs().map(node => node.textContent.trim()).join(' | '));
+  const tab = key => window.document.querySelector(`#queue [data-tab-work="${key}"]`);
+  const tabs = () => [tab('all'), tab('closed')];
+  check('work column has All / Auto-closed filters', /All \(\d+\)/.test(tab('all')?.textContent ?? '') &&
+    /Auto-closed \(\d+\)/.test(tab('closed')?.textContent ?? ''), [...window.document.querySelectorAll('#queue [data-tab-work]')].map(node => node.textContent.trim()).join(' | '));
+  const all = count('#queue .card');
+  const narrow = [...window.document.querySelectorAll('#queue [data-tab-work]')].find(node => !['all', 'closed'].includes(node.dataset.tabWork));
+  if (narrow) {
+    const expected = Number(narrow.textContent.match(/\((\d+)\)/)[1]);
+    narrow.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await tick();
+    check('a filter narrows the cards to its count', count('#queue .card') === expected && expected < all, `${narrow.dataset.tabWork}: ${expected} of ${all}`);
+    tab('all').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await tick();
+  }
+  const filters = [...window.document.querySelectorAll('#queue [data-tab-work]')].map(node => node.dataset.tabWork);
+  check('no filter matches every card', filters.every(key => key === 'all' || key === 'closed' ||
+    Number(tab(key).textContent.match(/\((\d+)\)/)[1]) < all), filters.join(', '));
   tabs()[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await tick();
   check('auto-closed tab lists closed leads', count('#queue .closed-list li') > 0 && count('#queue .card') === 0, `${count('#queue .closed-list li')} closed`);
@@ -166,7 +186,7 @@ await tick();
   const chances = [...window.document.querySelectorAll('#queue .card:not(.settled) .person')].map(node => Number(node.textContent.match(/\d+/)[0]));
   check('cards lead with the person chance', count('#queue .card .person') > 0, chances.join(', '));
   check('queue ranks likely people first', chances.every((value, index) => index === 0 || chances[index - 1] >= value));
-  window.document.querySelectorAll('#queue [data-tab-work]')[1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  window.document.querySelector('#queue [data-tab-work="closed"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await tick();
   const closed = count('#queue .closed-list li');
   const before = sent.length;
@@ -174,7 +194,7 @@ await tick();
   await tick();
   check('confirming auto-closes sends one approval per lead', sent.length - before === closed &&
     sent.slice(before).every(message => message.type === 'lead.approve'), `${closed} closed`);
-  window.document.querySelectorAll('#queue [data-tab-work]')[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  window.document.querySelector('#queue [data-tab-work="all"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   await tick();
 }
 
@@ -239,19 +259,19 @@ for (const [id, cmd] of [['start', 'start'], ['pause', 'pause'], ['reset', 'rese
 // check('ask renders a tool trace', count('#ask details') > 0 && text('ask').includes('list_leads'));
 // check('ask links lead ids', count('#ask [data-lead-link]') >= 0);
 
-// Results tab draws from results/summary.json only.
+// Results tab draws from results/*.json only; Grok and fine-tune sections show 'not run yet' without their files.
 window.document.querySelector('[data-tab="results"]').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await new Promise(resolve => window.setTimeout(resolve, 60));
 const resultsRoot = window.document.getElementById('tab-results');
-check('results tab renders metric cards', resultsRoot.querySelectorAll('.cards article').length > 0,
-  `${resultsRoot.querySelectorAll('.cards article').length} arms`);
-check('results tab renders its charts', resultsRoot.querySelectorAll('canvas').length === 3);
-check('results lead with the validating numbers', resultsRoot.firstElementChild.classList.contains('kpis') && resultsRoot.querySelectorAll('.kpi').length === 4,
-  [...resultsRoot.querySelectorAll('.kpi h4')].map(node => node.textContent).join(' | '));
-check('results tab shows declared assumptions', resultsRoot.textContent.includes('Declared assumptions'));
-check('results tab shows the human load', /Flags that needed you/.test(resultsRoot.textContent) && /manual review: all \d+/.test(resultsRoot.textContent));
-check('results tab shows a speedup', /\d+(\.\d+)?×/.test(resultsRoot.textContent));
-
+check('results lead with the validating numbers', resultsRoot.firstElementChild.classList.contains('kpis') && resultsRoot.querySelectorAll(':scope > .kpis .kpi').length === 4,
+  [...resultsRoot.querySelectorAll(':scope > .kpis .kpi h4')].map(node => node.textContent).join(' | '));
+const stories = [...resultsRoot.querySelectorAll('.story h3')].map(node => node.textContent);
+check('results tell the four system stories', stories.length === 4 && /Where the flags go/.test(stories[0]) && /confidence/.test(stories[1])
+  && /Grok/.test(stories[2]) && /Fine-tuning/.test(stories[3]), stories.join(' | '));
+check('results draw the flow and confidence charts', !!resultsRoot.querySelector('#chart-flow') && !!resultsRoot.querySelector('#chart-confidence'));
+check('the confusion grid is 4 by 4', resultsRoot.querySelectorAll('.confusion tbody td').length === 16);
+check('results no longer compare against a manual reviewer', !/manual/i.test(resultsRoot.textContent) && !/×/.test(resultsRoot.textContent));
+check('results keep the declared assumptions', resultsRoot.querySelector('details.assumptions') !== null);
 console.log(results.join('\n'));
 if (errors.length) {
   console.log('\nJavaScript errors:\n' + errors.join('\n'));

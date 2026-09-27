@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { dressScene, groundTexture, loadModels, model, type ModelName } from './models';
 import { notify, store } from './store';
 
-export const colors: Record<string, string> = { dispatch_ground_team: '#327c65', reimage_zoom: '#bb913f', close_in_inspect: '#5f76b0', ignore: '#79847f', dispatched: '#195846', awaiting_human: '#cf653c' };
+export const colors: Record<string, string> = { dispatch_ground_team: '#859966', reimage_zoom: '#dbbc7f', close_in_inspect: '#7fbbb3', ignore: '#859289', dispatched: '#56663f', awaiting_human: '#e69875' };
 export type CameraMode = 'orbit' | 'follow' | 'top';
 
 // World (x east, y north, metres) -> three (x, up, -y): origin SW, north is -z.
@@ -20,7 +20,7 @@ interface Ctx {
   coverage: { tex: THREE.DataTexture; n: number; count: number } | null;
   sectorLabels: Record<string, HTMLElement>; houseMats: THREE.Material[];
   runId: string; hazardKey: string; truthKey: string; mode: CameraMode; droneTarget: THREE.Vector3; last: THREE.Vector3;
-  pins: Map<string, THREE.Group>; fetching: string; ocean: THREE.Mesh | null;
+  pins: Map<string, THREE.Group>; fetching: string; ocean: THREE.Mesh | null; foam: THREE.Mesh[]; clouds: THREE.Texture | null;
 }
 let ctx: Ctx | null = null;
 
@@ -43,11 +43,11 @@ function label(text: string, cls: string) {
 // A quadcopter drawn ~3x real size so it stays readable from the orbit camera.
 function buildDrone() {
   const g = new THREE.Group(), rotors: THREE.Object3D[] = [];
-  const shell = new THREE.MeshStandardMaterial({ color: '#e9ecea', roughness: .35, metalness: .1 });
+  const shell = new THREE.MeshStandardMaterial({ color: '#3f7fe0', roughness: .3, metalness: .15 });
   const carbon = new THREE.MeshStandardMaterial({ color: '#23272a', roughness: .5, metalness: .4 });
   const blade = new THREE.MeshStandardMaterial({ color: '#15181a', transparent: true, opacity: .75 });
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 2.2, 6, 16), shell); body.rotation.x = Math.PI / 2; body.scale.set(1.25, 1, .55); g.add(body);
-  const battery = new THREE.Mesh(new THREE.BoxGeometry(1.3, .5, 1.8), carbon); battery.position.y = .55; g.add(battery);
+  const battery = new THREE.Mesh(new THREE.BoxGeometry(1.3, .5, 1.8), carbon); battery.position.set(0, .55, .75); battery.scale.z = .75; g.add(battery);
   for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
     const tip = new THREE.Vector3(sx * 2.9, 0.1, sz * 2.9), arm = new THREE.Mesh(new THREE.CylinderGeometry(.14, .18, tip.length(), 8), carbon);
     arm.position.copy(tip).multiplyScalar(.5); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().normalize()); g.add(arm);
@@ -63,9 +63,69 @@ function buildDrone() {
   const lens = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 16), new THREE.MeshStandardMaterial({ color: '#0a2340', metalness: .9, roughness: .1 }));
   lens.position.set(0, -.85, -1); g.add(lens);
   for (const sx of [-1, 1]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(.12, .9, 2.4), carbon); skid.position.set(sx * .8, -.7, 0); g.add(skid); }
+  // Quirky face on the flat of the nose: one big eye, one small, a lopsided grin and a blush.
+  const white = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .3 }), ink = new THREE.MeshBasicMaterial({ color: '#0b1220' });
+  for (const [x, r] of [[-.42, .24], [.4, .15]]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), white); eye.position.set(x, .5, -.35); eye.scale.y = .6; g.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(r * .5, 12, 8), ink); pupil.position.set(x + (x < 0 ? .05 : -.03), .5 + r * .45, -.35 - r * .35); g.add(pupil);
+  }
+  const grin = new THREE.Mesh(new THREE.TorusGeometry(.42, .055, 8, 24, Math.PI), ink);
+  grin.rotation.x = Math.PI / 2; grin.rotation.z = .18; grin.position.set(.02, .5, -.78); grin.scale.set(1, 1, .5); g.add(grin);
+  const blush = new THREE.MeshBasicMaterial({ color: '#ff9db1' });
+  for (const x of [-.85, .8]) { const dot = new THREE.Mesh(new THREE.CircleGeometry(.14, 12), blush); dot.rotation.x = -Math.PI / 2; dot.position.set(x, .47, -.75); g.add(dot); }
   g.traverse(o => { o.castShadow = true; });
   g.scale.setScalar(1.3);
   return { g, rotors };
+}
+
+/** A drifting high cloud deck: soft blobs painted once, tiled, scrolled slowly. */
+function cloudLayer(scene: THREE.Scene) {
+  const size = 512, canvas = document.createElement('canvas'); canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  let a = 7; const rand = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  for (let i = 0; i < 70; i++) {
+    const x = rand() * size, y = rand() * size, r = 24 + rand() * 60;
+    for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) {
+      const grad = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      grad.addColorStop(0, 'rgba(255,255,255,.34)'); grad.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grad; g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(5, 5); tex.colorSpace = THREE.SRGBColorSpace;
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(14000, 14000), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, fog: false, opacity: .9 }));
+  deck.rotation.x = Math.PI / 2; deck.position.set(150, 1400, -150); deck.renderOrder = -1; scene.add(deck);
+  return tex;
+}
+
+/** Wave normals tiled over the sea: sums of sines, turned into a tangent-space normal map. */
+function waterNormals() {
+  const n = 128, canvas = document.createElement('canvas'); canvas.width = canvas.height = n;
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  const img = g.createImageData(n, n), h = (x: number, y: number) => {
+    const u = x / n * Math.PI * 2, v = y / n * Math.PI * 2;
+    return Math.sin(u * 2 + Math.sin(v * 3) * .8) * .5 + Math.sin(v * 3 + u) * .35 + Math.sin(u * 5 - v * 4) * .18;
+  };
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const dx = h(x + 1, y) - h(x - 1, y), dy = h(x, y + 1) - h(x, y - 1), k = 1 / Math.hypot(dx * 1.6, dy * 1.6, 1), i = (y * n + x) * 4;
+    img.data[i] = (-dx * 1.6 * k * .5 + .5) * 255; img.data[i + 1] = (-dy * 1.6 * k * .5 + .5) * 255; img.data[i + 2] = (k * .5 + .5) * 255; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; return tex;
+}
+
+/** Foam lace for the surf line: bright at the waterline, breaking into flecks seaward. */
+function foamTexture() {
+  const w = 128, h = 512, canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+  const g = canvas.getContext('2d');
+  if (!g) return null;
+  let a = 11; const rand = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
+  for (let i = 0; i < 900; i++) {
+    const t = Math.pow(rand(), 1.8), x = t * w, y = rand() * h, r = 1 + rand() * 4.5 * (1 - t * .6);
+    g.fillStyle = `rgba(255,255,255,${(.25 + rand() * .6) * (1 - t * .7)})`; g.beginPath(); g.ellipse(x, y, r * 1.6, r, 0, 0, Math.PI * 2); g.fill();
+  }
+  const tex = new THREE.CanvasTexture(canvas); tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace; return tex;
 }
 
 function buildCamera(altitude: number, footprint: number) {
@@ -89,14 +149,26 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   const labels = new CSS2DRenderer();
   labels.domElement.className = 'labels'; labelRoot.appendChild(labels.domElement);
   // Overcast morning after the surge: low sun from the sea, haze toward the horizon.
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#9fb0b8'); scene.fog = new THREE.Fog('#9fb0b8', 380, 1100);
-  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.28;
+  const sunDir = new THREE.Vector3(420, 200, -60).normalize();
+  const skySun = new THREE.Vector3(420, 420, -60).normalize();  // painted higher than the light so the horizon stays blue, not blown out
+  const scene = new THREE.Scene(); scene.fog = new THREE.Fog('#c3d3d9', 500, 3200);
+  const makeSky = () => {
+    const sky = new Sky(); sky.scale.setScalar(12000);
+    const u = sky.material.uniforms;
+    u.turbidity.value = 2.5; u.rayleigh.value = 2.4; u.mieCoefficient.value = .0015; u.mieDirectionalG.value = .7;
+    u.sunPosition.value.copy(skySun).multiplyScalar(450000);
+    return sky;
+  };
+  scene.add(makeSky());
+  // The same sky, baked once, lights and reflects off the water, the drone and the houses.
+  const skyScene = new THREE.Scene(); skyScene.add(makeSky());
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(skyScene, 0.02).texture; scene.environmentIntensity = 0.26;
   scene.add(new THREE.HemisphereLight('#dbe6ec', '#4a4436', 0.8));
-  const sun = new THREE.DirectionalLight('#fff1dc', 2.6); sun.position.set(420, 260, -60); sun.target.position.set(150, 0, -150);
+  const sun = new THREE.DirectionalLight('#fff1dc', 2.6); sun.position.copy(sunDir).multiplyScalar(450); sun.target.position.set(150, 0, -150);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.4;
   Object.assign(sun.shadow.camera, { left: -260, right: 260, top: 260, bottom: -260, near: 50, far: 900 });
   scene.add(sun, sun.target);
-  const camera = new THREE.PerspectiveCamera(50, 1, 1, 4000);
+  const camera = new THREE.PerspectiveCamera(50, 1, 2, 24000);
   const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02;
   const { g: drone, rotors } = buildDrone(); scene.add(drone);
   const [world, leadGroup, truthGroup, hazardGroup] = [1, 2, 3, 4].map(() => new THREE.Group());
@@ -104,10 +176,11 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   const lkp = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: '#c96b43', dashSize: 3, gapSize: 2 })); lkp.visible = false; scene.add(lkp);
   ctx = { renderer, labels, scene, camera, controls, world, leadGroup, truthGroup, hazardGroup, drone, rotors, cam: new THREE.Group(), lkp,
     coverage: null, sectorLabels: {}, houseMats: [], runId: '', hazardKey: '', truthKey: '', mode: 'orbit',
-    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null };
+    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null, foam: [], clouds: null };
   // Models stream in after first paint; the scene is rebuilt with them once they arrive.
   loadModels().then(count => { if (count && ctx) { ctx.runId = ''; renderMap(); } });
   scene.add(ctx.cam);
+  ctx.clouds = cloudLayer(scene);
 
   const resize = () => {
     const w = labelRoot.clientWidth, h = labelRoot.clientHeight;
@@ -144,7 +217,14 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
       const pos = ocean.geometry.attributes.position as THREE.BufferAttribute, t = clock.elapsedTime;
       for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .05 + t * 1.1) * .22 + Math.sin(y * .08 - t * .7) * .15); }
       pos.needsUpdate = true; ocean.geometry.computeVertexNormals();
+      const nm = (ocean.material as THREE.MeshStandardMaterial).normalMap;
+      if (nm) nm.offset.set(t * .006, -t * .004);
+      ctx.foam.forEach(b => {
+        const wave = Math.sin(t * .8 + b.userData.phase);
+        b.position.x = b.userData.base + wave * 3.5; (b.material as THREE.MeshBasicMaterial).opacity = .35 + .35 * (wave * .5 + .5);
+      });
     }
+    if (ctx.clouds) ctx.clouds.offset.x += dt * .0006;
     if (ctx.mode === 'follow') { const shift = ctx.drone.position.clone().sub(ctx.controls.target); ctx.controls.target.add(shift); ctx.camera.position.add(shift); }
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera); ctx.labels.render(ctx.scene, ctx.camera);
@@ -170,8 +250,8 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   const limit = painted?.limit ?? (() => area * .25);
   // Land stops at the shoreline (BEACH_M past the area edge); the sea fills everything east of it.
   const shore = area + BEACH_M;
-  const outer = new THREE.Mesh(new THREE.PlaneGeometry(2400, 2400), new THREE.MeshStandardMaterial({ color: '#56603f', roughness: 1 }));
-  outer.rotation.x = -Math.PI / 2; outer.position.set(shore - 1200 - margin, -0.08, -area / 2); outer.receiveShadow = true; c.world.add(outer);
+  const outer = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#56603f', roughness: 1 }));
+  outer.rotation.x = -Math.PI / 2; outer.position.set(shore - 6000 - margin, -0.08, -area / 2); outer.receiveShadow = true; c.world.add(outer);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(area + margin * 2, area + margin * 2), new THREE.MeshStandardMaterial({ map: painted?.tex ?? null, color: painted ? '#ffffff' : '#56603f', roughness: .95, alphaTest: .5 }));
   land.rotation.x = -Math.PI / 2; land.position.set(area / 2, 0, -area / 2); land.receiveShadow = true; c.world.add(land);
 
@@ -188,16 +268,30 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
     const id = `S${row * scene.sector_grid + col + 1}`, l = label(id, 'sector');
     l.position.copy(at(col * size + 12, (row + 1) * size - 12, 1)); c.world.add(l); c.sectorLabels[id] = l.element;
   }
-  c.ocean = null;
+  c.ocean = null; c.foam = [];
   scene.water.forEach(w => {
     if (w.kind === 'ocean') {
       // The sea runs off to the horizon; the server rectangle only marks where it starts.
-      const width = w.width + 900, height = w.height + 1200, sea = new THREE.Mesh(new THREE.PlaneGeometry(width, height, 90, 90),
-        new THREE.MeshStandardMaterial({ color: '#164656', roughness: .2, metalness: .3 }));
+      const width = w.width + 900, height = w.height + 1200, geo = new THREE.PlaneGeometry(width, height, 90, 90);
+      // Turquoise shallows fading to deep teal with distance from the shoreline (local x = east).
+      const pos = geo.attributes.position, tint = new Float32Array(pos.count * 3), shallow = new THREE.Color('#5fb7a8'), deep = new THREE.Color('#0d3a49'), mix = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) { mix.copy(shallow).lerp(deep, Math.min(1, Math.pow((pos.getX(i) + width / 2) / 160, .6))); tint.set([mix.r, mix.g, mix.b], i * 3); }
+      geo.setAttribute('color', new THREE.BufferAttribute(tint, 3));
+      const normals = waterNormals();
+      if (normals) { normals.repeat.set(width / 28, height / 28); normals.anisotropy = 8; }
+      const sea = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .12, metalness: .05, normalMap: normals, normalScale: new THREE.Vector2(.12, .12), envMapIntensity: 1 }));
       sea.rotation.x = -Math.PI / 2; sea.position.copy(at(shore - 20 + width / 2, w.y + w.height / 2, -0.45)); sea.receiveShadow = true;
       c.world.add(sea); c.ocean = sea;
-      const foam = new THREE.Mesh(new THREE.PlaneGeometry(4, w.height + 400), new THREE.MeshBasicMaterial({ color: '#e8efe9', transparent: true, opacity: .6, depthWrite: false }));
-      foam.rotation.x = -Math.PI / 2; foam.position.copy(at(shore + 2, w.y + w.height / 2, 0.05)); c.world.add(foam);
+      // Beyond the animated patch the sea is flat deep water all the way to the fogged horizon.
+      const far = new THREE.Mesh(new THREE.PlaneGeometry(12000, 12000), new THREE.MeshStandardMaterial({ color: '#0d3a49', roughness: .15 }));
+      far.rotation.x = -Math.PI / 2; far.position.copy(at(shore + 5900, w.y + w.height / 2, -2)); c.world.add(far);
+      // Two swash bands that wash in and out over the wet sand.
+      c.foam = [0, 1].map(k => {
+        const tex = foamTexture(); tex?.repeat.set(1, (w.height + 400) / 60);
+        const band = new THREE.Mesh(new THREE.PlaneGeometry(9, w.height + 400), new THREE.MeshBasicMaterial({ map: tex, color: '#f4f7f1', transparent: true, opacity: .7, depthWrite: false, fog: false }));
+        band.rotation.x = -Math.PI / 2; band.userData.base = shore + 3 + k * 7; band.userData.phase = k * 2.1;
+        band.position.copy(at(band.userData.base, w.y + w.height / 2, 0.06 + k * .01)); c.world.add(band); return band;
+      });
       return;
     }
     // Standing floodwater: brown, sediment-laden, still.

@@ -109,13 +109,14 @@ function card(lead: Lead): string {
         <strong>${lead.lead_id}</strong>
         <small>${lead.sector} · ${words(lead.nearest_landmark || '')}</small>
       </div>
-      <div class="tags">
+    </header>
+    <div class="tags">
+        ${topPriority(lead) ? '<span class="tag human">top priority</span>' : ''}
+        ${settled ? '' : '<span class="tag need">needs you</span>'}
         ${settled ? `<span class="tag done">${lead.status === 'reimaging' ? 'drone zooming' : lead.status === 'inspecting' ? 'drone inspecting' : words(lead.status)}</span>` : ''}
-        ${lead.status === 'awaiting_human' ? '<span class="tag human">needs you</span>' : ''}
         ${lead.reranked ? '<span class="tag rerank">re-ranked</span>' : ''}
         ${decision?.used_fallback ? '<span class="tag warn">fallback</span>' : ''}
-      </div>
-    </header>
+    </div>
     <p class="action" style="--tone:${colors[action]}">${LABELS[action]} <small>${source}</small></p>
     <p class="reason">${reason(lead)}</p>
     <p class="facts">${person(lead)} · ${urgency ? `<span class="urgency u${Math.min(3, Math.round(decision!.urgency!))}">${urgency}</span> · ` : ''}<span title="${CAMERA_TIP}">Camera ${pct(lead.detector_conf)}</span></p>
@@ -143,7 +144,17 @@ export function closedRisk(lead: Lead): string[] {
   ].filter(Boolean);
 }
 
-let tab: 'work' | 'closed' = 'work';
+/** Top priority: waiting on you and likely a person, or rated critical. */
+const topPriority = (lead: Lead) => PENDING.includes(lead.status) && ((lead.person_chance ?? 0) >= 0.5 || (lead.decision?.urgency ?? 0) >= 2.5);
+const FILTERS = {
+  all: { label: 'All', test: (_: Lead) => true },
+  top: { label: 'Top priority', test: topPriority },
+  needs: { label: 'Needs you', test: (lead: Lead) => PENDING.includes(lead.status) },
+  drone: { label: 'With drone', test: (lead: Lead) => lead.status === 'reimaging' || lead.status === 'inspecting' },
+  dispatched: { label: 'Dispatched', test: (lead: Lead) => lead.status === 'dispatched' },
+};
+type Filter = keyof typeof FILTERS | 'closed';
+let tab: Filter = 'all';
 
 function closedRow(lead: Lead): string {
   const risk = closedRisk(lead);
@@ -157,26 +168,83 @@ function closedRow(lead: Lead): string {
     </select></span></li>`;
 }
 
+// Reading position: the open card stays put while cards arrive around it, and cards that land out of
+// view raise a pill (top/bottom, like unread messages) that clears once they've been on screen.
+const fresh = new Set<string>();
+let known: Set<string> | null = null;
+const scrollerOf = (root: HTMLElement) => root.closest('.work') as HTMLElement | null;
+const cards = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('.card[data-lead]')];
+
+function anchorOf(root: HTMLElement) {
+  const scroller = scrollerOf(root);
+  if (!scroller) return null;
+  const view = scroller.getBoundingClientRect(), list = cards(root);
+  const shown = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return r.bottom > view.top && r.top < view.bottom; };
+  const el = list.find(card => card.classList.contains('selected') && shown(card)) ?? (scroller.scrollTop > 0 ? list.find(shown) : undefined);
+  return el ? { id: el.dataset.lead!, top: el.getBoundingClientRect().top } : null;
+}
+
+function updatePills(root: HTMLElement) {
+  const scroller = scrollerOf(root);
+  if (!scroller) return;
+  const view = scroller.getBoundingClientRect();
+  let above = 0, below = 0;
+  for (const id of [...fresh]) {
+    const el = root.querySelector<HTMLElement>(`.card[data-lead="${id}"]`);
+    if (!el) { fresh.delete(id); continue; }
+    const r = el.getBoundingClientRect();
+    if (!view.height || (r.bottom > view.top && r.top < view.bottom)) fresh.delete(id);  // seen
+    else if (r.bottom <= view.top) above++; else below++;
+  }
+  for (const [dir, n] of [['up', above], ['down', below]] as const) {
+    const pill = scroller.querySelector<HTMLButtonElement>(`[data-jump="${dir}"]`);
+    if (!pill) continue;
+    if (n) pill.textContent = `${n} new ${dir === 'up' ? 'above' : 'below'}`;
+    pill.classList.toggle('on', n > 0); pill.tabIndex = n ? 0 : -1;
+  }
+}
+
 export function renderQueue(root: HTMLElement) {
+  const anchor = anchorOf(root);
   const leads = store.snapshot ? rank(store.snapshot.leads) : [];
-  const waiting = leads.filter(lead => PENDING.includes(lead.status)).length;
   const closed = (store.snapshot?.leads ?? []).filter(lead => lead.status === 'auto_closed')
     .sort((a, b) => closedRisk(b).length - closedRisk(a).length || b.detector_conf - a.detector_conf);
   const flagged = closed.filter(lead => closedRisk(lead).length).length;
-  const body = tab === 'work'
-    ? (leads.length ? leads.map(card).join('') : '<p class="empty">Nothing needs you right now.</p>')
-    : (closed.length
-      ? `<p class="closed-note">Laya was sure these are not people. Nothing is final until you confirm; new intel re-decides them.</p>
+  // A filter shows only when it narrows the list: one that matches nothing, or everything, is just noise.
+  const counts = Object.fromEntries(Object.entries(FILTERS).map(([key, filter]) => [key, leads.filter(filter.test).length]));
+  const useful = (Object.keys(FILTERS) as (keyof typeof FILTERS)[]).filter(key => key !== 'all' && counts[key] > 0 && counts[key] < leads.length);
+  if (tab === 'closed' ? !closed.length : tab !== 'all' && !useful.includes(tab)) tab = 'all';
+  const shown = tab === 'closed' ? [] : leads.filter(FILTERS[tab].test);
+  const body = tab !== 'closed'
+    ? (shown.length ? shown.map(card).join('') : '<p class="empty">Nothing needs you right now.</p>')
+    : `<p class="closed-note">Laya was sure these are not people. Nothing is final until you confirm; new intel re-decides them.</p>
         <button class="primary confirm-all" data-confirm-closed>Confirm ${closed.length} as not a person</button>
-        <ul class="closed-list">${closed.map(closedRow).join('')}</ul>`
-      : '<p class="empty">Laya has not closed any leads.</p>');
-  root.innerHTML = `<nav class="work-tabs">
-      <button data-tab-work="work" class="${tab === 'work' ? 'on' : ''}">Needs you (${waiting})</button>
-      <button data-tab-work="closed" class="${tab === 'closed' ? 'on' : ''}">Auto-closed (${closed.length})${flagged ? ` <span class="warn">· ${flagged} flagged</span>` : ''}</button>
-    </nav>${body}`;
+        <ul class="closed-list">${closed.map(closedRow).join('')}</ul>`;
+  const chip = (key: Filter, text: string) => `<button data-tab-work="${key}" class="${tab === key ? 'on' : ''}">${text}</button>`;
+  const chips = [
+    ...(useful.length || closed.length ? ['all' as const, ...useful] : []).map(key => chip(key, `${FILTERS[key].label} (${counts[key]})`)),
+    closed.length ? chip('closed', `Auto-closed (${closed.length})${flagged ? ` <span class="warn">· ${flagged} flagged</span>` : ''}`) : '',
+  ].join('');
+  root.innerHTML = `${chips ? `<nav class="work-tabs">${chips}</nav>` : ''}${body}`;
+  const scroller = scrollerOf(root), moved = anchor && root.querySelector<HTMLElement>(`.card[data-lead="${anchor.id}"]`);
+  if (scroller && moved) scroller.scrollTop += moved.getBoundingClientRect().top - anchor.top;
+  const ids = new Set(leads.map(lead => lead.lead_id));
+  if (known) ids.forEach(id => { if (!known!.has(id) && tab !== 'closed') fresh.add(id); });
+  known = ids; if (tab === 'closed') fresh.clear();
+  updatePills(root);
 }
 
 export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void, onBrief: (lead: Lead) => void) {
+  const scroller = scrollerOf(root);
+  scroller?.addEventListener('scroll', () => updatePills(root), { passive: true });
+  scroller?.addEventListener('click', event => {
+    const pill = (event.target as HTMLElement).closest<HTMLElement>('[data-jump]');
+    if (!pill) return;
+    const view = scroller.getBoundingClientRect(), rects = [...fresh].map(id => root.querySelector<HTMLElement>(`.card[data-lead="${id}"]`)?.getBoundingClientRect()).filter(Boolean) as DOMRect[];
+    const side = rects.filter(r => (pill.dataset.jump === 'up' ? r.bottom <= view.top : r.top >= view.bottom));
+    const target = side.sort((a, b) => a.top - b.top)[0];
+    if (target) scroller.scrollBy?.({ top: target.top - view.top - 12, behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
   root.addEventListener('click', event => {
     const target = event.target as HTMLElement;
     const approve = target.closest('[data-approve]') as HTMLElement | null;
