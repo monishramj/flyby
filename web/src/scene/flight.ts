@@ -3,7 +3,7 @@
 // runInspection(host, request) and send the resolved outcome back as `inspect.result`.
 // Live mode never waits on the reflex: each 20 ms tick uses the newest reply.
 import * as THREE from 'three';
-import { DT, FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type Scenario } from './inspect';
+import { DT, FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario } from './inspect';
 
 export interface InspectRequest {
   lead_id: string;
@@ -45,11 +45,17 @@ function hashSeed(s: string): number {
 
 let reflexLink: ReflexLink | null = null;
 let episodeCounter = Math.floor(Math.random() * 1e6) * 100;
+let sideChannel: ReflexSideChannel | null = null;
+
+/** Receive the reflex's eye.layout and live viz packets (e.g. a flyviz VizStream). */
+export function attachReflexStream(side: ReflexSideChannel | null) {
+  sideChannel = side;
+}
 
 async function reflex(): Promise<ReflexLink | null> {
   if (reflexLink) return reflexLink;
   try {
-    const link = new ReflexLink();
+    const link = new ReflexLink({ handle: (data) => sideChannel?.handle(data) ?? false });
     await link.open();
     reflexLink = link;
   } catch {
