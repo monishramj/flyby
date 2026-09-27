@@ -22,6 +22,13 @@ recaptured `debris:0` and `beam:1` route flights match the pre-change capture in
 fly frame (515/515, 535/535 identical pixels), every command and S, and the result.
 (A first attempt changed the benchmark seeds through one extra random draw; caught by this
 check and fixed.) Held-out numbers therefore still apply unchanged.
+Atmosphere (same day, `dress.ts`): dawn sky and sun, airborne dust, distant smoke columns,
+and behind the brick wall the burnt-out house the carport belonged to (smoke, charred
+rafters, a fire truck's flashing lights), all chase-only. The ruin also respects the fly's
+real sightline: from any fly-eye point (y 1.2 m, z >= -9.1) the 4 m wall hides a point at
+z <= -11 up to h = 4 + 2.8(-11 - z)/1.9; every top stays below it. Identity check repeated
+(beam:1, debris:0: frame-identical). Note: a concurrent second flight on the same reflex
+made the first debris re-check diverge (one eye per process), so checks run alone.
 `house` (dev page only, marked experimental; not in `SCENARIOS`, bench or mission defaults):
 a gutted open-plan house (collapsed facade, cutaway walls for the viewer, hanging ceiling
 panel, toppled wardrobe), route entry → living room → target. **The readout does not

@@ -3,7 +3,7 @@
 // Heading 0 faces −z; + yaw turns right (toward +x). Camera image: x right, y up,
 // sent with row 0 = top. Constants mirror reflex/config.py where they overlap.
 import * as THREE from 'three';
-import { CHASE, EYE, addChaseEnvironment, makeDrone, makePerson, onLayer, palette, twin } from './dress';
+import { CHASE, EYE, addAtmosphere, addChaseEnvironment, addRuin, makeDrone, makePerson, onLayer, palette, twin } from './dress';
 
 export const FRAME_R = 96;
 // The camera renders at SUPERSAMPLE× resolution with MSAA, then is area-averaged to
@@ -152,7 +152,9 @@ export class Inspection {
     s.add(onLayer(new THREE.HemisphereLight(0xffffff, 0x555555, 1.6), EYE));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4); sun.position.set(4, 8, 3); s.add(onLayer(sun, EYE));
     addChaseEnvironment(s);
-    this.chaseRig = spec.scenario === 'house' ? { back: 3.4, up: 4.0, ahead: 1.4, lookY: 0.5 } : { back: 2.5, up: 2.0, ahead: 2.0, lookY: 1.0 };
+    addAtmosphere(s, new THREE.Vector3(-5, 0.1, -12), new THREE.Vector3(5, 3.5, 8));
+    if (spec.scenario !== 'house') addRuin(s);
+    this.chaseRig = spec.scenario === 'house' ? { back: 3.4, up: 4.0, ahead: 1.4, lookY: 0.5 } : { back: 2.8, up: 2.7, ahead: 2.0, lookY: 1.1 };
 
     // Concrete-like ground: 2 cm grain with broad stains (texture spans 5 m).
     const groundTex = noiseTexture(11, 512, 128, 22, 2, 18, 64); groundTex.repeat.set(12, 12);

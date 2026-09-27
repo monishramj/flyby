@@ -173,15 +173,15 @@ export function makePerson(): THREE.Group {
 export function addChaseEnvironment(scene: THREE.Scene, opts: { shadowSpan?: number } = {}) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(70, 32, 16), new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { top: { value: new THREE.Color(0x6d8fb3) }, mid: { value: new THREE.Color(0xc9d3d6) }, low: { value: new THREE.Color(0xa59c8c) } },
+    uniforms: { top: { value: new THREE.Color(0x4f6f99) }, mid: { value: new THREE.Color(0xe6c7a4) }, low: { value: new THREE.Color(0x8a7e70) } },
     vertexShader: 'varying vec3 p; void main(){ p = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 low; varying vec3 p; void main(){ float h = p.y; vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.6)) : mix(mid, low, min(1.0, -h * 4.0)); gl_FragColor = vec4(c, 1.0); }',
   }));
   sky.renderOrder = -1; sky.name = 'sky';
   scene.add(onLayer(sky, CHASE));
-  scene.add(onLayer(new THREE.HemisphereLight(0xdfe8f0, 0x5a5146, 1.1), CHASE));
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.4);
-  sun.position.set(6, 11, 4); sun.castShadow = true;
+  scene.add(onLayer(new THREE.HemisphereLight(0xd6dde8, 0x6a5a48, 1.1), CHASE));
+  const sun = new THREE.DirectionalLight(0xffd6a8, 2.5); // low early-morning sun, long shadows
+  sun.position.set(-8, 7, 5); sun.castShadow = true;
   const s = opts.shadowSpan ?? 9;
   Object.assign(sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 40 });
   sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.02;
@@ -202,7 +202,7 @@ export class ChaseView {
   private pos = new THREE.Vector3();
   private look = new THREE.Vector3();
   private init = false;
-  private fog = new THREE.Fog(0xc9d3d6, 14, 60);
+  private fog = new THREE.Fog(0xd8c6b0, 12, 55);
 
   constructor(private scene: THREE.Scene, private rig = { back: 3.2, up: 2.6, ahead: 2.0, lookY: 1.0 }) {
     this.camera.layers.enable(CHASE);
@@ -244,6 +244,7 @@ export class ChaseView {
     const ev = d.collided ? 'collided' : d.arrived ? 'reached' : d.cmd ?? 'none';
     if (ev !== this.last && ev !== 'none' && ev !== 'arrived') this.mark(ev as Mark, d.x, d.z, d.yaw);
     this.last = ev;
+    for (const tick of (this.scene.userData.ticks ?? []) as ((t: number) => void)[]) tick(d.t);
     // Props spin with thrust; LEDs blink; the body tilts with acceleration.
     d.drone.traverse((o) => {
       if (o.name === 'prop') o.rotation.y += (o.userData.dir as number) * 1.4;
@@ -267,4 +268,132 @@ export class ChaseView {
     renderer.render(this.scene, this.camera);
     this.scene.fog = fog;
   }
+}
+
+/** Animated viewer-only effects register here; ChaseView.update runs them with sim time. */
+export function onTick(scene: THREE.Scene, fn: (t: number) => void) {
+  (scene.userData.ticks ??= []).push(fn);
+}
+
+let puffTex: THREE.Texture | null = null;
+function puff(): THREE.Texture {
+  if (puffTex) return puffTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  for (let i = 0; i < 14; i++) { // lumpy soft blob
+    const x = 64 + (Math.sin(i * 2.4) * 26), y = 64 + (Math.cos(i * 1.7) * 22), r = 30 + (i % 4) * 7;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(255,255,255,0.28)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  }
+  puffTex = new THREE.CanvasTexture(c); puffTex.colorSpace = THREE.SRGBColorSpace;
+  return puffTex;
+}
+
+/** A rising smoke column of looping sprites (viewer-only). */
+export function addSmoke(scene: THREE.Scene, x: number, z: number, opts: { y0?: number; height?: number; width?: number; color?: number; n?: number; far?: boolean } = {}) {
+  const { y0 = 0, height = 14, width = 3, color = 0x4a4540, n = 18, far = false } = opts;
+  const group = new THREE.Group();
+  const sprites = Array.from({ length: n }, (_, i) => {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: puff(), color, transparent: true, depthWrite: false, fog: !far }));
+    m.userData.phase = i / n; m.userData.spin = (i % 2 ? 1 : -1) * (0.1 + 0.05 * (i % 3));
+    group.add(m); return m;
+  });
+  scene.add(onLayer(group, CHASE));
+  onTick(scene, (t) => {
+    for (const m of sprites) {
+      const f = (m.userData.phase + t / 16) % 1; // each puff rises over 16 s
+      const w = width * (0.5 + 1.8 * f);
+      m.position.set(x + Math.sin(f * 5 + m.userData.phase * 9) * width * 0.35 + f * width * 0.8, y0 + f * height, z);
+      m.scale.set(w, w, 1);
+      m.material.opacity = Math.min(1, f * 6) * (1 - f) * 0.9;
+      m.material.rotation = m.userData.spin * t;
+    }
+  });
+}
+
+/** Airborne dust drifting through a box (viewer-only). */
+export function addDust(scene: THREE.Scene, min: THREE.Vector3, max: THREE.Vector3, n = 700) {
+  const pos = new Float32Array(3 * n), base = new Float32Array(3 * n);
+  let a = 12345;
+  const r = () => { a = (a * 1103515245 + 12345) >>> 0; return a / 4294967296; };
+  for (let i = 0; i < n; i++) {
+    base[3 * i] = min.x + (max.x - min.x) * r(); base[3 * i + 1] = min.y + (max.y - min.y) * r(); base[3 * i + 2] = min.z + (max.z - min.z) * r();
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xf1dcc0, size: 0.025, transparent: true, opacity: 0.55, depthWrite: false }));
+  pts.frustumCulled = false;
+  scene.add(onLayer(pts, CHASE));
+  const h = max.y - min.y;
+  onTick(scene, (t) => {
+    for (let i = 0; i < n; i++) {
+      const k = 3 * i;
+      pos[k] = base[k] + 0.25 * Math.sin(t * 0.3 + i);
+      pos[k + 1] = min.y + ((base[k + 1] - min.y + t * 0.04 * (1 + (i % 5) * 0.2)) % h);
+      pos[k + 2] = base[k + 2] + 0.25 * Math.cos(t * 0.23 + i * 1.3);
+    }
+    geo.attributes.position.needsUpdate = true;
+  });
+}
+
+/** Flashing red/blue emergency lights with halos (viewer-only). */
+export function addBeacons(scene: THREE.Scene, x: number, y: number, z: number) {
+  const group = new THREE.Group();
+  const halo = (color: number, dx: number) => {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: puff(), color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    m.position.set(x + dx, y, z); m.scale.set(3, 3, 1); group.add(m); return m;
+  };
+  const red = halo(0xff2a2a, -0.6), blue = halo(0x2a6bff, 0.6);
+  const lr = new THREE.PointLight(0xff3030, 0, 14, 1.5), lb = new THREE.PointLight(0x3060ff, 0, 14, 1.5);
+  lr.position.set(x - 0.6, y, z); lb.position.set(x + 0.6, y, z); group.add(lr, lb);
+  scene.add(onLayer(group, CHASE));
+  onTick(scene, (t) => {
+    const ph = (t * 2.5) % 1, on = (a: number) => (Math.sin(a * Math.PI * 2) > 0.3 ? 1 : 0.08);
+    const vr = on(ph), vb = on(ph + 0.5);
+    red.material.opacity = vr; blue.material.opacity = vb; lr.intensity = 6 * vr; lb.intensity = 6 * vb;
+  });
+}
+
+/**
+ * The collapsed house the carport belonged to, behind the 4 m brick wall at z = -11.
+ * Viewer-only, and also out of the fly's sight in reality: from any fly-eye position
+ * (y = 1.2 m, z >= -9.1 on every flight) the wall hides a point at z <= -11 up to
+ * h = 4 + 2.8 * (-11 - z) / 1.9; every top here stays below that bound, and |x| <= 7.5
+ * keeps it within the wall's 20 m width. A higher viewer camera sees over the wall.
+ */
+export function addRuin(scene: THREE.Scene) {
+  const pal = palette(), group = new THREE.Group();
+  const box = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, mat: THREE.Material, rot?: [number, number, number]) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat);
+    m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+    if (rot) m.rotation.set(...rot);
+    m.castShadow = m.receiveShadow = true; group.add(m); return m;
+  };
+  const charred = new THREE.MeshStandardMaterial({ color: 0x2a2522, roughness: 1 });
+  const brick = pal.brick.clone(); brick.map = pal.brick.map!.clone(); brick.map.repeat.set(2, 2);
+  // Two-storey shell, z from -16 to -23: side walls with broken tops, a gable end, a fallen slab.
+  box(-6.5, 0, -23, -6.2, 6.5, -16, brick);                       // left wall (tallest point 6.5 m)
+  box(3.2, 0, -23, 3.5, 4.2, -18.5, brick);                       // right wall, broken
+  box(3.2, 0, -18.5, 3.5, 2.6, -16, brick);
+  box(-6.2, 0, -23.3, 3.2, 5.8, -23, brick);                      // back wall
+  box(-6.2, 3.0, -23, 1.0, 3.2, -18, pal.plaster);                // intact half of the first floor
+  box(0.2, 1.2, -21, 3.3, 1.4, -16.5, pal.plaster, [0, 0.1, 0.42]); // floor slab collapsed onto the ground
+  for (let i = 0; i < 6; i++) box(-5.5 + i * 1.3, 5.2, -23, -5.35 + i * 1.3, 5.4, -17 - (i % 3), charred, [0.15 * (i % 2 ? 1 : -1), 0, 0.08 * i]); // charred rafters
+  box(-6.2, 0, -16.2, -3.0, 1.1, -16, brick);                     // front wall stub
+  box(-2.4, 0, -17.5, 1.8, 0.9, -15.4, pal.plaster);              // rubble heap
+  box(-1.0, 0.5, -17, 0.9, 1.4, -15.8, pal.panel, [0.3, 0.5, 0.2]);
+  // A leaning utility pole (top ~7 m at z = -14.5; the bound there is 9.2 m).
+  const pole = box(6.4, 0, -14.6, 6.6, 7.4, -14.4, pal.wood); pole.rotation.z = -0.18; pole.position.x += 0.6;
+  // Fire truck behind the wall (hidden from both cameras except its lights).
+  box(-5.6, 0, -14.4, -1.2, 2.9, -12.4, new THREE.MeshStandardMaterial({ color: 0x9e1b1b, roughness: 0.5 }));
+  scene.add(onLayer(group, CHASE));
+  addBeacons(scene, -3.4, 3.2, -13.4);
+  addSmoke(scene, -2.5, -20, { y0: 3, height: 10, width: 2.2, color: 0x3d3834 }); // top ~15.5 m < 17.3 m bound at z = -20
+}
+
+/** Dust, distant smoke columns: shared by every scene. */
+export function addAtmosphere(scene: THREE.Scene, dustMin: THREE.Vector3, dustMax: THREE.Vector3) {
+  addDust(scene, dustMin, dustMax);
+  addSmoke(scene, -38, -42, { y0: 0, height: 30, width: 7, color: 0x5a524b, far: true, n: 14 });
+  addSmoke(scene, 34, -48, { y0: 0, height: 26, width: 6, color: 0x6a625a, far: true, n: 12 });
 }

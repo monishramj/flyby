@@ -110,6 +110,12 @@ INSPECT_HOVER_S=120 at scale 4). The patch does not implement that ownership han
 - The viewer's chase view is dressed (colours, drone model, shadows, trail); the fly camera
   renders the measured benchmark scene, verified frame-identical (STATUS.md). The inset
   "Drone camera → fly eye" shows what the fly actually sees.
+- **One flight at a time.** The reflex runs one fly eye per process; two flights at once
+  (e.g. the mission panel and `/inspect.html` in two tabs) corrupt each other's eye state.
+  Close other flying tabs during the demo.
+- Viewer atmosphere (dawn light, dust, distant smoke, the burnt-out house behind the wall,
+  emergency lights) is chase-only; the ruin also sits below the fly's sightline over the
+  4 m wall from every point it flies, so a real camera would not see it either.
 - `house` on `/inspect.html` is experimental: the readout was not fitted indoors and 0/6
   flights reached the target. Don't use it in the mission demo.
 
