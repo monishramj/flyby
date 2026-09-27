@@ -17,13 +17,13 @@ VECTOR_INDEX = "lead_vectors"
 PRIORITY = ("low", "moderate", "high", "critical")
 
 
-def vector(state, cfg=settings):
+def vector(state):
     """A lead's built (truth-free) state as numbers in [0, 1] for Atlas Vector Search."""
     lead, context = state.get("lead", {}), state.get("context", {})
     priority = context.get("sector_priority")
     return [
         float(lead.get("detector_conf", 0)),
-        min(float(lead.get("box_px", 0)) / cfg.LARGE_BOX_PX, 1.0),
+        min(float(lead.get("box_px", 0)) / settings.LARGE_BOX_PX, 1.0),
         float(bool(lead.get("near_structure"))),
         float(lead.get("passes", 1) > 1),
         (PRIORITY.index(priority) + 1) / len(PRIORITY) if priority in PRIORITY else 0.0,
@@ -189,7 +189,7 @@ class Writer:
         if self.db is None or not self.available:
             return {"unavailable": True, "reason": "Atlas is unavailable."}
         pipeline = [
-            {"$vectorSearch": {"index": VECTOR_INDEX, "path": "vector", "queryVector": vector(state, self.cfg),
+            {"$vectorSearch": {"index": VECTOR_INDEX, "path": "vector", "queryVector": vector(state),
                                "numCandidates": limit * 8, "limit": limit, "filter": {"seed": {"$ne": seed}}}},
             {"$group": {"_id": "$truth.type", "count": {"$sum": 1}}},
         ]

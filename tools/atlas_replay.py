@@ -11,12 +11,10 @@ from server.store.writer import COLLECTIONS, ops
 CHUNK = 1000
 
 
-def seed_of(document, seeds):
+def seed_of(document):
     """Older spooled leads predate the seed field; recover it so Writer.similar() can exclude a mission's own seed."""
     if document.get("seed") is not None:
         return document["seed"]
-    if document["run_id"] in seeds:
-        return seeds[document["run_id"]]
     parts = document["run_id"].split("-")  # MissionRun ids are {timestamp}-{seed}-{hex}
     return int(parts[1]) if len(parts) == 3 and parts[1].isdigit() else None
 
@@ -30,8 +28,6 @@ async def main(cfg=settings):
         raise SystemExit("MONGODB_URI is not set.")
     client = AsyncMongoClient(cfg.MONGODB_URI)
     db = client[cfg.MONGODB_DATABASE]
-    runs = cfg.LOG_DIR / "runs.jsonl"
-    seeds = {run["run_id"]: run.get("seed") for run in read(runs)} if runs.exists() else {}
     for name in COLLECTIONS:
         path = cfg.LOG_DIR / f"{name}.jsonl"
         if not path.exists():
@@ -40,7 +36,7 @@ async def main(cfg=settings):
         skipped = 0
         if name == "leads":
             for document in documents:
-                document["seed"] = seed_of(document, seeds)
+                document["seed"] = seed_of(document)
             kept = [document for document in documents if document["seed"] is not None]
             skipped, documents = len(documents) - len(kept), kept
         for start in range(0, len(documents), CHUNK):
