@@ -97,7 +97,7 @@ captured → decided ─┬─ auto (max prob ≥ TAU_ROUTE):
 
 awaiting_approval / awaiting_human ──approve / override──▶ dispatched | reimaging | inspecting | ignored
 
-inspecting ──after T_INSPECT_S──▶ person found → awaiting_approval (action = dispatch_ground_team)
+inspecting ──drone flies there, INSPECT_HOVER_S──▶ person found → awaiting_approval (action = dispatch_ground_team)
                                   nothing found → resolved_empty
 
 While a lead is awaiting_approval or awaiting_human: if an incident update changes its
@@ -160,8 +160,8 @@ referenced by your step first.
 | `NOISE` | T1.2 table | Detection probability and confidence |
 | `SMALL_BOX_PX` | 20 |  |
 | `MAX_PASSES` | 2 |  |
-| `T_REIMAGE_S` / `REIMAGE_BOX_MULT` / `REIMAGE_CONF_SHIFT` | 60 / 3.0 / +0.20 subjects, −0.10 decoys |  |
-| `T_INSPECT_S` | 90 |  |
+| `TRANSIT_SPEED_MPS` / `ZOOM_HOVER_S` / `REIMAGE_BOX_MULT` / `REIMAGE_CONF_SHIFT` | 12 / 10 / 3.0 / +0.20 subjects, −0.10 decoys | A reimage is a real drone visit; the sweep pauses |
+| `INSPECT_HOVER_S` | 40 | Close-in inspection is a drone visit too |
 | `TAU_ROUTE` | 0.60 | Tuned in T2.4 |
 | `LAYA_TIMEOUT_MS` | 500 | Reset to ≈3× measured p95 |
 | `RHO` | 0.9 | Share of intel messages pointing at a real subject |
@@ -633,7 +633,7 @@ T2.4. Implement tools/laya_check.py per T2.4. Print tables only; do not change d
 - **`mission/loop.py`:** `MissionRun(seed, cfg, policy, parse_mode="oracle"|"grok", sim_human=False)`. It owns the clock, scenario, captures, the lifecycle from §1, re-decision, the incident store, and the intel schedule. It emits events. Timing depends on mode:
   - **Live:** decisions are queued, so captures never wait on them.
   - **Fast (batch):** the clock doesn't advance past a lead until its decision returns. The decision is stamped `t_capture + latency_ms / 1000`.
-  - **Inspections:** resolve after `T_INSPECT_S` using truth. If `inspect.result` arrives first and the run is live, it wins.
+  - **Inspections:** the drone flies to the lead and resolves after `INSPECT_HOVER_S` using truth. If `inspect.result` arrives first and the run is live, it wins.
   - **`sim_human=True`:** routed leads get an action after `SIM_HUMAN_ROUTED_S`, and approvals happen after `SIM_HUMAN_APPROVE_S`. The simulated human picks the §4.4 optimal action with probability `SIM_HUMAN_ACC`; otherwise it picks a random different action.
 - **`server/app.py`:** at startup, loads Laya and starts the writer. `/ws/mission` streams events plus `mission.state` at 10 Hz.
 

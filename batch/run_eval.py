@@ -21,7 +21,8 @@ def subject_rows(run):
         index, t0 = None, None
         for position, capture in enumerate(run.sweep.captures()):
             if contains(capture, subject):
-                index, t0 = position, capture["t"]
+                # the real capture time: visits by the drone push later captures back
+                index, t0 = position, run.capture_times.get(capture["id"], capture["t"])
                 break
         rows.append({"seed": run.seed, "run_id": run.run_id, "object_id": subject["id"],
                      "visibility": subject["visibility"], "capture_index": index, "t0": t0})

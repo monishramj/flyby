@@ -3,7 +3,7 @@
   {
    "type": "mission.snapshot",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "seed": 7,
     "scene": {
      "seed": 7,
@@ -258,7 +258,7 @@
     "leads": [],
     "intel": [],
     "incident": {
-     "run_id": "20260927T023433-7-86ba77",
+     "run_id": "20260927T024729-7-f1cf66",
      "reports": [],
      "sector_priority": {},
      "reported_subjects": {},
@@ -272,6 +272,9 @@
       "y": 10.0
      },
      "coverage_pct": 1.36,
+     "drone_task": null,
+     "search_done": false,
+     "search_end_t": null,
      "running": false,
      "finished": false,
      "coverage_cells": [
@@ -562,7 +565,7 @@
   {
    "type": "mission.snapshot",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "seed": 7,
     "scene": {
      "seed": 7,
@@ -817,7 +820,7 @@
     "leads": [],
     "intel": [],
     "incident": {
-     "run_id": "20260927T023433-7-86ba77",
+     "run_id": "20260927T024729-7-f1cf66",
      "reports": [],
      "sector_priority": {},
      "reported_subjects": {},
@@ -831,6 +834,9 @@
       "y": 10.0
      },
      "coverage_pct": 1.36,
+     "drone_task": null,
+     "search_done": false,
+     "search_end_t": null,
      "running": false,
      "finished": false,
      "coverage_cells": [
@@ -1149,7 +1155,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1209,7 +1215,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1270,7 +1276,7 @@
    "payload": {
     "lead_id": "L-P7",
     "object_id": "P7",
-    "t_capture": 55.0,
+    "t_capture": 55.097,
     "x": 51.46148981877492,
     "y": 182.63648523917894,
     "sector": "S4",
@@ -1285,7 +1291,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 55.304
+      "t": 55.183
      }
     ]
    }
@@ -1295,7 +1301,7 @@
    "payload": {
     "lead_id": "L-D3",
     "object_id": "D3",
-    "t_capture": 80.0,
+    "t_capture": 80.122,
     "x": 76.77932738792595,
     "y": 8.4202674073267,
     "sector": "S1",
@@ -1310,7 +1316,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 80.287
+      "t": 80.304
      }
     ]
    }
@@ -1320,7 +1326,7 @@
    "payload": {
     "lead_id": "L-D5",
     "object_id": "D5",
-    "t_capture": 80.0,
+    "t_capture": 80.122,
     "x": 112.16553007463995,
     "y": 6.082930195102026,
     "sector": "S2",
@@ -1335,7 +1341,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 80.409
+      "t": 80.42
      }
     ]
    }
@@ -1373,7 +1379,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1482,7 +1488,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1582,7 +1588,7 @@
    "payload": {
     "lead_id": "L-P3",
     "object_id": "P3",
-    "t_capture": 95.0,
+    "t_capture": 95.552,
     "x": 78.91218041969613,
     "y": 134.07212870596751,
     "sector": "S4",
@@ -1597,7 +1603,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 95.378
+      "t": 95.643
      }
     ]
    }
@@ -1633,7 +1639,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1750,7 +1756,7 @@
    "payload": {
     "lead_id": "L-D1",
     "object_id": "D1",
-    "t_capture": 120.0,
+    "t_capture": 120.142,
     "x": 140.19974734433384,
     "y": 270.97865422592713,
     "sector": "S8",
@@ -1765,7 +1771,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 120.456
+      "t": 120.244
      }
     ]
    }
@@ -1775,7 +1781,7 @@
    "payload": {
     "lead_id": "L-D10",
     "object_id": "D10",
-    "t_capture": 125.0,
+    "t_capture": 125.147,
     "x": 152.2539485271015,
     "y": 257.6884192409354,
     "sector": "S8",
@@ -1790,7 +1796,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 125.354
+      "t": 125.221
      }
     ]
    }
@@ -1817,7 +1823,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -1934,7 +1940,7 @@
    "payload": {
     "lead_id": "L-D12",
     "object_id": "D12",
-    "t_capture": 145.0,
+    "t_capture": 145.131,
     "x": 117.41322232211132,
     "y": 98.68054041487993,
     "sector": "S2",
@@ -1949,7 +1955,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 145.288
+      "t": 145.223
      }
     ]
    }
@@ -1987,7 +1993,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -2126,12 +2132,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 194.319,
+    "t": 193.817,
     "drone": {
      "x": 170.0,
-     "y": 284.5493280515075
+     "y": 280.53865583613515
     },
     "coverage_pct": 63.89,
+    "drone_task": null,
+    "search_done": false,
+    "search_end_t": null,
     "running": true,
     "finished": false
    }
@@ -2141,7 +2150,7 @@
    "payload": {
     "lead_id": "L-P5",
     "object_id": "P5",
-    "t_capture": 200.0,
+    "t_capture": 200.12,
     "x": 210.0,
     "y": 280.0,
     "sector": "S9",
@@ -2156,7 +2165,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 200.211
+      "t": 200.229
      }
     ]
    }
@@ -2166,7 +2175,7 @@
    "payload": {
     "lead_id": "L-D2",
     "object_id": "D2",
-    "t_capture": 215.0,
+    "t_capture": 215.166,
     "x": 187.475613802393,
     "y": 154.09411751385903,
     "sector": "S5",
@@ -2181,7 +2190,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 215.286
+      "t": 215.268
      }
     ]
    }
@@ -2219,7 +2228,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -2409,7 +2418,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -2588,7 +2597,7 @@
    "payload": {
     "lead_id": "L-D6",
     "object_id": "D6",
-    "t_capture": 245.0,
+    "t_capture": 245.174,
     "x": 245.71384164250622,
     "y": 49.79371350781756,
     "sector": "S3",
@@ -2603,7 +2612,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 245.304
+      "t": 245.278
      }
     ]
    }
@@ -2641,7 +2650,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -2870,7 +2879,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -3088,7 +3097,7 @@
    "payload": {
     "lead_id": "L-P2",
     "object_id": "P2",
-    "t_capture": 260.0,
+    "t_capture": 260.127,
     "x": 250.0,
     "y": 150.0,
     "sector": "S6",
@@ -3103,7 +3112,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 260.412
+      "t": 260.27
      }
     ]
    }
@@ -3113,7 +3122,7 @@
    "payload": {
     "lead_id": "L-D7",
     "object_id": "D7",
-    "t_capture": 260.0,
+    "t_capture": 260.127,
     "x": 260.2963246544403,
     "y": 152.83933486184273,
     "sector": "S6",
@@ -3128,7 +3137,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 260.546
+      "t": 260.372
      }
     ]
    }
@@ -3138,7 +3147,7 @@
    "payload": {
     "lead_id": "L-D8",
     "object_id": "D8",
-    "t_capture": 260.0,
+    "t_capture": 260.127,
     "x": 250.6735714461021,
     "y": 190.5179784133326,
     "sector": "S6",
@@ -3153,7 +3162,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 260.62
+      "t": 260.438
      }
     ]
    }
@@ -3191,7 +3200,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -3431,12 +3440,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 305.381,
+    "t": 303.874,
     "drone": {
      "x": 290.0,
-     "y": 86.9533440284431
+     "y": 99.006672129035
     },
-    "coverage_pct": 98.19,
+    "coverage_pct": 97.08,
+    "drone_task": null,
+    "search_done": false,
+    "search_end_t": null,
     "running": true,
     "finished": false
    }
@@ -3472,7 +3484,7 @@
   {
    "type": "incident.update",
    "payload": {
-    "run_id": "20260927T023433-7-86ba77",
+    "run_id": "20260927T024729-7-f1cf66",
     "reports": [
      {
       "sector": "S1",
@@ -3706,7 +3718,7 @@
    "payload": {
     "lead_id": "L-P6",
     "object_id": "P6",
-    "t_capture": 310.0,
+    "t_capture": 311.422,
     "x": 291.7984428277466,
     "y": 67.43952248832369,
     "sector": "S3",
@@ -3721,7 +3733,7 @@
     "status_history": [
      {
       "status": "captured",
-      "t": 313.809
+      "t": 311.483
      }
     ]
    }
@@ -3729,103 +3741,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 354.719,
+    "t": 352.185,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 399.942,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 440.507,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 481.002,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 521.422,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 561.856,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 602.733,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 643.237,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 315.105,
     "running": true,
     "finished": false
    }
@@ -3838,7 +3762,7 @@
     "lead": {
      "lead_id": "L-P7",
      "object_id": "P7",
-     "t_capture": 55.0,
+     "t_capture": 55.097,
      "x": 51.46148981877492,
      "y": 182.63648523917894,
      "sector": "S4",
@@ -3860,22 +3784,22 @@
        },
        "urgency": 0.9319,
        "p_person": 0.0973,
-       "latency_ms": 306.43479200080037,
+       "latency_ms": 165.44470898224972,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 669.65
+       "t": 386.91
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 55.304
+       "t": 55.183
       },
       {
        "status": "awaiting_approval",
-       "t": 669.65
+       "t": 386.91
       }
      ],
      "person_chance": 0.47,
@@ -3912,7 +3836,7 @@
       },
       "urgency": 0.9319,
       "p_person": 0.0973,
-      "latency_ms": 306.43479200080037,
+      "latency_ms": 165.44470898224972,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -3930,7 +3854,7 @@
      },
      "urgency": 0.9319,
      "p_person": 0.0973,
-     "latency_ms": 306.43479200080037,
+     "latency_ms": 165.44470898224972,
      "used_fallback": false,
      "routed_to_human": false,
      "source": "laya",
@@ -3946,7 +3870,7 @@
     "lead": {
      "lead_id": "L-P7",
      "object_id": "P7",
-     "t_capture": 55.0,
+     "t_capture": 55.097,
      "x": 51.46148981877492,
      "y": 182.63648523917894,
      "sector": "S4",
@@ -3968,26 +3892,26 @@
        },
        "urgency": 0.9319,
        "p_person": 0.0973,
-       "latency_ms": 306.43479200080037,
+       "latency_ms": 165.44470898224972,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 669.65
+       "t": 386.91
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 55.304
+       "t": 55.183
       },
       {
        "status": "awaiting_approval",
-       "t": 669.65
+       "t": 386.91
       },
       {
        "status": "inspecting",
-       "t": 671.628
+       "t": 388.288
       }
      ],
      "person_chance": 0.47,
@@ -4024,7 +3948,7 @@
       },
       "urgency": 0.9319,
       "p_person": 0.0973,
-      "latency_ms": 306.43479200080037,
+      "latency_ms": 165.44470898224972,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -4034,7 +3958,7 @@
      "human": {
       "kind": "approve",
       "action": "close_in_inspect",
-      "t": 671.62
+      "t": 388.285
      },
      "final_action": "close_in_inspect"
     }
@@ -4047,32 +3971,6 @@
    }
   },
   {
-   "type": "mission.state",
-   "payload": {
-    "t": 713.33,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 753.628,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
    "type": "lead.decided",
    "payload": {
     "lead_id": "L-P7",
@@ -4080,7 +3978,7 @@
     "lead": {
      "lead_id": "L-P7",
      "object_id": "P7",
-     "t_capture": 55.0,
+     "t_capture": 55.097,
      "x": 51.46148981877492,
      "y": 182.63648523917894,
      "sector": "S4",
@@ -4102,12 +4000,12 @@
        },
        "urgency": 0.9319,
        "p_person": 0.0973,
-       "latency_ms": 306.43479200080037,
+       "latency_ms": 165.44470898224972,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 669.65
+       "t": 386.91
       },
       {
        "action": "dispatch_ground_team",
@@ -4119,30 +4017,30 @@
        },
        "urgency": 0.9319,
        "p_person": 0.0973,
-       "latency_ms": 306.43479200080037,
+       "latency_ms": 165.44470898224972,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "inspection",
        "version": 1,
-       "t": 762.522
+       "t": 453.261
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 55.304
+       "t": 55.183
       },
       {
        "status": "awaiting_approval",
-       "t": 669.65
+       "t": 386.91
       },
       {
        "status": "inspecting",
-       "t": 671.628
+       "t": 388.288
       },
       {
        "status": "awaiting_approval",
-       "t": 762.528
+       "t": 453.265
       }
      ],
      "person_chance": 0.47,
@@ -4179,7 +4077,7 @@
       },
       "urgency": 0.9319,
       "p_person": 0.0973,
-      "latency_ms": 306.43479200080037,
+      "latency_ms": 165.44470898224972,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "inspection",
@@ -4189,14 +4087,14 @@
      "human": {
       "kind": "approve",
       "action": "close_in_inspect",
-      "t": 671.62
+      "t": 388.285
      },
      "final_action": "close_in_inspect",
      "inspection": {
       "found": true,
       "source": "truth",
       "collided": false,
-      "t": 762.501
+      "t": 453.245
      },
      "inspection_found": true
     },
@@ -4210,7 +4108,7 @@
      },
      "urgency": 0.9319,
      "p_person": 0.0973,
-     "latency_ms": 306.43479200080037,
+     "latency_ms": 165.44470898224972,
      "used_fallback": false,
      "routed_to_human": false,
      "source": "inspection",
@@ -4221,12 +4119,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 803.642,
+    "t": 493.96,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4234,12 +4135,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 844.06,
+    "t": 534.214,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4247,12 +4151,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 884.415,
+    "t": 574.5,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4260,12 +4167,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 924.892,
+    "t": 614.837,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4273,12 +4183,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 965.354,
+    "t": 655.121,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4286,90 +4199,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1005.732,
+    "t": 695.38,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1046.155,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1086.534,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1126.891,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1167.243,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1207.862,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1248.359,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4382,7 +4220,7 @@
     "lead": {
      "lead_id": "L-D3",
      "object_id": "D3",
-     "t_capture": 80.0,
+     "t_capture": 80.122,
      "x": 76.77932738792595,
      "y": 8.4202674073267,
      "sector": "S1",
@@ -4404,22 +4242,22 @@
        },
        "urgency": 0.696,
        "p_person": 0.1598,
-       "latency_ms": 290.72474999702536,
+       "latency_ms": 172.2471250104718,
        "used_fallback": false,
        "routed_to_human": true,
        "source": "laya",
        "version": 1,
-       "t": 1250.914
+       "t": 731.468
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 80.287
+       "t": 80.304
       },
       {
        "status": "awaiting_human",
-       "t": 1250.914
+       "t": 731.468
       }
      ],
      "person_chance": 0.61,
@@ -4458,7 +4296,7 @@
       },
       "urgency": 0.696,
       "p_person": 0.1598,
-      "latency_ms": 290.72474999702536,
+      "latency_ms": 172.2471250104718,
       "used_fallback": false,
       "routed_to_human": true,
       "source": "laya",
@@ -4476,7 +4314,7 @@
      },
      "urgency": 0.696,
      "p_person": 0.1598,
-     "latency_ms": 290.72474999702536,
+     "latency_ms": 172.2471250104718,
      "used_fallback": false,
      "routed_to_human": true,
      "source": "laya",
@@ -4492,7 +4330,7 @@
     "lead": {
      "lead_id": "L-D3",
      "object_id": "D3",
-     "t_capture": 80.0,
+     "t_capture": 80.122,
      "x": 76.77932738792595,
      "y": 8.4202674073267,
      "sector": "S1",
@@ -4514,26 +4352,26 @@
        },
        "urgency": 0.696,
        "p_person": 0.1598,
-       "latency_ms": 290.72474999702536,
+       "latency_ms": 172.2471250104718,
        "used_fallback": false,
        "routed_to_human": true,
        "source": "laya",
        "version": 1,
-       "t": 1250.914
+       "t": 731.468
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 80.287
+       "t": 80.304
       },
       {
        "status": "awaiting_human",
-       "t": 1250.914
+       "t": 731.468
       },
       {
        "status": "dispatched",
-       "t": 1252.69
+       "t": 732.762
       }
      ],
      "person_chance": 0.61,
@@ -4572,7 +4410,7 @@
       },
       "urgency": 0.696,
       "p_person": 0.1598,
-      "latency_ms": 290.72474999702536,
+      "latency_ms": 172.2471250104718,
       "used_fallback": false,
       "routed_to_human": true,
       "source": "laya",
@@ -4582,7 +4420,7 @@
      "human": {
       "kind": "override",
       "action": "dispatch_ground_team",
-      "t": 1252.682
+      "t": 732.759
      },
      "final_action": "dispatch_ground_team"
     }
@@ -4602,7 +4440,7 @@
      "nearest_landmark": "south_pump",
      "p_person": 0.1598,
      "urgency": 0.696,
-     "time": 1253.872,
+     "time": 733.352,
      "text": {
       "headline": "Ground team dispatch approved",
       "what_drone_saw": "A possible person was flagged by the drone detector.",
@@ -4621,12 +4459,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1295.065,
+    "t": 774.241,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4634,12 +4475,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1335.536,
+    "t": 814.575,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4647,12 +4491,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1375.965,
+    "t": 854.86,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4660,12 +4507,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1416.491,
+    "t": 895.104,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4673,12 +4523,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1456.858,
+    "t": 935.373,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4686,12 +4539,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1497.224,
+    "t": 975.799,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4699,90 +4555,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1537.523,
+    "t": 1016.23,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1577.882,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1618.291,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1658.712,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1699.772,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1740.176,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1780.527,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 477.822,
     "running": true,
     "finished": false
    }
@@ -4795,7 +4576,7 @@
     "lead": {
      "lead_id": "L-D5",
      "object_id": "D5",
-     "t_capture": 80.0,
+     "t_capture": 80.122,
      "x": 112.16553007463995,
      "y": 6.082930195102026,
      "sector": "S2",
@@ -4817,22 +4598,22 @@
        },
        "urgency": 1.564,
        "p_person": 0.1514,
-       "latency_ms": 267.4168329976965,
+       "latency_ms": 157.96416698140092,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 1785.727
+       "t": 1047.42
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 80.409
+       "t": 80.42
       },
       {
        "status": "awaiting_approval",
-       "t": 1785.727
+       "t": 1047.42
       }
      ],
      "person_chance": 0.47,
@@ -4870,7 +4651,7 @@
       },
       "urgency": 1.564,
       "p_person": 0.1514,
-      "latency_ms": 267.4168329976965,
+      "latency_ms": 157.96416698140092,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -4888,7 +4669,7 @@
      },
      "urgency": 1.564,
      "p_person": 0.1514,
-     "latency_ms": 267.4168329976965,
+     "latency_ms": 157.96416698140092,
      "used_fallback": false,
      "routed_to_human": false,
      "source": "laya",
@@ -4904,7 +4685,7 @@
     "lead": {
      "lead_id": "L-D5",
      "object_id": "D5",
-     "t_capture": 80.0,
+     "t_capture": 80.122,
      "x": 112.16553007463995,
      "y": 6.082930195102026,
      "sector": "S2",
@@ -4926,26 +4707,26 @@
        },
        "urgency": 1.564,
        "p_person": 0.1514,
-       "latency_ms": 267.4168329976965,
+       "latency_ms": 157.96416698140092,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 1785.727
+       "t": 1047.42
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 80.409
+       "t": 80.42
       },
       {
        "status": "awaiting_approval",
-       "t": 1785.727
+       "t": 1047.42
       },
       {
        "status": "inspecting",
-       "t": 1787.927
+       "t": 1049.027
       }
      ],
      "person_chance": 0.47,
@@ -4983,7 +4764,7 @@
       },
       "urgency": 1.564,
       "p_person": 0.1514,
-      "latency_ms": 267.4168329976965,
+      "latency_ms": 157.96416698140092,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -4993,7 +4774,7 @@
      "human": {
       "kind": "approve",
       "action": "close_in_inspect",
-      "t": 1787.921
+      "t": 1049.024
      },
      "final_action": "close_in_inspect"
     }
@@ -5006,32 +4787,6 @@
    }
   },
   {
-   "type": "mission.state",
-   "payload": {
-    "t": 1830.125,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 1870.534,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
    "type": "lead.status",
    "payload": {
     "lead_id": "L-D5",
@@ -5039,7 +4794,7 @@
     "lead": {
      "lead_id": "L-D5",
      "object_id": "D5",
-     "t_capture": 80.0,
+     "t_capture": 80.122,
      "x": 112.16553007463995,
      "y": 6.082930195102026,
      "sector": "S2",
@@ -5061,30 +4816,30 @@
        },
        "urgency": 1.564,
        "p_person": 0.1514,
-       "latency_ms": 267.4168329976965,
+       "latency_ms": 157.96416698140092,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 1785.727
+       "t": 1047.42
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 80.409
+       "t": 80.42
       },
       {
        "status": "awaiting_approval",
-       "t": 1785.727
+       "t": 1047.42
       },
       {
        "status": "inspecting",
-       "t": 1787.927
+       "t": 1049.027
       },
       {
        "status": "resolved_empty",
-       "t": 1878.873
+       "t": 1104.189
       }
      ],
      "person_chance": 0.47,
@@ -5122,7 +4877,7 @@
       },
       "urgency": 1.564,
       "p_person": 0.1514,
-      "latency_ms": 267.4168329976965,
+      "latency_ms": 157.96416698140092,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -5132,14 +4887,14 @@
      "human": {
       "kind": "approve",
       "action": "close_in_inspect",
-      "t": 1787.921
+      "t": 1049.024
      },
      "final_action": "close_in_inspect",
      "inspection": {
       "found": false,
       "source": "truth",
       "collided": false,
-      "t": 1878.861
+      "t": 1104.181
      },
      "inspection_found": false
     }
@@ -5148,12 +4903,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1919.849,
+    "t": 1144.952,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5161,12 +4919,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 1960.241,
+    "t": 1185.29,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5174,12 +4935,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2000.666,
+    "t": 1225.565,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5187,12 +4951,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2041.076,
+    "t": 1265.893,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5200,64 +4967,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2081.495,
+    "t": 1306.197,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 2121.869,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 2162.24,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 2202.81,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
-    "running": true,
-    "finished": false
-   }
-  },
-  {
-   "type": "mission.state",
-   "payload": {
-    "t": 2243.207,
-    "drone": {
-     "x": 290.0,
-     "y": 10.0
-    },
-    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5270,7 +4988,7 @@
     "lead": {
      "lead_id": "L-P3",
      "object_id": "P3",
-     "t_capture": 95.0,
+     "t_capture": 95.552,
      "x": 78.91218041969613,
      "y": 134.07212870596751,
      "sector": "S4",
@@ -5292,22 +5010,22 @@
        },
        "urgency": 1.1389,
        "p_person": 0.5252,
-       "latency_ms": 232.4793750012759,
+       "latency_ms": 141.76845899783075,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 2251.334
+       "t": 1331.04
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 95.378
+       "t": 95.643
       },
       {
        "status": "awaiting_approval",
-       "t": 2251.334
+       "t": 1331.04
       }
      ],
      "person_chance": 0.96,
@@ -5344,7 +5062,7 @@
       },
       "urgency": 1.1389,
       "p_person": 0.5252,
-      "latency_ms": 232.4793750012759,
+      "latency_ms": 141.76845899783075,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -5362,7 +5080,7 @@
      },
      "urgency": 1.1389,
      "p_person": 0.5252,
-     "latency_ms": 232.4793750012759,
+     "latency_ms": 141.76845899783075,
      "used_fallback": false,
      "routed_to_human": false,
      "source": "laya",
@@ -5378,7 +5096,7 @@
     "lead": {
      "lead_id": "L-P3",
      "object_id": "P3",
-     "t_capture": 95.0,
+     "t_capture": 95.552,
      "x": 78.91218041969613,
      "y": 134.07212870596751,
      "sector": "S4",
@@ -5400,26 +5118,26 @@
        },
        "urgency": 1.1389,
        "p_person": 0.5252,
-       "latency_ms": 232.4793750012759,
+       "latency_ms": 141.76845899783075,
        "used_fallback": false,
        "routed_to_human": false,
        "source": "laya",
        "version": 1,
-       "t": 2251.334
+       "t": 1331.04
       }
      ],
      "status_history": [
       {
        "status": "captured",
-       "t": 95.378
+       "t": 95.643
       },
       {
        "status": "awaiting_approval",
-       "t": 2251.334
+       "t": 1331.04
       },
       {
        "status": "dispatched",
-       "t": 2253.903
+       "t": 1332.383
       }
      ],
      "person_chance": 0.96,
@@ -5456,7 +5174,7 @@
       },
       "urgency": 1.1389,
       "p_person": 0.5252,
-      "latency_ms": 232.4793750012759,
+      "latency_ms": 141.76845899783075,
       "used_fallback": false,
       "routed_to_human": false,
       "source": "laya",
@@ -5466,7 +5184,7 @@
      "human": {
       "kind": "approve",
       "action": "dispatch_ground_team",
-      "t": 2253.896
+      "t": 1332.38
      },
      "final_action": "dispatch_ground_team"
     }
@@ -5486,7 +5204,7 @@
      "nearest_landmark": "cedar_church",
      "p_person": 0.5252,
      "urgency": 1.1389,
-     "time": 2254.663,
+     "time": 1332.957,
      "text": {
       "headline": "Ground team dispatch approved",
       "what_drone_saw": "A possible person was flagged by the drone detector.",
@@ -5505,12 +5223,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2295.493,
+    "t": 1373.741,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5518,12 +5239,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2335.858,
+    "t": 1414.171,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5531,12 +5255,15 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2376.328,
+    "t": 1454.525,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }
@@ -5544,12 +5271,1025 @@
   {
    "type": "mission.state",
    "payload": {
-    "t": 2416.807,
+    "t": 1494.847,
     "drone": {
      "x": 290.0,
      "y": 10.0
     },
     "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1535.183,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1575.62,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1616.035,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "lead.decided",
+   "payload": {
+    "lead_id": "L-D1",
+    "status": "awaiting_human",
+    "lead": {
+     "lead_id": "L-D1",
+     "object_id": "D1",
+     "t_capture": 120.142,
+     "x": 140.19974734433384,
+     "y": 270.97865422592713,
+     "sector": "S8",
+     "pass": 1,
+     "detector_conf": 0.5789690983415865,
+     "box_px": 13.856406460551021,
+     "altitude_m": 40.0,
+     "near_structure": false,
+     "nearest_landmark": "hill_shelter",
+     "status": "awaiting_human",
+     "history": [
+      {
+       "action": "close_in_inspect",
+       "probs": {
+        "dispatch_ground_team": 0.1459,
+        "reimage_zoom": 0.1493,
+        "close_in_inspect": 0.3911,
+        "ignore": 0.3137
+       },
+       "urgency": 0.9658,
+       "p_person": 0.1465,
+       "latency_ms": 152.57679199567065,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 1636.202
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 120.244
+      },
+      {
+       "status": "awaiting_human",
+       "t": 1636.202
+      }
+     ],
+     "person_chance": 0.47,
+     "state": {
+      "lead": {
+       "detector_conf": 0.5789690983415865,
+       "detector_band": "medium",
+       "box_px": 13.856406460551021,
+       "size_band": "small",
+       "altitude_m": 40.0,
+       "sector": "S8",
+       "near_structure": false,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 92.607,
+       "near_last_known_point": true,
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 40,
+       "open_leads": 5
+      }
+     },
+     "model_text": "The detector is unsure (58%) this is a person. It is out in the open. The image is tiny. It is near the last known point of a missing person.",
+     "decision": {
+      "action": "close_in_inspect",
+      "probs": {
+       "dispatch_ground_team": 0.1459,
+       "reimage_zoom": 0.1493,
+       "close_in_inspect": 0.3911,
+       "ignore": 0.3137
+      },
+      "urgency": 0.9658,
+      "p_person": 0.1465,
+      "latency_ms": 152.57679199567065,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "reimage_zoom"
+    },
+    "decision": {
+     "action": "close_in_inspect",
+     "probs": {
+      "dispatch_ground_team": 0.1459,
+      "reimage_zoom": 0.1493,
+      "close_in_inspect": 0.3911,
+      "ignore": 0.3137
+     },
+     "urgency": 0.9658,
+     "p_person": 0.1465,
+     "latency_ms": 152.57679199567065,
+     "used_fallback": false,
+     "routed_to_human": true,
+     "source": "laya",
+     "version": 1
+    }
+   }
+  },
+  {
+   "type": "lead.status",
+   "payload": {
+    "lead_id": "L-D1",
+    "status": "dispatched",
+    "lead": {
+     "lead_id": "L-D1",
+     "object_id": "D1",
+     "t_capture": 120.142,
+     "x": 140.19974734433384,
+     "y": 270.97865422592713,
+     "sector": "S8",
+     "pass": 1,
+     "detector_conf": 0.5789690983415865,
+     "box_px": 13.856406460551021,
+     "altitude_m": 40.0,
+     "near_structure": false,
+     "nearest_landmark": "hill_shelter",
+     "status": "dispatched",
+     "history": [
+      {
+       "action": "close_in_inspect",
+       "probs": {
+        "dispatch_ground_team": 0.1459,
+        "reimage_zoom": 0.1493,
+        "close_in_inspect": 0.3911,
+        "ignore": 0.3137
+       },
+       "urgency": 0.9658,
+       "p_person": 0.1465,
+       "latency_ms": 152.57679199567065,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 1636.202
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 120.244
+      },
+      {
+       "status": "awaiting_human",
+       "t": 1636.202
+      },
+      {
+       "status": "dispatched",
+       "t": 1637.725
+      }
+     ],
+     "person_chance": 0.47,
+     "state": {
+      "lead": {
+       "detector_conf": 0.5789690983415865,
+       "detector_band": "medium",
+       "box_px": 13.856406460551021,
+       "size_band": "small",
+       "altitude_m": 40.0,
+       "sector": "S8",
+       "near_structure": false,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 92.607,
+       "near_last_known_point": true,
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 40,
+       "open_leads": 5
+      }
+     },
+     "model_text": "The detector is unsure (58%) this is a person. It is out in the open. The image is tiny. It is near the last known point of a missing person.",
+     "decision": {
+      "action": "close_in_inspect",
+      "probs": {
+       "dispatch_ground_team": 0.1459,
+       "reimage_zoom": 0.1493,
+       "close_in_inspect": 0.3911,
+       "ignore": 0.3137
+      },
+      "urgency": 0.9658,
+      "p_person": 0.1465,
+      "latency_ms": 152.57679199567065,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "reimage_zoom",
+     "human": {
+      "kind": "override",
+      "action": "dispatch_ground_team",
+      "t": 1637.722
+     },
+     "final_action": "dispatch_ground_team"
+    }
+   }
+  },
+  {
+   "type": "dispatch.created",
+   "payload": {
+    "lead_id": "L-D1",
+    "brief": {
+     "lead_id": "L-D1",
+     "coordinates": {
+      "x": 140.19974734433384,
+      "y": 270.97865422592713
+     },
+     "sector": "S8",
+     "nearest_landmark": "hill_shelter",
+     "p_person": 0.1465,
+     "urgency": 0.9658,
+     "time": 1638.264,
+     "text": {
+      "headline": "Ground team dispatch approved",
+      "what_drone_saw": "A possible person was flagged by the drone detector.",
+      "access_notes": "Check access and reported hazards before approach.",
+      "confidence_statement": "An automated lead requires verification by the responding crew."
+     },
+     "source": "template",
+     "digits_stripped": false
+    },
+    "pin": {
+     "x": 140.19974734433384,
+     "y": 270.97865422592713
+    }
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1678.971,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1719.229,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1759.624,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1799.932,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1840.153,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1880.41,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1920.634,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "lead.decided",
+   "payload": {
+    "lead_id": "L-D10",
+    "status": "awaiting_human",
+    "lead": {
+     "lead_id": "L-D10",
+     "object_id": "D10",
+     "t_capture": 125.147,
+     "x": 152.2539485271015,
+     "y": 257.6884192409354,
+     "sector": "S8",
+     "pass": 1,
+     "detector_conf": 0.3519608199874427,
+     "box_px": 13.856406460551021,
+     "altitude_m": 40.0,
+     "near_structure": true,
+     "nearest_landmark": "hill_shelter",
+     "status": "awaiting_human",
+     "history": [
+      {
+       "action": "ignore",
+       "probs": {
+        "dispatch_ground_team": 0.1338,
+        "reimage_zoom": 0.1223,
+        "close_in_inspect": 0.3014,
+        "ignore": 0.4425
+       },
+       "urgency": 0.798,
+       "p_person": 0.0674,
+       "latency_ms": 147.73541598697193,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 1931.723
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 125.221
+      },
+      {
+       "status": "awaiting_human",
+       "t": 1931.723
+      }
+     ],
+     "person_chance": 0.61,
+     "state": {
+      "lead": {
+       "detector_conf": 0.3519608199874427,
+       "detector_band": "low",
+       "box_px": 13.856406460551021,
+       "size_band": "small",
+       "altitude_m": 40.0,
+       "sector": "S8",
+       "near_structure": true,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 102.543,
+       "near_last_known_point": false,
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 42,
+       "open_leads": 6
+      }
+     },
+     "model_text": "The detector is not confident (35%) this is a person. It is next to a building or under a roof. The image is tiny.",
+     "decision": {
+      "action": "ignore",
+      "probs": {
+       "dispatch_ground_team": 0.1338,
+       "reimage_zoom": 0.1223,
+       "close_in_inspect": 0.3014,
+       "ignore": 0.4425
+      },
+      "urgency": 0.798,
+      "p_person": 0.0674,
+      "latency_ms": 147.73541598697193,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "ignore"
+    },
+    "decision": {
+     "action": "ignore",
+     "probs": {
+      "dispatch_ground_team": 0.1338,
+      "reimage_zoom": 0.1223,
+      "close_in_inspect": 0.3014,
+      "ignore": 0.4425
+     },
+     "urgency": 0.798,
+     "p_person": 0.0674,
+     "latency_ms": 147.73541598697193,
+     "used_fallback": false,
+     "routed_to_human": true,
+     "source": "laya",
+     "version": 1
+    }
+   }
+  },
+  {
+   "type": "lead.status",
+   "payload": {
+    "lead_id": "L-D10",
+    "status": "dispatched",
+    "lead": {
+     "lead_id": "L-D10",
+     "object_id": "D10",
+     "t_capture": 125.147,
+     "x": 152.2539485271015,
+     "y": 257.6884192409354,
+     "sector": "S8",
+     "pass": 1,
+     "detector_conf": 0.3519608199874427,
+     "box_px": 13.856406460551021,
+     "altitude_m": 40.0,
+     "near_structure": true,
+     "nearest_landmark": "hill_shelter",
+     "status": "dispatched",
+     "history": [
+      {
+       "action": "ignore",
+       "probs": {
+        "dispatch_ground_team": 0.1338,
+        "reimage_zoom": 0.1223,
+        "close_in_inspect": 0.3014,
+        "ignore": 0.4425
+       },
+       "urgency": 0.798,
+       "p_person": 0.0674,
+       "latency_ms": 147.73541598697193,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 1931.723
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 125.221
+      },
+      {
+       "status": "awaiting_human",
+       "t": 1931.723
+      },
+      {
+       "status": "dispatched",
+       "t": 1933.118
+      }
+     ],
+     "person_chance": 0.61,
+     "state": {
+      "lead": {
+       "detector_conf": 0.3519608199874427,
+       "detector_band": "low",
+       "box_px": 13.856406460551021,
+       "size_band": "small",
+       "altitude_m": 40.0,
+       "sector": "S8",
+       "near_structure": true,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 102.543,
+       "near_last_known_point": false,
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 42,
+       "open_leads": 6
+      }
+     },
+     "model_text": "The detector is not confident (35%) this is a person. It is next to a building or under a roof. The image is tiny.",
+     "decision": {
+      "action": "ignore",
+      "probs": {
+       "dispatch_ground_team": 0.1338,
+       "reimage_zoom": 0.1223,
+       "close_in_inspect": 0.3014,
+       "ignore": 0.4425
+      },
+      "urgency": 0.798,
+      "p_person": 0.0674,
+      "latency_ms": 147.73541598697193,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "ignore",
+     "human": {
+      "kind": "override",
+      "action": "dispatch_ground_team",
+      "t": 1933.116
+     },
+     "final_action": "dispatch_ground_team"
+    }
+   }
+  },
+  {
+   "type": "dispatch.created",
+   "payload": {
+    "lead_id": "L-D10",
+    "brief": {
+     "lead_id": "L-D10",
+     "coordinates": {
+      "x": 152.2539485271015,
+      "y": 257.6884192409354
+     },
+     "sector": "S8",
+     "nearest_landmark": "hill_shelter",
+     "p_person": 0.0674,
+     "urgency": 0.798,
+     "time": 1933.665,
+     "text": {
+      "headline": "Ground team dispatch approved",
+      "what_drone_saw": "A possible person was flagged by the drone detector.",
+      "access_notes": "Check access and reported hazards before approach.",
+      "confidence_statement": "An automated lead requires verification by the responding crew."
+     },
+     "source": "template",
+     "digits_stripped": false
+    },
+    "pin": {
+     "x": 152.2539485271015,
+     "y": 257.6884192409354
+    }
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 1974.449,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2014.915,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2055.316,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2095.669,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2135.958,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2176.279,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2216.534,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
+    "running": true,
+    "finished": false
+   }
+  },
+  {
+   "type": "lead.decided",
+   "payload": {
+    "lead_id": "L-D12",
+    "status": "awaiting_human",
+    "lead": {
+     "lead_id": "L-D12",
+     "object_id": "D12",
+     "t_capture": 145.131,
+     "x": 117.41322232211132,
+     "y": 98.68054041487993,
+     "sector": "S2",
+     "pass": 1,
+     "detector_conf": 0.4435989258433722,
+     "box_px": 20.784609690826528,
+     "altitude_m": 40.0,
+     "near_structure": false,
+     "nearest_landmark": "central_market",
+     "status": "awaiting_human",
+     "history": [
+      {
+       "action": "ignore",
+       "probs": {
+        "dispatch_ground_team": 0.193019301930193,
+        "reimage_zoom": 0.0842084208420842,
+        "close_in_inspect": 0.146014601460146,
+        "ignore": 0.5767576757675767
+       },
+       "urgency": 1.2846,
+       "p_person": 0.2161,
+       "latency_ms": 147.33370899921283,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 2226.379
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 145.223
+      },
+      {
+       "status": "awaiting_human",
+       "t": 2226.379
+      }
+     ],
+     "person_chance": 0.13,
+     "state": {
+      "lead": {
+       "detector_conf": 0.4435989258433722,
+       "detector_band": "low",
+       "box_px": 20.784609690826528,
+       "size_band": "medium",
+       "altitude_m": 40.0,
+       "sector": "S2",
+       "near_structure": false,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 165.657,
+       "near_last_known_point": false,
+       "sector_priority": "high",
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 49,
+       "open_leads": 7
+      }
+     },
+     "model_text": "The detector is not confident (44%) this is a person. It is out in the open. The image is clear. The sector is high priority.",
+     "decision": {
+      "action": "ignore",
+      "probs": {
+       "dispatch_ground_team": 0.193019301930193,
+       "reimage_zoom": 0.0842084208420842,
+       "close_in_inspect": 0.146014601460146,
+       "ignore": 0.5767576757675767
+      },
+      "urgency": 1.2846,
+      "p_person": 0.2161,
+      "latency_ms": 147.33370899921283,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "ignore"
+    },
+    "decision": {
+     "action": "ignore",
+     "probs": {
+      "dispatch_ground_team": 0.193019301930193,
+      "reimage_zoom": 0.0842084208420842,
+      "close_in_inspect": 0.146014601460146,
+      "ignore": 0.5767576757675767
+     },
+     "urgency": 1.2846,
+     "p_person": 0.2161,
+     "latency_ms": 147.33370899921283,
+     "used_fallback": false,
+     "routed_to_human": true,
+     "source": "laya",
+     "version": 1
+    }
+   }
+  },
+  {
+   "type": "lead.status",
+   "payload": {
+    "lead_id": "L-D12",
+    "status": "dispatched",
+    "lead": {
+     "lead_id": "L-D12",
+     "object_id": "D12",
+     "t_capture": 145.131,
+     "x": 117.41322232211132,
+     "y": 98.68054041487993,
+     "sector": "S2",
+     "pass": 1,
+     "detector_conf": 0.4435989258433722,
+     "box_px": 20.784609690826528,
+     "altitude_m": 40.0,
+     "near_structure": false,
+     "nearest_landmark": "central_market",
+     "status": "dispatched",
+     "history": [
+      {
+       "action": "ignore",
+       "probs": {
+        "dispatch_ground_team": 0.193019301930193,
+        "reimage_zoom": 0.0842084208420842,
+        "close_in_inspect": 0.146014601460146,
+        "ignore": 0.5767576757675767
+       },
+       "urgency": 1.2846,
+       "p_person": 0.2161,
+       "latency_ms": 147.33370899921283,
+       "used_fallback": false,
+       "routed_to_human": true,
+       "source": "laya",
+       "version": 1,
+       "t": 2226.379
+      }
+     ],
+     "status_history": [
+      {
+       "status": "captured",
+       "t": 145.223
+      },
+      {
+       "status": "awaiting_human",
+       "t": 2226.379
+      },
+      {
+       "status": "dispatched",
+       "t": 2227.67
+      }
+     ],
+     "person_chance": 0.13,
+     "state": {
+      "lead": {
+       "detector_conf": 0.4435989258433722,
+       "detector_band": "low",
+       "box_px": 20.784609690826528,
+       "size_band": "medium",
+       "altitude_m": 40.0,
+       "sector": "S2",
+       "near_structure": false,
+       "passes": 1
+      },
+      "context": {
+       "dist_to_last_known_point_m": 165.657,
+       "near_last_known_point": false,
+       "sector_priority": "high",
+       "hazards_nearby": [],
+       "confirmed_subjects_in_sector": 0
+      },
+      "mission": {
+       "coverage_pct": 49,
+       "open_leads": 7
+      }
+     },
+     "model_text": "The detector is not confident (44%) this is a person. It is out in the open. The image is clear. The sector is high priority.",
+     "decision": {
+      "action": "ignore",
+      "probs": {
+       "dispatch_ground_team": 0.193019301930193,
+       "reimage_zoom": 0.0842084208420842,
+       "close_in_inspect": 0.146014601460146,
+       "ignore": 0.5767576757675767
+      },
+      "urgency": 1.2846,
+      "p_person": 0.2161,
+      "latency_ms": 147.33370899921283,
+      "used_fallback": false,
+      "routed_to_human": true,
+      "source": "laya",
+      "version": 1
+     },
+     "baseline_rule": "ignore",
+     "human": {
+      "kind": "override",
+      "action": "dispatch_ground_team",
+      "t": 2227.668
+     },
+     "final_action": "dispatch_ground_team"
+    }
+   }
+  },
+  {
+   "type": "dispatch.created",
+   "payload": {
+    "lead_id": "L-D12",
+    "brief": {
+     "lead_id": "L-D12",
+     "coordinates": {
+      "x": 117.41322232211132,
+      "y": 98.68054041487993
+     },
+     "sector": "S2",
+     "nearest_landmark": "central_market",
+     "p_person": 0.2161,
+     "urgency": 1.2846,
+     "time": 2228.227,
+     "text": {
+      "headline": "Ground team dispatch approved",
+      "what_drone_saw": "A possible person was flagged by the drone detector.",
+      "access_notes": "Check access and reported hazards before approach.",
+      "confidence_statement": "An automated lead requires verification by the responding crew."
+     },
+     "source": "template",
+     "digits_stripped": false
+    },
+    "pin": {
+     "x": 117.41322232211132,
+     "y": 98.68054041487993
+    }
+   }
+  },
+  {
+   "type": "mission.state",
+   "payload": {
+    "t": 2269.025,
+    "drone": {
+     "x": 290.0,
+     "y": 10.0
+    },
+    "coverage_pct": 100.0,
+    "drone_task": null,
+    "search_done": true,
+    "search_end_t": 1119.05,
     "running": true,
     "finished": false
    }

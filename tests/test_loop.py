@@ -92,7 +92,7 @@ async def test_inspection_resolves_from_truth_after_the_timer():
         assert lead["status"] == "awaiting_approval"
         assert run.approve(lead["lead_id"]) is True
         assert lead["status"] == "inspecting"
-    await run.clock.advance_to(run.clock.now + cfg.T_INSPECT_S + 1)
+    await run.clock.advance_to(run.clock.now + 600)  # the drone flies to each lead in turn and looks
     assert found["decision"]["action"] == "dispatch_ground_team"
     assert found["decision"]["probs"]["dispatch_ground_team"] == 1
     assert found["status"] == "awaiting_approval"
@@ -263,4 +263,36 @@ async def test_the_rule_obeys_the_same_close_gate():
     run._register(lead)
     await run._decide(lead)
     assert lead["decision"]["action"] == "ignore" and lead["status"] == "awaiting_human"
+    await run.stop()
+
+
+async def test_the_drone_reroutes_to_reimage_and_the_sweep_resumes_later():
+    cfg = fast_settings()
+    run = MissionRun(3, cfg, fast=True, policy="laya", runtime=FakeRuntime(action="reimage_zoom"))
+    await run.start()
+    try:
+        planned = {capture["id"]: capture["t"] for capture in run.sweep.captures()}
+        late = [cid for cid, t in run.capture_times.items() if t > planned[cid] + 1e-6]
+        assert late, "visits pushed later captures back"
+        assert max(run.capture_times.values()) > max(planned.values())
+        assert all(lead["pass"] == 2 for lead in run.leads.values() if lead["history"] and len(lead["history"]) > 1
+                   and lead["history"][0]["action"] == "reimage_zoom")
+        assert run.drone.visit is None and not run._visits and run._search_done()
+    finally:
+        await run.stop()
+
+
+async def test_visits_go_to_the_likeliest_person_first():
+    cfg = fast_settings()
+    run = MissionRun(3, cfg, fast=True, policy="laya", runtime=FakeRuntime(action="reimage_zoom"))
+    far, near = open_lead("L-maybe", .5), {**open_lead("L-likely", .7), "x": 250.0}
+    for lead in (far, near):
+        run._register(lead)
+    far["person_chance"], near["person_chance"] = .13, .96
+    run.drone.plan_visit(0, far, "reimage")  # the drone is busy, so both requests queue
+    run._request_visit(far, "reimage")
+    run._request_visit(near, "reimage")
+    run.drone.finish_visit()
+    run._start_visit(run.clock.now)
+    assert run.drone.visit["lead_id"] == "L-likely"
     await run.stop()

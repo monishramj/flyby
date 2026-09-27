@@ -16,7 +16,7 @@ from server.mission import intel_script
 from server.mission.clock import SimClock
 from server.mission.noise import Noise
 from server.mission.scenario import generate
-from server.mission.sweep import Sweep
+from server.mission.sweep import Drone, Sweep
 from server.mission.truth import optimal_action
 from server.triage.decide import Decider
 from server.triage.fallback import ACTIONS, rule
@@ -44,6 +44,11 @@ class MissionRun:
         self.run_id = run_id or f"{datetime.now(UTC):%Y%m%dT%H%M%S}-{seed}-{uuid4().hex[:6]}"
         self.scenario = generate(seed, cfg)
         self.sweep = Sweep(cfg)
+        self.drone = Drone(self.sweep, cfg)
+        self._captures, self._next_capture, self._capture_gen = self.sweep.captures(), 0, 0
+        self.capture_times: dict[str, float] = {}  # when each capture actually happened (visits delay them)
+        self._visits: list[tuple[str, str]] = []   # (lead_id, "reimage" | "inspect") waiting for the drone
+        self._search_end = 0.0                     # last capture or visit return; final once the search is done
         self.noise = Noise(self.scenario, np.random.default_rng(seed + 1))
         self.intel = intel_script.generate(self.scenario, np.random.default_rng(seed + 2))
         self.human_rng = np.random.default_rng(seed + 3)
@@ -82,15 +87,20 @@ class MissionRun:
 
     def mission_state(self, *, cells=None):
         t = self.clock.now
-        covered = self.sweep.covered_count(t)
+        swept = self.drone.sweep_time(t)
+        covered = self.sweep.covered_count(swept)
         include = self._coverage_mark != covered if cells is None else cells
-        state = {"t": round(t, 3), "drone": self.sweep.position_at(t),
-                 "coverage_pct": round(self.sweep.coverage_pct(t), 2),
+        visit = self.drone.visit if self.drone.visit and t < self.drone.visit["resume_t"] else None
+        state = {"t": round(t, 3), "drone": self.drone.position(t),
+                 "coverage_pct": round(self.sweep.coverage_pct(swept), 2),
+                 "drone_task": {"kind": visit["kind"], "lead_id": visit["lead_id"]} if visit else None,
+                 "search_done": self._search_done(),
+                 "search_end_t": round(self._search_end, 3) if self._search_done() else None,
                  "running": self._started and not self.clock.paused and not self._finished,
                  "finished": self._finished}
         if include:
             self._coverage_mark = covered
-            state["coverage_cells"] = self.sweep.coverage(t)["coverage_cells"]
+            state["coverage_cells"] = self.sweep.coverage(swept)["coverage_cells"]
         return state
 
     def public_lead(self, lead):
@@ -142,8 +152,7 @@ class MissionRun:
                                      "parse_mode": self.parse_mode, "sim_human": self.sim_human,
                                      "config": self.cfg.public_dict(),
                                      "started_at": datetime.now(UTC).isoformat()})
-        for capture in self.sweep.captures():
-            self.clock.call_at(capture["t"], lambda capture=capture: self._on_capture(capture))
+        self._schedule_capture()
         for message in self.intel:
             self.clock.call_at(message["t"], lambda message=message: self._on_intel(message))
         if not self.fast:
@@ -170,7 +179,7 @@ class MissionRun:
         """A live clock stays alive while a lead still waits on a human click."""
         if self._stopped:
             return
-        waiting = self._tasks or self.clock.now < self.sweep.duration or \
+        waiting = self._tasks or not self._search_done() or self._visits or \
             any(lead["status"] not in TERMINAL for lead in self.leads.values())
         if waiting:
             self.clock.call_at(self.clock.now + HEARTBEAT_S, self._heartbeat)
@@ -186,6 +195,54 @@ class MissionRun:
         if self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
         self.decider.close()
+
+    # ---- the drone: sweep captures, and visits that pause the sweep --------
+
+    def _search_done(self):
+        return self._next_capture >= len(self._captures) and self.drone.visit is None
+
+    def _schedule_capture(self):
+        """Captures fire one at a time, so a visit can push every later one back."""
+        if self._next_capture < len(self._captures):
+            gen = self._capture_gen
+            planned = self._captures[self._next_capture]["t"] + self.drone.offset
+            self.clock.call_at(planned, lambda: self._fire_capture(gen))
+
+    def _fire_capture(self, gen):
+        if gen != self._capture_gen or self.drone.visit:
+            return None  # the drone left on a visit; the sweep resumes this capture afterwards
+        capture = {**self._captures[self._next_capture], "t": round(self.clock.now, 3)}
+        self._next_capture += 1
+        self.capture_times[capture["id"]] = self._search_end = capture["t"]
+        self._schedule_capture()
+        return self._on_capture(capture)
+
+    def _request_visit(self, lead, kind, t=None):
+        self._visits.append((lead["lead_id"], kind))
+        if self.drone.visit is None:
+            self._start_visit(self.clock.now if t is None else t)
+
+    def _start_visit(self, t):
+        # Likely people first, the same order as the commander's queue.
+        lead_id, kind = max(self._visits, key=lambda item: self.leads[item[0]].get("person_chance", 0))
+        self._visits.remove((lead_id, kind))
+        lead = self.leads[lead_id]
+        visit = self.drone.plan_visit(t, lead, kind)
+        self._capture_gen += 1  # a pending sweep capture waits for the drone to come back
+        if kind == "inspect":
+            self.clock.call_at(visit["arrive_t"], lambda: self._emit("inspect.request", {"lead_id": lead_id}))
+            self.clock.call_at(visit["done_t"], lambda: self._resolve_inspection(lead_id, None))
+        else:
+            self.clock.call_at(visit["done_t"], lambda: self._on_reimage(lead_id))
+        self.clock.call_at(visit["resume_t"], self._end_visit)
+
+    def _end_visit(self):
+        self.drone.finish_visit()
+        self._search_end = self.clock.now
+        if self._visits:
+            self._start_visit(self.clock.now)
+        else:
+            self._schedule_capture()
 
     # ---- captures and decisions --------------------------------------------
 
@@ -214,7 +271,7 @@ class MissionRun:
 
     def _build_state(self, lead):
         open_leads = sum(item["status"] not in TERMINAL for item in self.leads.values())
-        mission = {"coverage_pct": round(self.sweep.coverage_pct(self.clock.now)), "open_leads": open_leads}
+        mission = {"coverage_pct": round(self.sweep.coverage_pct(self.drone.sweep_time(self.clock.now))), "open_leads": open_leads}
         return build_state(lead, self.incident.snapshot(), mission, leads=self.leads, cfg=self.cfg)
 
     async def _decide(self, lead, *, base=None):
@@ -249,7 +306,7 @@ class MissionRun:
             status = "awaiting_approval"
         self._set_status(lead, status, t=t, emit="lead.decided")
         if status == "reimaging":
-            self.clock.call_at(t + self.cfg.T_REIMAGE_S, lambda: self._on_reimage(lead["lead_id"]))
+            self._request_visit(lead, "reimage", t)
 
     def _set_status(self, lead, status, *, t=None, emit="lead.status"):
         t = self.clock.now if t is None else t
@@ -303,12 +360,10 @@ class MissionRun:
             self._spawn(self._dispatch(lead))
         elif action == "close_in_inspect":
             self._set_status(lead, "inspecting")
-            self._emit("inspect.request", {"lead_id": lead["lead_id"]})
-            self.clock.call_at(self.clock.now + self.cfg.T_INSPECT_S,
-                               lambda: self._resolve_inspection(lead["lead_id"], None))
+            self._request_visit(lead, "inspect")
         elif action == "reimage_zoom" and lead["pass"] < self.cfg.MAX_PASSES:
             self._set_status(lead, "reimaging")
-            self.clock.call_at(self.clock.now + self.cfg.T_REIMAGE_S, lambda: self._on_reimage(lead["lead_id"]))
+            self._request_visit(lead, "reimage")
         else:
             self._set_status(lead, "ignored")
         return True

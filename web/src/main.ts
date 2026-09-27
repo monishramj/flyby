@@ -146,11 +146,12 @@ function renderStatus() {
   ].filter(Boolean).join(' · ');
   if (!snapshot || !state) return;
   const counts = snapshot.leads.reduce<Record<string, number>>((total, lead) => ({ ...total, [lead.status]: (total[lead.status] ?? 0) + 1 }), {});
-  // The clock keeps ticking for inspections and re-images still in flight, but the search itself is over: freeze its timer there.
-  const searched = snapshot.config.SWEEP_DURATION_S;
-  element('mission-meta').textContent = state.t >= searched || state.finished
-    ? `search complete in ${Math.round(Math.min(state.t, searched))}s · ${state.coverage_pct.toFixed(0)}% covered`
-    : `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.running ? 'flying' : 'paused'}`;
+  // Visits push the search end back, so the server says when the search is done; freeze its timer there.
+  const searchEnd = state.search_done ? state.search_end_t ?? state.t : null;
+  const task = state.drone_task ? ` · drone ${state.drone_task.kind === 'reimage' ? 'rerouted to zoom on' : 'inspecting'} ${state.drone_task.lead_id}` : '';
+  element('mission-meta').textContent = searchEnd != null
+    ? `search complete in ${Math.round(searchEnd)}s · ${state.coverage_pct.toFixed(0)}% covered${task}`
+    : `t+${Math.round(state.t)}s · ${state.coverage_pct.toFixed(0)}% covered · ${state.running ? 'flying' : 'paused'}${task}`;
   element('queue-meta').textContent = `${counts.dispatched ?? 0} dispatched`;
   element('context-meta').textContent = contextSummary();
 }

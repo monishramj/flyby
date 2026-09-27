@@ -65,7 +65,7 @@ def test_detector_rates_deduplication_and_reimage():
     assert original == leads[0]
     assert zoomed["pass"] == 2 and zoomed["lead_id"] == original["lead_id"]
     assert zoomed["box_px"] == original["box_px"] * cfg.REIMAGE_BOX_MULT
-    assert zoomed["t_capture"] == original["t_capture"] + cfg.T_REIMAGE_S
+    assert zoomed["t_capture"] == original["t_capture"], "the loop stamps the real arrival time"
     with pytest.raises(ValueError):
         noise.recapture(zoomed)
 
@@ -129,3 +129,20 @@ async def test_live_clock_pause():
     frozen = clock.now
     await asyncio.sleep(.01)
     assert frozen > 0 and clock.now == frozen
+
+
+def test_a_visit_takes_the_drone_off_the_sweep_and_pauses_it():
+    from server.mission.sweep import Drone
+    cfg = Settings()
+    sweep = Sweep(cfg)
+    drone = Drone(sweep, cfg)
+    home = drone.position(20)
+    visit = drone.plan_visit(20, {"lead_id": "L-1", "x": home["x"] + 60, "y": home["y"]}, "reimage")
+    leg = 60 / cfg.TRANSIT_SPEED_MPS
+    assert visit["arrive_t"] == 20 + leg and visit["done_t"] == 20 + leg + cfg.ZOOM_HOVER_S
+    halfway = drone.position(20 + leg / 2)
+    assert abs(halfway["x"] - (home["x"] + 30)) < 1e-6, "flying out to the lead"
+    assert drone.sweep_time(20 + leg) == 20, "the sweep is frozen while away"
+    drone.finish_visit()
+    assert drone.offset == 2 * leg + cfg.ZOOM_HOVER_S
+    assert drone.position(20 + drone.offset) == home, "it resumes exactly where it left"

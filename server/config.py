@@ -39,10 +39,11 @@ class Settings(BaseSettings):
     ORDER_HAZARD_M: float = 150    # hazards this close can still shape a crew's approach
     ORDER_LANDMARK_M: float = 80   # landmarks named in a crew order
     MAX_PASSES: int = 2
-    T_REIMAGE_S: float = 60
     REIMAGE_BOX_MULT: float = 3.0
     REIMAGE_CONF_SHIFT: dict[str, float] = {"subject": 0.20, "decoy": -0.10}
-    T_INSPECT_S: float = 90
+    TRANSIT_SPEED_MPS: float = 12   # the drone cruises to a lead faster than it surveys
+    ZOOM_HOVER_S: float = 10        # hover for the zoomed second photo
+    INSPECT_HOVER_S: float = 40     # descend and look under cover
     TAU_ROUTE: float = 0.50
     TAU_CLOSE: float = 0.60  # Laya must be this sure to auto-close; at 0.50 it closed 9 of 87 held-out people, at 0.60 one
     # Measured share of flags that were real people, by camera band and cover (docs/GATES.md, 1,191 states).

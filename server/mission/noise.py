@@ -41,7 +41,6 @@ class Noise:
             raise ValueError("Lead has already used its zoom pass")
         result = deepcopy(lead)
         result["pass"] += 1
-        result["t_capture"] += self.cfg.T_REIMAGE_S
         result["box_px"] *= self.cfg.REIMAGE_BOX_MULT
         kind = "subject" if lead["truth"]["is_person"] else "decoy"
         result["detector_conf"] = float(np.clip(lead["detector_conf"] + self.cfg.REIMAGE_CONF_SHIFT[kind], 0, 1))

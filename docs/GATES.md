@@ -96,14 +96,24 @@ That is a product decision, not a model fix, so `TAU_ROUTE` is unchanged.
 | intel re-ranks the queue within 2 sim-minutes | first re-rank at t+99.4 s |
 | at least 3 dispatches | 3 dispatches |
 
+## The drone reroutes for follow-ups
+
+A reimage or close-in inspection is a real visit by the one drone: it leaves the sweep, flies to the
+lead at `TRANSIT_SPEED_MPS = 12`, hovers (`ZOOM_HOVER_S = 10` for a zoom, `INSPECT_HOVER_S = 40` to
+look under cover), flies back and resumes. The sweep pauses, so later captures and the end of the
+search move back by the visit's length, and subjects' zero points use the actual capture time. Queued
+visits go to the likeliest person first. This replaced fixed 60 s / 90 s timers; with real flight
+times, follow-ups resolve sooner (Laya under-structure time to dispatch about 450 s → 270 s; the rule,
+which re-images often, 125 s → 76 s median).
+
 ## Headline evaluation numbers
 
 `uv run python -m batch.run_eval` → `results/summary.json`
 
 | Arm | Time to dispatch (median) | vs manual @120 s/image | vs manual @10 s/image | Subjects found | Final action accuracy |
 | --- | --- | --- | --- | --- | --- |
-| rule | 125.0 s | 4090 s → 32.7× | 240 s → 1.9× | 72/141 | 0.689 |
-| laya | 82.7 s | 4090 s → 49.4× | 240 s → 2.9× | 77/141 | 0.818 |
+| rule | 76.3 s | 4090 s → 53.6× | 240 s → 3.2× | 70/141 | 0.679 |
+| laya | 80.2 s | 4090 s → 51.0× | 240 s → 3.0× | 77/141 | 0.813 |
 
 Laya's `ignore` auto-closes only on a low detector band; auto-closed leads are re-decided when intel changes their context. Laya routes 44.5% of leads to the simulated human, who then picks the §4.4 optimal action 90% of
 the time, so part of the laya arm's edge is the simulated operator, not Laya. First-decision
@@ -115,7 +125,7 @@ accuracy (before any human) is 0.44 for laya vs 0.42 for the rule.
 | Arm | Needed judgment | One-click approval | No human | Real people closed with no human look |
 | --- | --- | --- | --- | --- |
 | rule | 65 | 62 | 82 | 10 |
-| laya | 144 | 58 | 7 | 2 |
+| laya | 146 | 55 | 8 | 2 |
 
 **No one gets lost.** An `ignore` may auto-close only on a low camera score, in the open, with Laya
 at least `TAU_CLOSE = 0.60` sure; anything else goes to a human. The queue ranks by

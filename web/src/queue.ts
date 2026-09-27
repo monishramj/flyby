@@ -22,9 +22,10 @@ export function rank(leads: Lead[]): Lead[] {
     (b.person_chance ?? 0) - (a.person_chance ?? 0)
     || (b.decision?.urgency ?? -1) - (a.decision?.urgency ?? -1)
     || b.detector_conf - a.detector_conf);
-  // Dispatched leads stay listed below, so their brief is still reachable.
+  // Leads the drone is working on stay visible, then dispatched ones (their brief is still reachable).
+  const inFlight = leads.filter(lead => lead.status === 'reimaging' || lead.status === 'inspecting');
   const dispatched = leads.filter(lead => lead.status === 'dispatched').reverse();
-  return [...pending, ...dispatched];
+  return [...pending, ...inFlight, ...dispatched];
 }
 
 /** The card's one-line reason, from the same facts Laya read. Written by code: instant, offline, never wrong. */
@@ -109,7 +110,7 @@ function card(lead: Lead): string {
         <small>${lead.sector} · ${words(lead.nearest_landmark || '')}</small>
       </div>
       <div class="tags">
-        ${settled ? `<span class="tag done">${words(lead.status)}</span>` : ''}
+        ${settled ? `<span class="tag done">${lead.status === 'reimaging' ? 'drone zooming' : lead.status === 'inspecting' ? 'drone inspecting' : words(lead.status)}</span>` : ''}
         ${lead.status === 'awaiting_human' ? '<span class="tag human">needs you</span>' : ''}
         ${lead.reranked ? '<span class="tag rerank">re-ranked</span>' : ''}
         ${decision?.used_fallback ? '<span class="tag warn">fallback</span>' : ''}

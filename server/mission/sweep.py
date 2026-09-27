@@ -63,3 +63,40 @@ class Sweep:
 
 def contains(capture: dict, obj: dict) -> bool:
     return max(abs(capture["x"] - obj["x"]), abs(capture["y"] - obj["y"])) <= capture["footprint_m"] / 2
+
+
+class Drone:
+    """The one drone: flies the sweep, and breaks off for a visit (zoom or close-in inspect) when asked.
+
+    A visit pauses the sweep, so every later capture happens `offset` seconds later than planned.
+    """
+
+    def __init__(self, sweep: Sweep, cfg: Settings):
+        self.sweep, self.cfg = sweep, cfg
+        self.offset = 0.0     # seconds the sweep has been paused by finished visits
+        self.visit = None     # {kind, lead_id, legs: [(t, x, y)], done_t, resume_t, left_at}
+
+    def position(self, t: float) -> dict:
+        if self.visit and t < self.visit["resume_t"]:
+            times, xs, ys = zip(*self.visit["legs"])
+            return {"x": float(np.interp(t, times, xs)), "y": float(np.interp(t, times, ys))}
+        return self.sweep.position_at(self.sweep_time(t))
+
+    def sweep_time(self, t: float) -> float:
+        """How far along the planned sweep the drone is; frozen while it is away on a visit."""
+        return self.visit["left_at"] if self.visit and t < self.visit["resume_t"] else t - self.offset
+
+    def plan_visit(self, t: float, lead: dict, kind: str) -> dict:
+        start = self.position(t)
+        leg = float(np.hypot(lead["x"] - start["x"], lead["y"] - start["y"])) / self.cfg.TRANSIT_SPEED_MPS
+        hover = self.cfg.ZOOM_HOVER_S if kind == "reimage" else self.cfg.INSPECT_HOVER_S
+        arrive, done = t + leg, t + leg + hover
+        self.visit = {"kind": kind, "lead_id": lead["lead_id"], "left_at": self.sweep_time(t),
+                      "legs": [(t, start["x"], start["y"]), (arrive, lead["x"], lead["y"]),
+                               (done, lead["x"], lead["y"]), (done + leg, start["x"], start["y"])],
+                      "arrive_t": arrive, "done_t": done, "resume_t": done + leg, "started_t": t}
+        return self.visit
+
+    def finish_visit(self) -> None:
+        self.offset += self.visit["resume_t"] - self.visit["started_t"]
+        self.visit = None
