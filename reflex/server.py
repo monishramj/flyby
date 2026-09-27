@@ -24,12 +24,14 @@ from reflex.controller import Controller, load_theta
 from reflex.frames import Frame, FrameError, Mode, decode_frame
 from reflex.hexeye import load_layout
 from reflex.looming import Readout, load_weights
+from reflex.viz import VizLimiter, encode_viz, layout_message
 
 BENCH_MODES = (Mode.BENCH_RECORD, Mode.BENCH_CLOSED)
 _LAYOUT = load_layout()
 COL_X, COL_Y = np.asarray(_LAYOUT["col_x"]), np.asarray(_LAYOUT["col_y"])
 READOUT_WEIGHTS = load_weights()
 THETA, THETA_CALIBRATED = load_theta()
+LAYOUT_MESSAGE = layout_message(_LAYOUT, THETA)  # eye.layout, sent once per connection
 log = logging.getLogger("reflex")
 
 # One eye per process; its network state belongs to one episode at a time.
@@ -79,6 +81,7 @@ class Episode:
     last_k: int | None = None
     ks: list[int] = field(default_factory=list)
     frames: list[np.ndarray] = field(default_factory=list)
+    viz: VizLimiter = field(default_factory=VizLimiter)
 
 
 class Session:
@@ -90,6 +93,7 @@ class Session:
         self.eye = eye
         self.theta = theta
         self.current: Episode | None = None
+        self.viz_out: bytes | None = None  # sent after the command reply
 
     def _new_episode(self, episode: int, bracketed: bool, params: dict | None = None) -> Episode:
         return Episode(episode, bracketed, Readout(COL_X, COL_Y, weights=READOUT_WEIGHTS), Controller(self.theta), params or {})
@@ -107,8 +111,11 @@ class Session:
                 await asyncio.to_thread(self.eye.reset)
                 _eye_owner[0] = ep
             drive, _ = await asyncio.to_thread(self.eye.step, frame.pixels)
+            deviation = self.eye.deviation() if frame.mode == Mode.LIVE and ep.viz.due(frame.k) else None
         S, dLR = ep.readout.update(drive)
         command = ep.controller.step(frame.k, S, dLR, frame.reflex_on, frame.goal_bearing, frame.goal_dist)
+        if deviation is not None:
+            self.viz_out = encode_viz(frame.k, S, dLR, command["cmd"], deviation)
         return {"k": frame.k, **command, "S": S, "dLR": dLR}
 
     def _validate(self, frame: Frame) -> Episode:
@@ -179,6 +186,7 @@ async def ws_reflex(websocket: WebSocket) -> None:
     await websocket.accept()
     session = Session(BENCH_FRAMES_DIR, CLOSED_LOOP_PATH, getattr(websocket.app.state, "eye", None))
     try:
+        await websocket.send_text(LAYOUT_MESSAGE)
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
@@ -199,6 +207,9 @@ async def ws_reflex(websocket: WebSocket) -> None:
             except (FrameError, ProtocolError) as exc:
                 reply = {"error": str(exc)}
             await websocket.send_json(reply)
+            if session.viz_out is not None:
+                await websocket.send_bytes(session.viz_out)
+                session.viz_out = None
     except WebSocketDisconnect:
         return
 

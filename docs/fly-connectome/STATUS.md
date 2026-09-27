@@ -102,6 +102,71 @@ In time by obstacle: debris 18/20, beam 5/20, post 6/20. Posts are at the eye's
 resolution limit at 90° (0.1 m post < 2 facets until inside ~1 m). A 60° batch is
 being recorded to test that. Not yet good enough to claim reliable avoidance.
 
+## Step 7.1 — viz stream (2026-09-27, Windows CPU)
+
+Files: `reflex/viz.py` (new), `reflex/server.py` (hooks only), `web/src/flyviz/stream.ts`
+(new), `tests/test_reflex_viz.py` (new), `tests/test_reflex_protocol.py` (adapted).
+
+- On connect the reflex sends one text message `{"type": "eye.layout", ...layout,
+  "S_theta": θ}` (814,532 bytes; θ = the server's `THETA`, currently 1.2 uncalibrated).
+- Live mode (0) only: after the JSON command reply, a binary viz message when due:
+  16-byte LE header `k u32, S f32, dLR f32, cmd u8, 3 zero pad` + N float16 LE
+  deviations (`FlyEye.deviation()`, native node order). 16 + 2 × 45,669 = 91,354 bytes.
+- Command byte enum (`reflex.viz.CmdByte`, `CMD_BY_BYTE` in stream.ts):
+  none 0, brake 1, saccade_left 2, saccade_right 3, arrived 4.
+- Rate limit per episode on frame time k × DT_S (not wall clock): at most VIZ_HZ;
+  at 50 Hz frames that is k = 0, 5, 10, … Dropped frames never cause a burst.
+- JSON command replies are unchanged; bench modes never get viz.
+- `stream.ts`: `VizStream.handle(data)` consumes eye.layout/viz and returns false
+  for commands/acks/errors; exposes `layout`, `latest` (Float32Array, reused in
+  place), `header`, and a typed ring buffer (`history()`: last 10 s of t, S, dLR, cmd).
+  Half floats decode via a Uint16Array view and a hand-written half→float table.
+
+Validation (this Windows laptop, CPU only):
+
+- `pytest -m "not slow"` (after rebasing on b62cebf/85420be): 65 passed, 12 errors. All 12 errors are the existing
+  `test_malformed_frames_are_rejected` params: on Windows their 9 KB byte-string IDs
+  exceed the 32,767-char `PYTEST_CURRENT_TEST` env limit (setup error, not a test
+  failure; the file's parameters are unchanged by this step). `tests/test_reflex_viz.py`:
+  15 passed (reference decoder written from the byte layout incl. a manual half
+  decoder; enum; limiter; 2 s live stream = 20 viz at k multiples of 5 whose headers
+  match the preceding replies; replies identical with viz on/off for all 3 modes ×
+  reflex_on).
+- `npx tsc --noEmit -p .` passed. A Node check decoded a Python-encoded message
+  with stream.ts: header exact, 45,669 values, max abs difference vs numpy float16 0.
+- Live, real pretrained model (`python -m reflex.server`, CUDA hidden), throwaway
+  client sending live frames paced at 50 Hz wall clock:
+  | run | layout msgs | commands | reply rate | ms p50/p95 | viz msgs | viz bytes | viz/s wall |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 10 s | 1 | 500 | 39.96 Hz | 22.92 / 33.07 | 100 | 91,354 | 8.01 |
+  | 10 s | 1 | 500 | 41.48 Hz | 22.56 / 28.56 | 100 | 91,354 | 8.31 |
+  | 5 s | 1 | 250 | 39.39 Hz | 23.78 / 30.24 | 50 | 91,354 | 7.91 |
+  Exactly 10 viz per second of frame time (1 per 5 frames). Wall-clock viz rate is
+  ~8/s because the CPU eye only processed ~40 frames/s here, below 50 Hz.
+  Pre-viz server code on the same machine: 42.83 and 40.08 Hz, p50 22.82 / 23.95 ms,
+  so no measurable cost from viz (encode_viz p50 0.12 ms; layout JSON 10 ms at import).
+
+Open issues:
+
+1. **Browser client needs a one-line change before viz reaches the scene.**
+   `ReflexLink` in `web/src/scene/inspect.ts` (not edited here, per ownership)
+   treats every message as a command reply. The on-connect eye.layout will resolve
+   the first `request()` (bench.ts `episode.begin`, capture.ts first frame), making
+   every later reply off by one; binary viz makes `JSON.parse` throw (harmless,
+   but noisy). Fix: set `binaryType = 'arraybuffer'`, pass each message to
+   `VizStream.handle()` first and only treat it as a reply when that returns false.
+2. **Pre-existing crash:** on this machine the reflex process dies with a Windows
+   access violation (exit 139) within seconds after a live client disconnects
+   (3 of 3 runs; once after the first client, twice after the second). The
+   pre-viz server.py crashed the same way (4 s after its second client), so it is
+   not caused by this step. Faulthandler shows no Python frame at the fault.
+   The shared `.venv` has torch 2.14.0+cu126, so the server needs
+   `CUDA_VISIBLE_DEVICES=-1` to load FlyEye on CPU (see the Step 7.4 notes); all
+   runs above used it. Investigate the crash before the demo.
+3. The eye does not sustain 50 Hz on this CPU under current load (~40 Hz, p50 ~23 ms).
+
+Next: fix ReflexLink (issue 1), then Step 7.2 eye view and looming trace.
+
 ## Carport scene and first calibration (2026-09-27) — reflex NOT yet reliable
 
 Built: `web/src/scene/inspect.ts` (carport: 4 posts, sagging front beam, roof,

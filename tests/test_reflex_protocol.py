@@ -62,6 +62,9 @@ class StubEye:
         self.steps += 1
         return self.q * self.pattern, None
 
+    def deviation(self):  # viz stream (Step 7.1); only its length and dtype matter here
+        return np.zeros(len(reflex_server._LAYOUT["node_type"]), dtype=np.float32)
+
 
 @pytest.fixture
 def eye(monkeypatch):
@@ -75,12 +78,20 @@ def ws(tmp_path, monkeypatch, eye):
     monkeypatch.setattr(reflex_server, "BENCH_FRAMES_DIR", tmp_path / "frames")
     monkeypatch.setattr(reflex_server, "CLOSED_LOOP_PATH", tmp_path / "closed_loop.jsonl")
     with TestClient(reflex_server.app).websocket_connect("/ws/reflex") as socket:
+        assert socket.receive_json()["type"] == "eye.layout"  # Step 7.1: sent once on connect
         yield socket
+
+
+def receive_reply(ws):
+    """Next JSON reply, skipping live-mode viz binaries (tested in test_reflex_viz.py)."""
+    while (message := ws.receive()).get("text") is None:
+        pass
+    return json.loads(message["text"])
 
 
 def send_frame(ws, episode, k, reflex_on, mode, seed=0):
     ws.send_bytes(encode_frame(episode, k, reflex_on, mode, pixels(seed)))
-    return ws.receive_json()
+    return receive_reply(ws)
 
 
 def send_msg(ws, **msg):
@@ -114,6 +125,7 @@ def test_each_episode_resets_the_eye(ws, eye):
 def test_frames_needing_the_model_report_an_error_without_it(ws, monkeypatch):
     monkeypatch.setattr(reflex_server.app.state, "eye", None)
     with TestClient(reflex_server.app).websocket_connect("/ws/reflex") as socket:
+        socket.receive_json()  # eye.layout
         assert "model not loaded" in send_frame(socket, 1, 0, True, Mode.LIVE)["error"]
         socket.send_text(json.dumps({"type": "episode.begin", "episode": 2, "params": {}}))
         socket.receive_json()
