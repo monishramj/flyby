@@ -6,7 +6,12 @@ brake:   S > θ latches a stop for BRAKE_LATCH_S (re-latched while S stays high)
 saccade: then a SACCADE_DEG yaw turn away from the looming side (dLR at brake
          onset), or toward the goal side when the side is unclear.
          Looming is ignored during the turn and for SACCADE_SUPPRESS_S after it,
-         as flies suppress vision during saccades. Then cruise again.
+         as flies suppress vision during saccades.
+commit:  hold the new heading for COMMIT_S before goal steering resumes, so the
+         drone clears the obstacle instead of swinging straight back into it.
+         A brake within CHAIN_S of the last saccade turns the same way again
+         (flies chain saccades in one direction), so it works around an obstacle
+         instead of alternating left and right. Then cruise again.
 arrived: within GOAL_RADIUS_M of the goal.
 The first HOVER_S of an episode ignores looming: the scene's onset after the
 gray warm-up is not approach (the scene hovers during this time).
@@ -19,7 +24,7 @@ import math
 from pathlib import Path
 
 from reflex.config import (
-    BRAKE_LATCH_S, DT_S, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
+    BRAKE_LATCH_S, CHAIN_S, COMMIT_S, DT_S, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
     SACCADE_RATE_DPS, SACCADE_SUPPRESS_S, THETA_UNCALIBRATED, THRESHOLDS_PATH,
 )
 
@@ -41,6 +46,9 @@ class Controller:
         self.until_k = 0
         self.suppress_until_k = round(HOVER_S / DT_S)
         self.turn = 0.0  # +1 right, −1 left
+        self.commit_frames = round(COMMIT_S / DT_S)
+        self.chain_frames = round(CHAIN_S / DT_S)
+        self.last_saccade_end_k: int | None = None
 
     def _cmd(self, cmd: str, speed: float, yaw_dps: float) -> dict:
         return {"cmd": cmd, "speed": speed, "yaw_rate": yaw_dps}
@@ -64,12 +72,20 @@ class Controller:
             if k < self.until_k:
                 side = "right" if self.turn > 0 else "left"
                 return self._cmd(f"saccade_{side}", 0.0, self.turn * SACCADE_RATE_DPS)
-            self.state, self.suppress_until_k = "cruise", k + self.suppress_frames
+            self.state, self.suppress_until_k = "commit", k + self.suppress_frames
+            self.until_k, self.last_saccade_end_k = k + self.commit_frames, k
+        if self.state == "commit" and k >= self.until_k:
+            self.state = "cruise"
         if k >= self.suppress_until_k and S > self.theta:
+            chained = self.last_saccade_end_k is not None and k - self.last_saccade_end_k <= self.chain_frames
             self.state, self.until_k = "brake", k + self.latch_frames
-            if abs(dLR) > 0.5 * self.theta:
+            if chained:
+                pass  # keep turning the same way around the obstacle
+            elif abs(dLR) > 0.5 * self.theta:
                 self.turn = 1.0 if dLR > 0 else -1.0  # dLR > 0: looming on the left, turn right
             else:
                 self.turn = 1.0 if goal_bearing >= 0 else -1.0
             return self._cmd("brake", 0.0, 0.0)
+        if self.state == "commit":
+            return self._cmd("none", NAV_CRUISE_MPS, 0.0)
         return cruise

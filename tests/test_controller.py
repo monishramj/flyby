@@ -188,3 +188,25 @@ def test_centred_expansion_fires_the_cone_and_off_centre_left_expansion_turns_ri
     for _ in range(20):
         S, dLR = ro.update(radial_drive(cx=-0.55, vertical=False, radius=0.5))
     assert ro.pathway == "units" and S > 1.0 and dLR > 0
+
+
+COMMIT = round(cfg.COMMIT_S / cfg.DT_S)
+
+
+def test_after_a_saccade_the_new_heading_is_held_before_goal_steering():
+    out = run_ctl(Controller(THETA), lambda k: THETA + 1 if k == 0 else 0.0, dLR=THETA, n=200, bearing=-1.0)
+    end = LATCH + SACCADE
+    assert all(o["yaw_rate"] == 0.0 and o["speed"] == cfg.NAV_CRUISE_MPS for o in out[end:end + COMMIT])
+    assert out[end + COMMIT]["yaw_rate"] < 0  # goal steering resumes toward the goal (left)
+
+
+def test_a_brake_soon_after_a_saccade_turns_the_same_way_again():
+    end = LATCH + SACCADE
+    again = end + SUPPRESS + 5
+    ctl = Controller(THETA)
+    out = run_ctl(ctl, lambda k: THETA + 1 if k in (0, again) else 0.0, dLR=THETA, n=again + LATCH + 3)
+    assert out[LATCH]["cmd"] == "saccade_right"
+    # the second brake sees looming on the right (dLR < 0) but keeps turning right
+    ctl2 = Controller(THETA)
+    outs = [ctl2.step(HOVER + k, THETA + 1 if k in (0, again) else 0.0, THETA if k == 0 else -THETA, True) for k in range(again + LATCH + 3)]
+    assert outs[again + LATCH]["cmd"] == "saccade_right"
