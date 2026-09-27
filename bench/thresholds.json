@@ -5,55 +5,59 @@
     "false_brakes": 4,
     "n_safe": 75,
     "n_colliding": 125,
-    "detected": 59,
-    "in_time": 47,
+    "early_brakes": 4,
+    "early_s": 2.5,
+    "detected": 101,
+    "in_time": 65,
     "required_warning_s": 0.415,
     "by_scenario": {
       "beam": {
         "n": 40,
-        "detected": 9,
-        "in_time": 8,
-        "warning_median_s": 3.7800000000000002
+        "detected": 30,
+        "in_time": 10,
+        "warning_median_s": 0.31
       },
       "debris": {
         "n": 40,
-        "detected": 36,
-        "in_time": 30,
-        "warning_median_s": 4.53
+        "detected": 40,
+        "in_time": 35,
+        "warning_median_s": 1.27
       },
       "near_post": {
         "n": 7,
-        "detected": 0,
+        "detected": 2,
         "in_time": 0,
-        "warning_median_s": null
+        "warning_median_s": 0.05
       },
       "post": {
         "n": 38,
-        "detected": 14,
-        "in_time": 9,
-        "warning_median_s": 1.26
+        "detected": 29,
+        "in_time": 20,
+        "warning_median_s": 0.8200000000000001
       }
     }
   },
   "test": {
-    "false_brakes": 3,
+    "false_brakes": 1,
     "n_safe": 37,
     "n_colliding": 63,
-    "detected": 34,
-    "in_time": 29,
+    "early_brakes": 2,
+    "early_s": 2.5,
+    "detected": 47,
+    "in_time": 36,
     "required_warning_s": 0.415,
     "by_scenario": {
       "beam": {
         "n": 20,
-        "detected": 7,
-        "in_time": 5,
-        "warning_median_s": 3.74
+        "detected": 13,
+        "in_time": 4,
+        "warning_median_s": 0.32
       },
       "debris": {
         "n": 20,
-        "detected": 19,
-        "in_time": 18,
-        "warning_median_s": 4.5600000000000005
+        "detected": 20,
+        "in_time": 20,
+        "warning_median_s": 1.32
       },
       "near_post": {
         "n": 3,
@@ -63,9 +67,9 @@
       },
       "post": {
         "n": 20,
-        "detected": 8,
-        "in_time": 6,
-        "warning_median_s": 1.3
+        "detected": 14,
+        "in_time": 12,
+        "warning_median_s": 1.22
       }
     }
   },

@@ -4,9 +4,10 @@ Completed: 0.1, 0.4, 6.1, 6.3, 6.4, fly-inspired navigation (brake → 90° sacc
 goal steering), carport scene + bench + calibration tools, Step 7.4 prep (3D connectome
 dev page), and a **fitted cone + learned-units readout** (live when
 `bench/readout_weights.json` exists).
-**Status:** on 100 held-out carport flights the reflex stops in time for 29/63
-collisions (debris 18/20, beam 5/20, posts 6/20) with 3/37 false brakes. Posts look
-limited by eye resolution at 90°; a 60° batch is being evaluated.
+**Status:** on 100 held-out carport flights the reflex stops in time for 36/63
+collisions (debris 20/20, posts 12/20, beam 4/20) with 1/37 false brakes and 2 early
+brakes (honest scoring; an earlier 29/63 figure was inflated, see the correction).
+60° FOV was worse than 90°; a larger flyvis eye loads but is out of scope for now.
 Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
@@ -77,7 +78,31 @@ Deviations / open issues:
   unless CUDA is hidden (flyvis builds its RNG on `flyvis.device`, chosen at import).
   The recorder sets `CUDA_VISIBLE_DEVICES=-1` (empty string is dropped on Windows).
 - Not wired into the Fly tab or the live stream yet (needs Step 7.1 `stream.ts`).
-## Fitted readout: collision cone + learned units (2026-09-27) — partial
+## Correction and adaptation (2026-09-27) — current numbers
+
+**The earlier "29/63 in time" was wrong.** Closed-loop captures showed debris flights
+braking at hover end and staying braked: the eye's rest was taken on gray, so a
+static scene (e.g. the hanging debris panel) keeps the drive above rest and the
+fitted θ_cone sat on that offset. Scoring only checked "first brake before contact",
+so brakes 4–5 s early counted as detections. Honest scoring now counts a first brake
+more than EARLY_S = 2.5 s before contact as a false (early) brake. Re-scored, that
+readout stopped in time for only 7/63 test collisions, with 22 early brakes.
+
+Fix: **adaptation** (`reflex.looming.Adapter`): relu(drive − running baseline) with
+time constant τ, like motion adaptation in the fly, so steady responses fade.
+τ was chosen on TRAIN only (sweep 0.04–2 s; 0.04 s and 0.1 s tied at 67 vs 65 in time;
+0.1 s chosen as the smoother setting). Held-out TEST (100 flights, 90° FOV, 1.5 m/s):
+
+| | caught | in time (≥ 0.415 s) | false brakes | early brakes (> 2.5 s) |
+| --- | --- | --- | --- | --- |
+| cone + units, τ = 0.1 s (live) | 47/63 | **36/63** | 1/37 | 2 |
+
+In time by obstacle: debris 20/20 (median warning 1.32 s), post 12/20 (1.22 s),
+beam 4/20 (0.32 s, too late), near_post 0/3. Calibration-set tuning was on train
+seeds only; test seeds were used once for this report
+(`measurements/readout-fit-fov90.json`).
+
+## Fitted readout: collision cone + learned units (2026-09-27) — SUPERSEDED (numbers inflated, see correction above)
 
 Camera now renders 384² with MSAA and is area-averaged to 96² (realistic camera,
 no aliasing); fine concrete ground. 90° FOV, 1.5 m/s. Data: 200 train flights

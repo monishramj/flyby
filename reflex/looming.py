@@ -21,6 +21,9 @@ different looming inputs:
   units: Σ w·log1p(feature/scale) + b over the EMA'd 7 units × 3 pathways.
 S = max(cone / θ_cone, 1 + units − θ_units), so S > 1 means "brake". dLR comes
 from the pathway that is higher: left side minus right side (> 0: turn right).
+Adaptation (fitted rule, `adapt_tau_s`): the drive has a slow running baseline
+subtracted, like motion adaptation in the fly, so steady responses to a static scene
+(the eye's rest was measured on gray) fade and only changes count.
 """
 
 import json
@@ -29,7 +32,7 @@ from pathlib import Path
 import numpy as np
 
 from reflex.config import (
-    EMA_ALPHA, LPLC2_NORM_2D, LPLC2_NORM_HORIZ, LPLC2_RINGS, LPLC2_SPACING, READOUT_WEIGHTS_PATH,
+    DT_S, EMA_ALPHA, LPLC2_NORM_2D, LPLC2_NORM_HORIZ, LPLC2_RINGS, LPLC2_SPACING, READOUT_WEIGHTS_PATH,
 )
 
 DIRECTIONS = ("left", "right", "up", "down")  # row order of the drive array
@@ -96,6 +99,23 @@ class Cone:
         return float(kq.sum()), float(kq @ self.side)
 
 
+class Adapter:
+    """relu(drive − baseline); the baseline follows the drive with time constant tau."""
+
+    def __init__(self, tau_s: float | None):
+        self.k = None if not tau_s else DT_S / tau_s
+        self.baseline = None
+
+    def __call__(self, drive: np.ndarray) -> np.ndarray:
+        if self.k is None:
+            return drive
+        if self.baseline is None:
+            self.baseline = np.zeros_like(drive)
+        out = np.maximum(drive - self.baseline, 0)
+        self.baseline = self.baseline + self.k * (drive - self.baseline)
+        return out
+
+
 class Readout:
     def __init__(self, col_x: np.ndarray, col_y: np.ndarray, alpha: float = EMA_ALPHA, weights: dict | None = None):
         self.units = LoomingUnits(np.asarray(col_x), np.asarray(col_y))
@@ -109,16 +129,19 @@ class Readout:
             self._b, self._theta_u = float(u["b"]), float(u["theta"])
             self.cone = Cone(col_x, col_y, float(weights["cone"]["sigma"]))
             self._theta_c = float(weights["cone"]["theta"])
+            self._tau = weights.get("adapt_tau_s")
         self.reset()
 
     def reset(self) -> None:
         self._ema = np.zeros(4)  # S_2d, S_horiz, dLR_2d, dLR_horiz
         self._feat = np.zeros((3, len(self.units.centers)))
         self._cone = np.zeros(2)  # cone score, cone left−right
+        self.adapt = Adapter(self._tau if self.weights is not None else None)
         self.S, self.dLR, self.pathway = 0.0, 0.0, "2d"
 
     def update(self, drive: np.ndarray) -> tuple[float, float]:
         if self.weights is not None:
+            drive = self.adapt(drive)
             a = self.alpha
             self._feat = a * self.units.pathways(drive) + (1 - a) * self._feat
             self._cone = a * np.array(self.cone.score(drive)) + (1 - a) * self._cone
