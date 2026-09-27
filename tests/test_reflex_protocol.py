@@ -40,6 +40,8 @@ def test_frame_round_trip_uses_documented_little_endian_layout():
         (struct.pack("<IIBBHff", 1, 0, 1, 0, 0, float("inf"), 1) + bytes(FRAME_R**2), "goal_bearing"),
         (struct.pack("<IIBBHff", 1, 0, 1, 0, 0, 0, -1) + bytes(FRAME_R**2), "goal_dist"),
     ],
+    # short ids: raw frame bytes in test ids overflow Windows' 32,767-char env var limit
+    ids=["empty", "short", "long", "reflex_on", "mode", "pad", "bearing_range", "bearing_inf", "dist_negative"],
 )
 def test_malformed_frames_are_rejected(data, match):
     with pytest.raises(FrameError, match=match):

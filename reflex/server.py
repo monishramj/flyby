@@ -4,10 +4,15 @@ README Steps 6.1 and 6.4. The eye loads and warms up once at startup; each
 episode resets it to that warmed state.
 """
 
+import os
+
 from reflex.threads import set_threads
 from reflex.config import BENCH_FRAMES_DIR, CLOSED_LOOP_PATH, CPU_THREADS, PORT, REFLEX_DEVICE
 
 set_threads(CPU_THREADS)
+if REFLEX_DEVICE == "cpu":
+    # A CUDA build of PyTorch otherwise makes flyvis load onto the GPU and fail on CPU.
+    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 
 import asyncio
 from contextlib import asynccontextmanager

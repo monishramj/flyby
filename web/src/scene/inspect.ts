@@ -276,17 +276,26 @@ export function encodeFrame(episode: number, k: number, reflexOn: boolean, mode:
   return buf;
 }
 
-/** WebSocket to the reflex. The server answers every message in order. */
+/** Handles unsolicited reflex messages (eye.layout JSON, binary viz); true if consumed. */
+export interface ReflexSideChannel { handle(data: string | ArrayBuffer): boolean }
+
+/** WebSocket to the reflex. The server answers every request in order; eye.layout
+ *  (on connect) and binary viz packets are not replies and go to `side` instead. */
 export class ReflexLink {
   private ws!: WebSocket;
   private pending: ((msg: any) => void)[] = [];
   latest: any = null;
+  constructor(private side?: ReflexSideChannel) {}
 
   // Same origin by default: Vite proxies /ws/reflex to the reflex on :8001.
   async open(url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/reflex`) {
     this.ws = new WebSocket(url);
+    this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = (e) => {
+      if (this.side?.handle(e.data)) return;
+      if (typeof e.data !== 'string') return; // binary viz with no side channel
       const msg = JSON.parse(e.data);
+      if (msg.type === 'eye.layout') return;
       this.latest = msg;
       this.pending.shift()?.(msg);
     };

@@ -19,6 +19,7 @@ export default defineConfig({
         inspect: resolve(import.meta.dirname, 'inspect.html'),
         bench: resolve(import.meta.dirname, 'bench.html'),
         capture: resolve(import.meta.dirname, 'capture.html'),
+        connectome: resolve(import.meta.dirname, 'connectome.html'),
       },
     },
   },
