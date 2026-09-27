@@ -6,8 +6,9 @@
 <style>
   :root { color-scheme: dark; }
   body { margin:0; background:#111914; color:#e8eee7; font:14px/1.45 Inter, "Segoe UI", Arial, sans-serif; }
-  main { display:grid; grid-template-columns: 260px minmax(0,1fr); gap:16px; padding:16px; min-height:100vh; box-sizing:border-box; }
-  #stage { min-height: 70vh; }
+  main { display:grid; grid-template-columns: 240px minmax(0,1.4fr) minmax(0,1fr); gap:16px; padding:16px; min-height:100vh; box-sizing:border-box; }
+  #stage, #brain { min-height: 70vh; }
+  #brain { height: 70vh; }
   h1 { font-size:18px; margin:0 0 10px; }
   .controls { display:grid; gap:8px; }
   label { display:grid; gap:4px; font-size:12px; color:#9fb09c; }
@@ -17,6 +18,7 @@
   button:disabled { opacity:.5; cursor:default; }
   #error { color:#ef6a5b; font-size:12px; }
   pre { font-size:11px; white-space:pre-wrap; color:#9fb09c; }
+  @media (max-width: 1100px) { main { grid-template-columns: 240px minmax(0,1fr); } #brain { grid-column: 1 / -1; } }
   @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -36,6 +38,7 @@
     <pre id="result"></pre>
   </aside>
   <div id="stage"></div>
+  <div id="brain"></div>
 </main>
 <script type="module" src="/src/inspect-page.ts"></script>
 </body>

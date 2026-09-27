@@ -1,11 +1,16 @@
 // Standalone development page for the close-in inspection (the same code the mission UI
-// calls on inspect.request).
+// calls on inspect.request), with the live 3D connectome view beside it.
 import { SCENARIOS, type Scenario } from './scene/inspect';
 import { runInspection } from './scene/flight';
+import { mountLiveConnectome } from './flyviz/live';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const scenarioSel = $<HTMLSelectElement>('scenario');
 for (const s of SCENARIOS) scenarioSel.add(new Option(s.replace('_', ' '), s));
+
+// Built now, before any flight; the flight never waits on it.
+const live = mountLiveConnectome($<HTMLDivElement>('brain'));
+(window as unknown as { flybyLive: typeof live }).flybyLive = live;
 
 $<HTMLButtonElement>('start').addEventListener('click', async () => {
   const button = $<HTMLButtonElement>('start');

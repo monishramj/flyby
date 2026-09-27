@@ -2,10 +2,7 @@
 // element. This is the integration point for the mission UI: on `inspect.request`, call
 // runInspection(host, request) and send the resolved outcome back as `inspect.result`.
 // Live mode never waits on the reflex: each 20 ms tick uses the newest reply.
-// An inset shows the reflex's live flyvis activity (Step 7.1 viz stream) on the 3D
-// connectome (Step 7.4). It loads in the background; the flight never waits on it.
 import * as THREE from 'three';
-import type { Connectome3D } from '../flyviz/connectome3d';
 import { DT, FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario } from './inspect';
 
 export interface InspectRequest {
@@ -30,15 +27,7 @@ export interface InspectOutcome {
 const TARGET_UNDER_ROOF_Z = -2.5;
 const CSS = `
 .flyby-insp{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:10px;width:100%;height:100%;min-height:320px;font:13px/1.4 system-ui,sans-serif;color:#e8eee7}
-.flyby-insp .main{position:relative;min-width:0}
 .flyby-insp canvas.view{width:100%;height:100%;min-height:300px;display:block;border-radius:8px;background:#0b100d}
-.flyby-insp .brain{position:absolute;right:8px;bottom:8px;width:min(50%,480px);display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 250px;border:1px solid #2b3a4f;border-radius:6px;overflow:hidden;background:#05070b}
-.flyby-insp .brain-cap{font-size:11px;padding:3px 8px;color:#a9b4c6;background:#0c1119;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.flyby-insp .brain-cap b{color:#1b1307;background:#e0a33c;border-radius:3px;padding:0 5px;margin-right:6px}
-.flyby-insp .brain-cap b.off{background:#344337;color:#c9d3c7}
-.flyby-insp .brain-stage{position:relative;min-height:0;overflow:hidden}
-.flyby-insp .brain-stage canvas{display:block}
-.flyby-insp .brain-err{padding:10px;font-size:12px;color:#ef6a5b}
 .flyby-insp aside{display:grid;gap:8px;align-content:start}
 .flyby-insp canvas.fpv{width:100%;aspect-ratio:1;image-rendering:pixelated;border-radius:6px;background:#000}
 .flyby-insp .cap{font-size:11px;color:#9fb09c;margin:0}
@@ -55,13 +44,10 @@ function hashSeed(s: string): number {
 }
 
 let reflexLink: ReflexLink | null = null;
-let brainView: Connectome3D | null = null; // the connectome inset of the latest flight
-let brainGen = 0;
 let episodeCounter = Math.floor(Math.random() * 1e6) * 100;
 let sideChannel: ReflexSideChannel | null = null;
 
-/** Also receive the reflex's eye.layout and live viz packets (e.g. a flyviz VizStream);
- *  the link's own `viz` feeds the connectome inset either way. */
+/** Receive the reflex's eye.layout and live viz packets (e.g. a flyviz VizStream). */
 export function attachReflexStream(side: ReflexSideChannel | null) {
   sideChannel = side;
 }
@@ -83,8 +69,7 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
     const style = document.createElement('style'); style.id = 'flyby-insp-css'; style.textContent = CSS;
     document.head.appendChild(style);
   }
-  host.innerHTML = `<div class="flyby-insp"><div class="main"><canvas class="view"></canvas>
-    <div class="brain"><div class="brain-cap"></div><div class="brain-stage"></div></div></div><aside>
+  host.innerHTML = `<div class="flyby-insp"><canvas class="view"></canvas><aside>
     <canvas class="fpv" width="220" height="220"></canvas>
     <p class="cap">Drone camera → fly eye (96 × 96)</p><div class="hud"></div></aside></div>`;
   const view = host.querySelector<HTMLCanvasElement>('canvas.view')!;
@@ -107,51 +92,6 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   const episode = ++episodeCounter;
   const maxWall = (req.maxWallS ?? 18) * 1000;
   let command: Command | null = null, stale = 0;
-
-  // Connectome inset: loaded asynchronously, fed from link.viz whenever a new viz arrives.
-  brainView?.dispose(); brainView = null;
-  const gen = ++brainGen;
-  const brainCap = host.querySelector<HTMLDivElement>('.brain-cap')!;
-  const brainStage = host.querySelector<HTMLDivElement>('.brain-stage')!;
-  const setCap = (badge: string, text: string, live = false) => {
-    brainCap.innerHTML = `<b class="${live ? '' : 'off'}">${badge}</b>`;
-    brainCap.append(text);
-  };
-  let brain: Connectome3D | null = null;
-  let shownViz = link?.viz.header ?? null; // skip a viz left over from an earlier flight
-  let vizShown = 0;
-  if (link) {
-    setCap('LIVE', 'loading connectome…');
-    import('../flyviz/connectome3d')
-      .then(({ Connectome3D }) => Connectome3D.create(brainStage, {
-        onStatus: (st) => { if (gen === brainGen && !brain) setCap('LIVE', st); },
-      }))
-      .then((v) => {
-        if (gen !== brainGen) { v.dispose(); return; }
-        brain = brainView = v;
-        if (!vizShown) setCap('LIVE', 'waiting for flyvis activity from the reflex…');
-      })
-      .catch((err: Error) => {
-        if (gen !== brainGen) return;
-        setCap('OFF', 'connectome view unavailable');
-        brainStage.innerHTML = '<p class="brain-err"></p>';
-        brainStage.firstElementChild!.textContent = `Could not load the 3D connectome (${err.message}). The flight is unaffected.`;
-      });
-  } else {
-    setCap('OFF', 'reflex not reachable: no live flyvis activity');
-  }
-  const feedBrain = () => {
-    const h = link?.viz.header, dev = link?.viz.latest;
-    if (!brain || !h || !dev || h === shownViz) return;
-    shownViz = h;
-    try {
-      brain.setActivity(dev);
-      vizShown += 1;
-      setCap('LIVE', `flyvis model activity from this flight · frame ${h.k} · S ${h.S.toFixed(2)} · ${h.cmd.replace('_', ' ')}`, true);
-    } catch (err) {
-      setCap('OFF', `viz not shown: ${(err as Error).message}`);
-    }
-  };
 
   const resize = () => {
     const w = view.clientWidth || 640, h = view.clientHeight || 360;
@@ -201,7 +141,6 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
       renderer.setRenderTarget(null);
       renderer.render(insp.scene, chase);
       drawHud();
-      feedBrain();
       if (!finished) { requestAnimationFrame(tick); return; }
       const r = insp.result();
       resolve({

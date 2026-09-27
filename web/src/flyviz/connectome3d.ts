@@ -78,6 +78,8 @@ export class Connectome3D {
   private overlay: HTMLDivElement;
   private disposed = false;
   private dirty = true; // redraw only when activity, camera or size changed
+  /** Frames actually drawn (render-on-demand), for measuring the view's frame rate. */
+  renders = 0;
 
   /** Loads the vendored fly-brain assets and builds the view inside `container`. */
   static async create(container: HTMLElement, opts: ConnectomeOptions = {}): Promise<Connectome3D> {
@@ -229,6 +231,7 @@ export class Connectome3D {
       if (this.controls.update() || this.dirty) {
         this.dirty = false;
         this.renderer.render(this.scene, this.camera);
+        this.renders += 1;
       }
     };
     loop();

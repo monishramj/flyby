@@ -12,7 +12,53 @@ Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
-## Live connectome inset in the inspection flight (2026-09-27, Windows)
+## Live 3D connectome view moved out of scene/ (2026-09-27, Windows)
+
+File ownership: `web/src/scene/*` belongs to the cloud session, so the live view now
+lives in fly-lane files and `scene/` is back to exactly 3171080.
+
+- New `web/src/flyviz/live.ts` (`mountLiveConnectome(host)`): a `VizStream` attached via
+  `attachReflexStream()` (3171080); on every new viz packet `VizStream.latest` (45,669
+  deviations, identity node map per `data/flybrain_node_map.json`) goes to
+  `Connectome3D.setActivity()`. Caption "LIVE · live flyvis model activity from the
+  reflex during this flight · frame k · S · cmd"; the view keeps its label and
+  attribution. A malformed viz packet is dropped and never becomes a reply.
+- `inspect.html` / `inspect-page.ts`: the view sits beside the flight (third column,
+  below it under 1100 px) and is **built at page load, before any flight**. Fly never
+  waits on it; load failure → "connectome view unavailable" + short error, flight runs.
+- `connectome3d.ts`: only a `renders` counter (for measuring the view's frame rate).
+- Reverted the 65e2579 hunks in `web/src/scene/flight.ts` and `web/src/scene/inspect.ts`
+  (no later commit touched `web/src/scene/`). Checked first: in the 3171080 `ReflexLink`,
+  binary messages return before the reply queue and `eye.layout` is filtered, so
+  layout/viz still never count as replies; confirmed live (below).
+
+Checks: `npx tsc --noEmit -p .` exit 0; `pytest -m "not slow"` 71 passed, 7 deselected.
+Live: `python -m reflex.server` (real pretrained model, CPU) + Vite dev, headless Edge
+(Intel UHD, ANGLE D3D11, 1600×900, not vsync-capped), scenario `clear`, seed 0, the view
+loaded before pressing Fly:
+
+| run | view | view load (page) | long task at load | replies in order from k=1 | reply Hz | viz/s | view renders/s | rAF fps | rAF p95 / max ms | gaps > 50 ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | on | 2.19 s | 199 ms | yes (205 replies) | 19.6 | 3.92 | 3.9 | 116.3 | 20.8 / 55.5 | 1 |
+| 2 | on | 2.33 s | 146 ms | yes (335) | 33.7 | 6.80 | 6.8 | 129.8 | 13.9 / 27.8 | 0 |
+| 3 | blocked | error shown | none | yes (335) | 34.8 | 7.05 | 0 | 143.8 | 7.1 / 7.3 | 0 |
+| 4 | on | 1.71 s | 89 ms | yes (336) | 32.8 | 6.59 | 6.6 | 130.8 | 13.8 / 27.9 | 0 |
+
+All flights reached the target, no collision; one eye.layout per connection; every viz
+received was shown (runs 1/2/4: 41/67/68). In time with the flight: sampled each
+second, the view's frame k trailed the newest command reply's k by 0–4 frames
+(e.g. run 2: 31/33, 96/98, 201/203). The geometry-build long task (89–199 ms) now
+happens at page load; in flight the long tasks were 59–117 ms within 0.25 s of Fly
+(also with the view blocked, so the flight's own start) plus one 57 ms at the end of
+run 1. The 0.1–0.9 s in-flight build stalls of the old inset were not seen. Screenshots checked (neurons lit beside the
+flight; error text with assets blocked). All servers stopped.
+
+Open: run 1 (first flight after reflex start) had lower reply/viz rates (19.6 Hz /
+3.9 per s); the reflex backlog (issue 1 below) remains. Bench record mode not re-run
+after the revert (its `ReflexLink` code is identical to 3171080). If Fly is pressed
+before the view finishes loading (~2 s), the build still lands in that flight.
+
+## Live connectome inset in the inspection flight (2026-09-27, Windows) — SUPERSEDED (moved to `flyviz/live.ts`, see above)
 
 Changed: `web/src/scene/inspect.ts`, `web/src/scene/flight.ts`, `web/src/flyviz/connectome3d.ts`.
 
