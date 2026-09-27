@@ -156,3 +156,8 @@ def test_truth_is_served_only_on_request_and_never_in_the_snapshot(client):
     assert payload["config"]["ALT_M"] == 40 and payload["config"]["SWEEP_PATH"]
     body = client.get("/api/truth").json()
     assert body["run_id"] == payload["run_id"] and body["subjects"] and body["decoys"]
+
+
+def test_the_page_and_results_are_revalidated_on_every_load(client):
+    assert client.get("/api/health").headers["cache-control"] == "no-cache"
+    assert client.get("/api/results/nope.json").headers["cache-control"] == "no-cache"

@@ -56,14 +56,15 @@ calibration win. Laya's contribution is the action recommendation, urgency and r
 ## Fine-tuning Laya (tried, not shipped)
 
 `uv run python -m tools.laya_finetune` retrains only Laya's `scorer` (about 1M of its 421M
-parameters) on 971 simulated decision states (seeds 1000–1059), labelled from the simulator's
-truth, and tests on 220 states from seeds 100–111. Urgency is distilled toward stock Laya so it does
+parameters) on 891 simulated decision states (seeds 1000–1059), labelled from the simulator's
+truth, and tests on 202 states from seeds 100–111 (latest run, with drone visits; writes
+`results/finetune.json` for the Results tab). Urgency is distilled toward stock Laya so it does
 not drift.
 
-| Scorer | Action accuracy | Routed to a human |
-| --- | --- | --- |
-| stock | 0.486 | 0.53 |
-| fine-tuned, 60 epochs | 0.491 | 0.48 |
+| Scorer | Action accuracy | Right when acting alone | Routed to a human | P(person) ECE | People called ignore |
+| --- | --- | --- | --- | --- | --- |
+| stock | 0.465 | 0.51 | 0.505 | 0.146 | 17/87 |
+| fine-tuned, 60 epochs | 0.495 | 0.60 | 0.495 | 0.099 | 17/87 |
 
 Heavier training and class weighting (exploratory sweeps, three training seeds each) reached
 accuracy 0.53–0.62, but only by auto-closing more real people: every setting sat on the same
@@ -110,16 +111,27 @@ which re-images often, 125 s → 76 s median).
 
 `uv run python -m batch.run_eval` → `results/summary.json`
 
-| Arm | Time to dispatch (median) | vs manual @120 s/image | vs manual @10 s/image | Subjects found | Final action accuracy |
-| --- | --- | --- | --- | --- | --- |
-| rule | 76.3 s | 4090 s → 53.6× | 240 s → 3.2× | 70/141 | 0.679 |
-| laya | 80.2 s | 4090 s → 51.0× | 240 s → 3.0× | 77/141 | 0.813 |
+Laya arm, 20 missions: 209 flags, 77/141 people reached a crew (44 were never flagged by the camera),
+median first sighting to crew 80.2 s (people in the open) and 270 s (under a roof), Laya 154 ms per
+decision (p95 175 ms). Laya's first call is right 43% of the time, scored at each call's own pass (an
+earlier version scored first calls against the end-of-mission pass, which flattered nothing but was
+wrong). At the 0.50 bar 54% of first calls clear it and 53% of those are right; higher bars do not
+buy more accuracy, so a person stays in the loop for every crew. Final action accuracy is 0.81
+because the simulated commander (90% right) makes most calls.
 
-Laya's `ignore` auto-closes only on a low detector band; auto-closed leads are re-decided when intel changes their context. Laya routes 44.5% of leads to the simulated human, who then picks the §4.4 optimal action 90% of
-the time, so part of the laya arm's edge is the simulated operator, not Laya. First-decision
-accuracy (before any human) is 0.44 for laya vs 0.42 for the rule.
+**Manual-reviewer comparison removed.** It reported 51× (120 s/photo) and 3× (10 s/photo). The 120 s
+is CRASAR's published 1–3 min, but the 51× came from applying it as a strict one-at-a-time backlog
+while a photo lands every 5 s; the simulated commander, meanwhile, answered every card in parallel
+(re-run through one serial commander: median extra wait 0 s, p90 46 s, max 149 s, busy 41% of the
+mission); and the manual median covered all 89 visible/partial people while FlyBy's covered only the
+68 it dispatched. Results now measure the system itself.
 
-**Human load (sub-problem 2).** A manual reviewer handles every flag. Of 209 flags, after the
+**Grok, live** (`uv run python -m tools.grok_eval`, grok-4.3, seeds 0–4): 33/33 crew orders written,
+none timed out at 20 s, median 11.6 s, 0 with digits. 66/71 radio messages parsed (5 hit the 10 s parse
+timeout), median 5.6 s; fields vs the scripted truth: location 100%, subject count 95%, urgency, hazards,
+source and retraction 100%.
+
+**Human load (sub-problem 2).** Of 209 flags, after the
 "no one gets lost" gate (below):
 
 | Arm | Needed judgment | One-click approval | No human | Real people closed with no human look |
@@ -136,5 +148,4 @@ found 72 → 77, median time to dispatch 80 → 83 s, flags needing judgment 111
 remain are low-score people in the open, who read exactly like debris; in the live app they still
 sit in the Auto-closed tab awaiting confirmation (the batch's simulated human never confirms).
 
-`under_structure` subjects are reported separately (median 394.1 s, laya arm): overhead
-review cannot see them at all, so they are excluded from the primary comparison.
+`under_structure` subjects are reported separately: only a close-in inspection can find them.

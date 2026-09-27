@@ -7,11 +7,8 @@ Results JSON schema written by batch/run_eval.py (results/summary.json):
   "generated_at": iso8601,
   "assumptions": {                     declared, not measured (README T1.2, T6.1)
       "detector_noise": {truth: {p_detect, mu_conf}}, "conf_std": float,
-      "sim_human_acc": float, "human_detection_probability": 1.0,
-      "handoff_s": float, "intel": "oracle", "review_s": [int],
+      "sim_human_acc": float, "handoff_s": float, "intel": "oracle",
       "policy_gate": str},
-  "baseline": {                        manual overhead review, seed-independent
-      "review_s": {"120": {...}, "10": {...}}},
   "arms": {policy: {
       "leads": int, "runs": int,
       "time_to_dispatch_s": {"n", "median", "iqr", "p25", "p75", "values"},
@@ -19,12 +16,15 @@ Results JSON schema written by batch/run_eval.py (results/summary.json):
       "subjects": {"placed", "visible_partial", "dispatched", "found_share"},
       "action_accuracy": {"decision", "final"},
       "human_load": {"flags", "needed_judgment", "one_click", "no_human", "people_closed_without_human"},
+      "flag_flow": {"routes": {no_human|one_click|needed_judgment: {person_reached, person_missed,
+                    empty_dispatch, cleared}}, "people_placed", "people_never_flagged"},
+      "confidence": {"n", "tau_route", "accuracy", "points": [{"bar", "cleared_share", "accuracy"}],
+                     "confusion": {chosen: {right: count}}},   Laya's first call per flag
       "dispatch": {"precision", "recall"},
       "routing_rate": float, "fallback_rate": float, "redecisions": int,
       "latency_ms": {"p50", "p95"},
       "calibration": {"laya_p_person": {"ece", "n"}, "detector_conf": {"ece", "n"},
-                      "reliability": [{"bin", "n", "confidence", "accuracy"}]}}},
-  "comparison": [{"arm", "review_s", "flyby_median_s", "manual_median_s", "speedup"}]
+                      "reliability": [{"bin", "n", "confidence", "accuracy"}]}}}
 }
 
 All times are seconds measured from a subject's zero point t0: the time of the
@@ -35,7 +35,7 @@ from datetime import UTC, datetime
 import numpy as np
 
 from server.config import settings
-from server.mission.sweep import Sweep
+from server.triage.fallback import ACTIONS
 
 BINS = 10
 
@@ -72,41 +72,6 @@ def _bin_index(probabilities, bins):
     return np.clip(np.digitize(probabilities, np.linspace(0, 1, bins + 1)[1:-1], right=False), 0, bins - 1)
 
 
-def reviewer_finish_times(capture_times, review_s: float) -> list[float]:
-    """f_i = max(t_i, f_{i−1}) + REVIEW_S: a reviewer who cannot skip an image."""
-    finish, previous = [], 0.0
-    for t in capture_times:
-        previous = max(t, previous) + review_s
-        finish.append(previous)
-    return finish
-
-
-def capture_lag(cfg=settings, review_seconds=None) -> dict:
-    """Per capture index, how long after t0 a manual reviewer reaches that image.
-
-    Seed-independent, because the sweep and its capture times are fixed by config.
-    """
-    times = [capture["t"] for capture in Sweep(cfg).captures()]
-    lags = {}
-    for review_s in review_seconds or cfg.REVIEW_S:
-        finish = reviewer_finish_times(times, review_s)
-        lags[str(review_s)] = [finish[index] - times[index] + cfg.HANDOFF_S for index in range(len(times))]
-    return lags
-
-
-def manual_times(subjects, lags) -> list[float]:
-    """T_human per subject: the reviewer spots it with P=1 at its first containing capture."""
-    return [lags[row["capture_index"]] for row in subjects
-            if row["visibility"] in ("visible", "partial") and row["capture_index"] is not None]
-
-
-def manual_baseline(subjects, cfg=settings) -> dict:
-    lags = capture_lag(cfg)
-    return {review_s: {"review_s": int(review_s), "captures": len(lag),
-                       **_spread(manual_times(subjects, lag))}
-            for review_s, lag in lags.items()}
-
-
 def _spread(values) -> dict:
     values = sorted(float(value) for value in values)
     if not values:
@@ -122,17 +87,55 @@ def _status_time(lead, status):
     return None
 
 
+def _handled_by(lead):
+    """Who a flag needed: a judgment call, a one-click approval, or no human at all."""
+    names = {entry["status"] for entry in lead.get("status_history", [])}
+    return "needed_judgment" if "awaiting_human" in names else "one_click" if "awaiting_approval" in names else "no_human"
+
+
 def human_load(leads: list[dict]) -> dict:
     """Sub-problem 2 directly: of every flag, how many reached a human, and how."""
-    seen = [{entry["status"] for entry in lead.get("status_history", [])} for lead in leads]
-    judgment = [lead for lead, names in zip(leads, seen) if "awaiting_human" in names]
-    one_click = [lead for lead, names in zip(leads, seen) if "awaiting_approval" in names and "awaiting_human" not in names]
-    untouched = [lead for lead, names in zip(leads, seen) if not names & {"awaiting_human", "awaiting_approval"}]
-    return {"flags": len(leads), "needed_judgment": len(judgment), "one_click": len(one_click),
-            "no_human": len(untouched),
+    routes = [_handled_by(lead) for lead in leads]
+    return {"flags": len(leads), **{name: routes.count(name) for name in ("needed_judgment", "one_click", "no_human")},
             # the price of not looking: real people that no human ever saw
             "people_closed_without_human": sum(bool(lead["is_person"]) and lead["status"] in ("auto_closed", "ignored")
-                                               for lead in untouched)}
+                                               for lead, route in zip(leads, routes) if route == "no_human")}
+
+
+OUTCOMES = ("person_reached", "person_missed", "empty_dispatch", "cleared")
+
+
+def flag_flow(leads: list[dict], subjects: list[dict]) -> dict:
+    """Where every flag went: who handled it, then whether a real person reached a crew."""
+    routes = {name: dict.fromkeys(OUTCOMES, 0) for name in ("no_human", "one_click", "needed_judgment")}
+    for lead in leads:
+        dispatched = _status_time(lead, "dispatched") is not None
+        outcome = ("person_reached" if dispatched else "person_missed") if lead["is_person"] else \
+            ("empty_dispatch" if dispatched else "cleared")
+        routes[_handled_by(lead)][outcome] += 1
+    flagged = {(lead["seed"], lead["object_id"]) for lead in leads}
+    return {"routes": routes, "people_placed": len(subjects),
+            # the camera never flagged them, so no triage could have helped
+            "people_never_flagged": sum((row["seed"], row["object_id"]) not in flagged for row in subjects)}
+
+
+def _first_optimal(lead):
+    """The right action for Laya's first call, judged at that call's own pass."""
+    return (lead.get("decision_optimal") or [lead["optimal_action"]])[0]
+
+
+def confidence_curve(leads: list[dict], cfg=settings) -> dict:
+    """Laya's first call on each flag: at each confidence bar, how many calls clear it and how often those are right."""
+    calls = [(max(lead["history"][0]["probs"].values()), lead["history"][0]["action"], _first_optimal(lead))
+             for lead in leads if lead.get("history") and lead["history"][0].get("source") == "laya"]
+    points = []
+    for bar in np.round(np.arange(0.25, 0.951, 0.05), 2):
+        cleared = [chosen == right for top, chosen, right in calls if top >= bar]
+        points.append({"bar": float(bar), "cleared_share": round(len(cleared) / len(calls), 3) if calls else None,
+                       "accuracy": _share(cleared)})
+    confusion = {chosen: {right: sum(c == chosen and r == right for _, c, r in calls) for right in ACTIONS} for chosen in ACTIONS}
+    return {"n": len(calls), "tau_route": cfg.TAU_ROUTE, "points": points,
+            "accuracy": _share([chosen == right for _, chosen, right in calls]), "confusion": confusion}
 
 
 def arm_metrics(leads: list[dict], subjects: list[dict], runs: int, cfg=settings) -> dict:
@@ -169,12 +172,14 @@ def arm_metrics(leads: list[dict], subjects: list[dict], runs: int, cfg=settings
         "subjects": {"placed": len(subjects), "visible_partial": len(overhead), "dispatched": found,
                      "found_share": round(found / len(subjects), 3) if subjects else None},
         "action_accuracy": {
-            "decision": _share([lead["history"][0]["action"] == lead["optimal_action"] for lead in leads if lead.get("history")]),
+            "decision": _share([lead["history"][0]["action"] == _first_optimal(lead) for lead in leads if lead.get("history")]),
             "final": _share([(lead.get("final_action") or lead["history"][0]["action"]) == lead["optimal_action"] for lead in leads if lead.get("history")]),
         },
         "dispatch": {"precision": _share([lead["is_person"] for lead in dispatched]),
                      "recall": round(len(true_dispatches) / len(subjects), 3) if subjects else None},
         "human_load": human_load(leads),
+        "flag_flow": flag_flow(leads, subjects),
+        "confidence": confidence_curve(leads, cfg),
         "routing_rate": _share([decision["routed_to_human"] for decision in decisions]),
         "fallback_rate": _share([decision["used_fallback"] for decision in decisions]),
         "redecisions": sum(max(0, len(lead.get("history", [])) - 1) for lead in leads),
@@ -195,7 +200,6 @@ def _share(values) -> float | None:
 
 def summarize(arms: dict, subjects_by_arm: dict, seeds: list[int], cfg=settings, policy_gate: str = "") -> dict:
     """arms: policy -> {"leads": [...], "runs": int}; subjects_by_arm: policy -> subject rows."""
-    baseline = manual_baseline(next(iter(subjects_by_arm.values())), cfg)
     summary = {
         "seeds": list(seeds),
         "generated_at": datetime.now(UTC).isoformat(),
@@ -203,25 +207,13 @@ def summarize(arms: dict, subjects_by_arm: dict, seeds: list[int], cfg=settings,
             "detector_noise": {key: {"p_detect": value[0], "mu_conf": value[1]} for key, value in cfg.NOISE.items()},
             "conf_std": cfg.CONF_STD,
             "sim_human_acc": cfg.SIM_HUMAN_ACC,
-            "human_detection_probability": 1.0,
             "handoff_s": cfg.HANDOFF_S,
             "intel": "oracle",
-            "review_s": list(cfg.REVIEW_S),
             "note": "Detector rates and human behaviour are declared simulation assumptions, "
                     "not measured detector or operator performance.",
             "policy_gate": policy_gate,
         },
-        "baseline": {"review_s": baseline},
         "arms": {policy: arm_metrics(data["leads"], subjects_by_arm[policy], data["runs"], cfg)
                  for policy, data in arms.items()},
     }
-    comparison = []
-    for policy, metrics in summary["arms"].items():
-        flyby = metrics["time_to_dispatch_s"]["median"]
-        for review_s, row in manual_baseline(subjects_by_arm[policy], cfg).items():
-            comparison.append({"arm": policy, "review_s": int(review_s),
-                               "flyby_median_s": flyby, "manual_median_s": row["median"],
-                               "flyby_n": metrics["time_to_dispatch_s"]["n"], "manual_n": row["n"],
-                               "speedup": round(row["median"] / flyby, 2) if flyby and row["median"] else None})
-    summary["comparison"] = comparison
     return summary

@@ -88,17 +88,17 @@ async def test_the_results_file_matches_what_the_results_tab_reads(tmp_path, mon
     cfg = fast_settings(RESULTS_DIR=tmp_path)
     await run_eval.evaluate([4], ["laya", "rule"], cfg)
     summary = json.loads((tmp_path / "summary.json").read_text())
-    assert {"seeds", "generated_at", "assumptions", "arms", "comparison"} <= set(summary)
+    assert {"seeds", "generated_at", "assumptions", "arms"} <= set(summary)
     for arm in summary["arms"].values():
         assert {"time_to_dispatch_s", "under_structure_time_to_dispatch_s", "subjects",
                 "action_accuracy", "dispatch", "routing_rate", "fallback_rate", "redecisions",
-                "latency_ms", "calibration"} <= set(arm)
+                "latency_ms", "calibration", "human_load", "flag_flow", "confidence"} <= set(arm)
         assert {"n", "median", "iqr"} <= set(arm["time_to_dispatch_s"])
         assert {"placed", "dispatched"} <= set(arm["subjects"])
         assert {"laya_p_person", "detector_conf", "reliability"} <= set(arm["calibration"])
         assert {"bin", "n", "confidence", "accuracy"} == set(arm["calibration"]["reliability"][0])
-    for row in summary["comparison"]:
-        assert {"arm", "review_s", "flyby_median_s", "manual_median_s", "speedup"} <= set(row)
+        assert {"routes", "people_placed", "people_never_flagged"} <= set(arm["flag_flow"])
+        assert {"n", "tau_route", "accuracy", "points", "confusion"} <= set(arm["confidence"])
 
 
 def test_the_built_ui_is_served_from_the_same_origin(client):

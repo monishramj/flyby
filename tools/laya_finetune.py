@@ -5,14 +5,16 @@ Retraining only that scorer on the simulator's ground truth teaches Laya this on
 which of the four actions fits a lead, and whether it is a person. Urgency has no ground
 truth, so it is held to Laya's original answers (distillation) and does not drift.
 
-  uv run python -m tools.laya_finetune            # writes models/laya_sar_scorer.pt; LAYA_SCORER=… to try it
+  uv run python -m tools.laya_finetune            # writes models/laya_sar_scorer.pt and results/finetune.json
 
 Result (docs/GATES.md): it trades human load against missed people along the same curve as
 stock Laya, because low-score people in the open read exactly like debris. Not shipped.
 """
 import argparse
 import asyncio
+import json
 from copy import deepcopy
+from datetime import UTC, datetime
 
 import numpy as np
 import torch
@@ -82,12 +84,17 @@ def predict(scorer, rows, temperature):
 
 def report(name, rows, action, person, tau):
     labels = torch.tensor([row["action"] for row in rows])
-    people = [row["person"] for row in rows]
+    people = torch.tensor([row["person"] for row in rows])
     top, choice = action.max(-1)
     auto = top >= tau
-    print(f"{name:10s} action acc {float((choice == labels).float().mean()):.3f} · "
-          f"routed {float((~auto).float().mean()):.2f} · auto acc {float((choice[auto] == labels[auto]).float().mean()) if auto.any() else float('nan'):.3f} · "
-          f"P(person) ECE {ece(person.tolist(), people):.3f} · people called ignore {int(((choice == 3) & (torch.tensor(people) == 1)).sum())}/{sum(people)}")
+    row = {"action_accuracy": round(float((choice == labels).float().mean()), 3),
+           "routed_share": round(float((~auto).float().mean()), 3),
+           "auto_accuracy": round(float((choice[auto] == labels[auto]).float().mean()), 3) if auto.any() else None,
+           "p_person_ece": round(ece(person.tolist(), people.tolist()), 3),
+           "people_called_ignore": int(((choice == 3) & (people == 1)).sum()), "people": int(people.sum())}
+    print(f"{name:10s} action acc {row['action_accuracy']} · routed {row['routed_share']} · auto acc {row['auto_accuracy']} · "
+          f"P(person) ECE {row['p_person_ece']} · people called ignore {row['people_called_ignore']}/{row['people']}")
+    return row
 
 
 def main():
@@ -108,7 +115,7 @@ def main():
     temperature = {"action": temps.get("choice:3-5", 1.0), "urgency": temps.get("score:3-5", 1.0), "person": temps.get("noul:2", 1.0)}
     original = runtime.agent.model.scorer
     scorer = deepcopy(original).float().train()
-    report("before", test, *predict(original.float(), test, temperature), cfg.TAU_ROUTE)
+    before = report("before", test, *predict(original.float(), test, temperature), cfg.TAU_ROUTE)
 
     action_y = torch.tensor([row["action"] for row in train])
     person_y = torch.tensor([row["person"] for row in train])
@@ -130,6 +137,12 @@ def main():
             report(f"epoch {epoch + 1}", test, *predict(scorer, test, temperature), cfg.TAU_ROUTE)
             scorer.train()
     scorer.eval()
+    after = report("after", test, *predict(scorer, test, temperature), cfg.TAU_ROUTE)
+    (cfg.RESULTS_DIR / "finetune.json").write_text(json.dumps({
+        "generated_at": datetime.now(UTC).isoformat(), "epochs": args.epochs, "tau_route": cfg.TAU_ROUTE,
+        "train": {"states": len(train), "seeds": [TRAIN_SEEDS.start, TRAIN_SEEDS.stop - 1]},
+        "test": {"states": len(test), "seeds": [TEST_SEEDS.start, TEST_SEEDS.stop - 1]},
+        "stock": before, "fine_tuned": after}, indent=2) + "\n")
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"scorer": scorer.state_dict(), "train_seeds": list(TRAIN_SEEDS), "revision": settings.LAYA_REVISION}, OUTPUT)
     print(f"Saved {OUTPUT}")

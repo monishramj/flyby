@@ -6,31 +6,6 @@ from batch import metrics, run_eval
 from conftest import FakeRuntime, fast_settings
 
 
-def test_reviewer_baseline_matches_a_hand_computed_three_capture_queue():
-    # Captures at t = 0, 5, 10 with 120 s per image: the queue, not the flight, sets the pace.
-    # f_0 = 0 + 120; f_1 = max(5, 120) + 120 = 240; f_2 = max(10, 240) + 120 = 360.
-    assert metrics.reviewer_finish_times([0, 5, 10], 120) == [120, 240, 360]
-    cfg = fast_settings()
-    subjects = [{"visibility": "visible", "capture_index": 0},
-                {"visibility": "partial", "capture_index": 2},
-                {"visibility": "under_structure", "capture_index": 1}]
-    lag = [finish - t + cfg.HANDOFF_S for finish, t in zip([120, 240, 360], [0, 5, 10])]
-    assert lag == [180, 295, 410]
-    assert metrics.manual_times(subjects, lag) == [180, 410], "hidden subjects are excluded"
-    # At 10 s per image the reviewer keeps up, so only the handoff remains.
-    assert metrics.reviewer_finish_times([0, 5, 10], 10) == [10, 20, 30]
-
-
-def test_the_real_sweep_baseline_grows_with_review_time():
-    cfg = fast_settings()
-    lags = metrics.capture_lag(cfg)
-    assert set(lags) == {"120", "10"}
-    assert len(lags["120"]) == len(lags["10"])
-    assert lags["120"][0] == 120 + cfg.HANDOFF_S
-    assert lags["120"][-1] > lags["10"][-1], "a slower reviewer accumulates a longer backlog"
-    assert all(later >= earlier for earlier, later in zip(lags["120"], lags["120"][1:]))
-
-
 def test_ece_on_a_toy_input():
     # Perfectly calibrated: half the 0.0 cases and half the 1.0 cases land in their own bins.
     assert metrics.ece([0.0, 0.0, 1.0, 1.0], [0, 0, 1, 1]) == pytest.approx(0.0)
@@ -56,10 +31,10 @@ async def test_a_one_seed_evaluation_produces_every_reported_metric(tmp_path):
         assert key in arm
     load = arm["human_load"]
     assert load["needed_judgment"] + load["one_click"] + load["no_human"] == load["flags"] == arm["leads"]
-    assert summary["assumptions"]["review_s"] == list(cfg.REVIEW_S)
-    assert summary["assumptions"]["human_detection_probability"] == 1.0
     assert summary["assumptions"]["detector_noise"]["visible"] == {"p_detect": .9, "mu_conf": .75}
-    assert [row["review_s"] for row in summary["comparison"]] == [120, 10]
+    flow = arm["flag_flow"]
+    assert sum(sum(row.values()) for row in flow["routes"].values()) == arm["leads"]
+    assert "comparison" not in summary, "Results measure the system itself, not a simulated reviewer"
     assert (tmp_path / "raw.parquet").is_file() and (tmp_path / "subjects.parquet").is_file()
     assert json.loads((tmp_path / "summary.json").read_text())["seeds"] == [4]
 
@@ -99,3 +74,29 @@ def test_human_load_counts_each_flag_once_and_names_people_nobody_saw():
                        row("captured", "auto_closed", person=True, status="auto_closed"),
                        row("captured", "reimaging", "auto_closed", status="auto_closed")])
     assert load == {"flags": 4, "needed_judgment": 1, "one_click": 1, "no_human": 2, "people_closed_without_human": 1}
+
+
+def test_flag_flow_and_the_confidence_curve_on_hand_made_flags():
+    from batch.metrics import confidence_curve, flag_flow
+    def lead(object_id, names, *, person, action, top, right, source="laya"):
+        rest = (1 - top) / 3
+        probs = {name: (top if name == action else rest) for name in ("dispatch_ground_team", "reimage_zoom", "close_in_inspect", "ignore")}
+        return {"seed": 0, "object_id": object_id, "is_person": person, "status": names[-1],
+                "status_history": [{"status": n, "t": i} for i, n in enumerate(names)],
+                "history": [{"action": action, "probs": probs, "source": source}], "decision_optimal": [right]}
+    leads = [lead("a", ["captured", "awaiting_approval", "dispatched"], person=True, action="dispatch_ground_team", top=.9, right="dispatch_ground_team"),
+             lead("b", ["captured", "auto_closed"], person=True, action="ignore", top=.7, right="dispatch_ground_team"),
+             lead("c", ["captured", "awaiting_human", "ignored"], person=False, action="ignore", top=.4, right="ignore"),
+             lead("d", ["captured", "awaiting_human", "dispatched"], person=False, action="dispatch_ground_team", top=.3, right="ignore", source="rule")]
+    flow = flag_flow(leads, [{"seed": 0, "object_id": "a"}, {"seed": 0, "object_id": "b"}, {"seed": 0, "object_id": "z"}])
+    assert flow["routes"]["one_click"]["person_reached"] == 1
+    assert flow["routes"]["no_human"]["person_missed"] == 1
+    assert flow["routes"]["needed_judgment"] == {"person_reached": 0, "person_missed": 0, "empty_dispatch": 1, "cleared": 1}
+    assert flow["people_never_flagged"] == 1
+    curve = confidence_curve(leads, fast_settings())
+    assert curve["n"] == 3, "only Laya's own calls are scored"
+    at = {point["bar"]: point for point in curve["points"]}
+    assert at[0.25] == {"bar": 0.25, "cleared_share": 1.0, "accuracy": round(2 / 3, 3)}
+    assert at[0.5] == {"bar": 0.5, "cleared_share": round(2 / 3, 3), "accuracy": 0.5}
+    assert at[0.95]["cleared_share"] == 0 and at[0.95]["accuracy"] is None
+    assert curve["confusion"]["ignore"]["dispatch_ground_team"] == 1

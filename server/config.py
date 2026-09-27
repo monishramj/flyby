@@ -62,7 +62,6 @@ class Settings(BaseSettings):
     SIM_HUMAN_APPROVE_S: float = 5
     HANDOFF_S: float = 60
     SIM_HUMAN_ACC: float = 0.9
-    REVIEW_S: tuple[int, int] = (120, 10)
     WS_HZ: float = 10
     MONGO_TIMEOUT_MS: int = 1000
     MONGO_RETRY_S: float = 5

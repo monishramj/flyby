@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-09-27T03:39:18.500788+00:00",
+  "epochs": 60,
+  "tau_route": 0.5,
+  "train": {
+    "states": 891,
+    "seeds": [
+      1000,
+      1059
+    ]
+  },
+  "test": {
+    "states": 202,
+    "seeds": [
+      100,
+      111
+    ]
+  },
+  "stock": {
+    "action_accuracy": 0.465,
+    "routed_share": 0.505,
+    "auto_accuracy": 0.51,
+    "p_person_ece": 0.146,
+    "people_called_ignore": 17,
+    "people": 87
+  },
+  "fine_tuned": {
+    "action_accuracy": 0.495,
+    "routed_share": 0.495,
+    "auto_accuracy": 0.598,
+    "p_person_ece": 0.099,
+    "people_called_ignore": 17,
+    "people": 87
+  }
+}

@@ -23,9 +23,13 @@ HackGT 13 · Georgia Tech · Sept 25–27, 2026. Submissions are due **Sunday 8:
 
 **How we prove it worked** (all in simulation, with declared assumptions):
 
-1. **Faster:** time from a subject's first capture to dispatch, vs. a simulated manual reviewer.
-2. **Trustworthy:** whether Laya's P(person) is calibrated. We measure this with a reliability diagram and ECE against raw detector confidence. It's a result to report, not an assumption.
-3. **Resilient:** the decision loop keeps working with Wi-Fi off.
+1. **Where the flags go:** every flag, by who handled it (no human / one click / a judgment call) and what came of it (person reached, person missed, crew sent to no one, cleared), plus the time from first sighting to crew.
+2. **Trustworthy:** whether Laya's confidence tracks its accuracy (accuracy and share of calls at each confidence bar, and a choice-vs-right-action grid), plus P(person) calibration against raw detector confidence.
+3. **Grok, measured live:** crew-order latency and timeouts, digits code had to strip, and intel parsing scored field by field against the scripted truth (`tools/grok_eval.py`).
+4. **Fine-tuning, honestly:** stock vs fine-tuned Laya on held-out missions (`tools/laya_finetune.py`).
+5. **Resilient:** the decision loop keeps working with Wi-Fi off.
+
+We dropped the simulated manual-reviewer comparison: its 51× came mostly from a strict one-photo-at-a-time backlog at 120 s per photo (CRASAR's 1–3 min figure), only the reviewer had a backlog while the simulated commander answered every card at once, and the two sides were scored on different people (docs/GATES.md).
 
 ## Features (in scope)
 
@@ -170,7 +174,6 @@ referenced by your step first.
 | `ASK_MAX_TOOL_ROUNDS` | 4 |  |
 | `SIM_HUMAN_ROUTED_S` / `SIM_HUMAN_APPROVE_S` / `HANDOFF_S` | 20 / 5 / 60 |  |
 | `SIM_HUMAN_ACC` | 0.9 | Batch human picks the optimal action with this probability; otherwise a random different action |
-| `REVIEW_S` | 120 and 10 | Manual reviewer seconds per image. The 1–3 min per image and 10 s figures are from CRASAR (Murphy & Manzini, 2025) |
 
 ---
 
@@ -812,20 +815,14 @@ POST /api/ask, qa logging, and the chat panel per T5.3 with tests.
 
 **Build:**
 
-- `batch/run_eval.py`: runs `MissionRun` in fast mode for seeds 0–19 with `sim_human=True` and `parse_mode="oracle"` (no Grok calls), for two arms: `policy ∈ {laya, rule}`. Writes `results/raw.parquet` and Mongo.
+- `batch/run_eval.py`: runs `MissionRun` in fast mode for seeds 0–19 with `sim_human=True` and `parse_mode="oracle"` (no Grok calls), for the `laya` policy (`--arms laya rule` adds the rule for comparison). Writes `results/raw.parquet` and Mongo.
 - `batch/metrics.py` computes the following.
 
 **Zero point:** for each subject, `t0` is the time of the first capture whose footprint contains it. All times below are measured from `t0`.
 
-**Manual reviewer baseline:**
-
-- Reviewer finish time for capture i is `f_i = max(t_i, f_{i−1}) + REVIEW_S`, for `REVIEW_S` ∈ {120, 10}.
-- The reviewer finds a `visible` or `partial` subject with P = 1 at its first containing capture, so `T_human = f_i − t0 + HANDOFF_S`.
-- P = 1 is deliberately generous to the human.
-
 **FlyBy:** `T = t_dispatch − t0 + HANDOFF_S`.
 
-**Primary comparison:** only `visible` and `partial` subjects, since overhead review can't see the others. Report `under_structure` subjects separately, as found only through inspection.
+Report `visible` and `partial` subjects together and `under_structure` subjects separately, as found only through inspection. (A manual-reviewer baseline was removed; see docs/GATES.md.)
 
 **Also report:**
 
@@ -836,10 +833,12 @@ POST /api/ask, qa logging, and the chat panel per T5.3 with tests.
 - routing rate
 - re-decision count
 - Laya reliability diagram and ECE vs. detector confidence
+- flag flow: flags by who handled them and their outcome, and people the camera never flagged
+- Laya's confidence curve (share of first calls and their accuracy at each bar) and choice-vs-right-action grid, each call scored at its own pass
 
-**Declared assumptions (print them in the output JSON):** the noise model, `SIM_HUMAN_ACC`, human P = 1, `HANDOFF_S`, and oracle intel.
+**Declared assumptions (print them in the output JSON):** the noise model, `SIM_HUMAN_ACC`, `HANDOFF_S`, and oracle intel.
 
-**Tests:** a hand-computed 3-capture baseline; ECE on a toy input; a one-seed run with a fake runtime.
+**Tests:** hand-made flags for the flow and confidence curve; ECE on a toy input; a one-seed run with a fake runtime.
 
 **Prompt:**
 
@@ -852,8 +851,8 @@ the listed tests; document the results JSON schema at the top of metrics.py.
 
 **Build:** a Results tab reading `/api/results/*` that shows:
 
-- time-to-dispatch vs. manual review at 120 s and 10 s
-- the reliability diagram with ECE
+- headline tiles: people reached a crew, flags handled without you, first sighting to crew, Laya latency
+- where the flags go, Laya's confidence curve and grid, Grok measured live, and the fine-tuning before/after
 - the declared assumptions
 
 No numbers are hardcoded.
@@ -923,12 +922,14 @@ uv run python -m tools.demo_check             # Laya, Grok, persistence, results
 uv run python -m tools.demo_check --find-seed # rescan seeds if constants change
 uv run python -m batch.run_eval               # seeds 0-19, both arms -> results/summary.json
 uv run python -m tools.laya_check             # accuracy, calibration, TAU_ROUTE sweep
+uv run python -m tools.grok_eval              # live Grok: order latency, intel parse accuracy -> results/grok.json
+uv run python -m tools.laya_finetune          # scorer retrain experiment -> results/finetune.json
 uv run python -m tools.grok_smoke             # live xAI parse + tool round trip
 uv run python -m tools.atlas_smoke            # write-behind proof; reports Atlas or JSONL
 ```
 
 Gate outcomes and the frozen constants they justify are recorded in [docs/GATES.md](docs/GATES.md).
-The live policy is Laya (rule is the fallback and the baseline arm); see docs/GATES.md.
+The live policy is Laya (rule is the fallback); see docs/GATES.md.
 
 ## 7. Demo (\~1:15)
 
@@ -936,5 +937,4 @@ The live policy is Laya (rule is the fallback and the baseline arm); see docs/GA
 2. An intel message arrives at about t+99 s. Grok's chips appear, the map updates, and pending leads in that sector are re-decided and re-ranked with a **re-ranked** marker.
 3. A pass-2 lead shows **needs human**. Approve or override a dispatch: the brief modal opens and a pin drops on the map.
 4. Ask: "What's still unresolved near Elm?" The answer shows its tool trace; lead ids in the answer are clickable.
-5. Results tab: time-to-dispatch vs manual review at 120 s and 10 s, the reliability diagram with ECE, and the declared assumptions.
-5. Results: time-to-dispatch vs. manual review, and the calibration plot, with assumptions shown.
+5. Results tab: where the flags go, whether Laya's confidence can be trusted, Grok measured live, and the fine-tuning result.

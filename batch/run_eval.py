@@ -1,4 +1,4 @@
-"""T6.1: seeds 0-19 in fast mode, two policy arms, oracle intel, simulated human."""
+"""T6.1: seeds 0-19 in fast mode, oracle intel, simulated human. The rule arm is optional (--arms laya rule)."""
 import argparse
 import asyncio
 import json
@@ -36,6 +36,10 @@ def lead_rows(run):
              "is_person": bool(lead["truth"]["is_person"]),
              "visibility": lead["truth"].get("visibility"),
              "optimal_action": optimal_action(lead, run.cfg),
+             # the right action at each decision's own pass (a zoomed second pass changes it)
+             "decision_optimal": [optimal_action({**lead, "pass": entry.get("pass", lead["pass"]),
+                                                  "box_px": entry.get("box_px", lead["box_px"])}, run.cfg)
+                                  for entry in lead["history"]],
              "baseline_rule": lead.get("baseline_rule"),
              "final_action": lead.get("final_action"),
              "human": lead.get("human"), "history": lead["history"],
@@ -104,10 +108,14 @@ def report(summary):
         calibration = arm["calibration"]
         print(f"  ECE laya {calibration['laya_p_person']['ece']} vs detector {calibration['detector_conf']['ece']} "
               f"(n={calibration['laya_p_person']['n']})")
-    print("\nFlyBy vs a manual overhead reviewer (visible and partial subjects)")
-    for row in summary["comparison"]:
-        print(f"  {row['arm']:5s} review {row['review_s']:>3d} s/image: FlyBy {_fmt(row['flyby_median_s'])} s "
-              f"vs manual {_fmt(row['manual_median_s'])} s -> {row['speedup']}x")
+        flow, confidence = arm["flag_flow"], arm["confidence"]
+        print(f"  flags by handler: " + ", ".join(f"{name} {sum(row.values())} ({row['person_reached']} people reached, "
+                                                  f"{row['person_missed']} missed)" for name, row in flow["routes"].items()))
+        print(f"  people the camera never flagged: {flow['people_never_flagged']}/{flow['people_placed']}")
+        bar = next((point for point in confidence["points"] if point["bar"] >= confidence["tau_route"]), None)
+        if bar:
+            print(f"  Laya first calls: {confidence['accuracy']} right overall; at the {bar['bar']} bar "
+                  f"{bar['cleared_share']} clear it and {bar['accuracy']} of those are right (n={confidence['n']})")
 
 
 def _fmt(value):
@@ -117,7 +125,7 @@ def _fmt(value):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", type=int, nargs="*", default=list(SEEDS))
-    parser.add_argument("--arms", nargs="*", default=["laya", "rule"], choices=("laya", "rule"))
+    parser.add_argument("--arms", nargs="*", default=["laya"], choices=("laya", "rule"))
     parser.add_argument("--no-mongo", action="store_true", help="skip Atlas and the local spool")
     args = parser.parse_args()
     cfg = settings.model_copy(update={"PARSE_MODE": "oracle"})

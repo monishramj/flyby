@@ -290,7 +290,8 @@ class MissionRun:
         lead["model_text"] = render(state)  # exactly what Laya read, shown under "Why?"
         lead["decision"] = payload
         lead["baseline_rule"] = rule(state, self.cfg)["action"]
-        lead["history"].append({**payload, "t": round(t, 3)})
+        # pass and box size as Laya saw them, so evaluation can score each decision against its own moment
+        lead["history"].append({**payload, "t": round(t, 3), "pass": lead["pass"], "box_px": lead["box_px"]})
         self._route(lead, payload, t)
 
     def _route(self, lead, decision, t):

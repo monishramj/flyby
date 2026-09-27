@@ -317,3 +317,18 @@ async def test_an_unavailable_order_falls_back_to_the_template():
     await settle(run)
     assert lead["dispatch"]["source"] == "template"
     await run.stop()
+
+
+def test_grok_eval_scores_a_parse_field_by_field():
+    from tools.grok_eval import score_parse
+    truth = {"reports": [{"landmark": "school", "subject_count": 2, "urgency": "high",
+                          "hazards": ["fire", "gas"], "source": "firsthand", "is_retraction": False}]}
+    parsed = {"reports": [{"sector": "S3", "landmark": "school", "urgency": "critical", "hazards": ["gas", "fire"],
+                           "source": "firsthand", "is_retraction": False}], "unparseable": False}
+    score = score_parse(truth, parsed)
+    assert score["count_match"] and score["unparseable_match"]
+    assert score["fields"] == {"location": [True], "subject_count": [False], "urgency": [False],
+                               "hazards": [True], "source": [True], "is_retraction": [True]}
+    assert score_parse({"reports": [], "unparseable": True}, {"reports": []})["unparseable_match"] is False
+    sector_only = {"reports": [{"sector": "S2", "urgency": "low", "source": "unverified"}]}
+    assert score_parse(sector_only, {"reports": [{"sector": "S4", "urgency": "low", "source": "unverified"}]})["fields"]["location"] == [False]

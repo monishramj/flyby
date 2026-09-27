@@ -112,6 +112,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FlyBy Triage", lifespan=lifespan)
 
 
+@app.middleware("http")
+async def revalidate(request, call_next):
+    """index.html and results files change between builds and eval runs; only hashed /assets/ may be cached."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.websocket("/ws/mission")
 async def mission_socket(socket: WebSocket):
     mission: Mission = socket.app.state.mission
