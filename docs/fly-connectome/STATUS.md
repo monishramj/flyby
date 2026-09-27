@@ -2,11 +2,79 @@
 
 Completed: 0.1, 0.4, 6.1, 6.3, 6.4, plus the **two-pathway LPLC2-style readout**
 (now live in the server) and a cached warm-up. θ is still uncalibrated.
-Also done: fly-inspired navigation controller, carport scene, bench and calibration tools.
+Also done: fly-inspired navigation controller, carport scene, bench and calibration tools,
+and Step 7.4 prep (3D connectome view on a dev page with recorded activity; see below).
 **Blocker:** the looming readout does not yet separate carport collisions from
 safe passes (see the carport section). Next: user decision on a learned readout.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
+
+## Step 7.4 prep — 3D connectome view (2026-09-26, Windows, dev page only)
+
+Pinned fly-brain: https://github.com/Lulzx/fly-brain commit
+`08cf8666bd3cb405c803f95821ebe06d22b3e5ab` (2026-09-22). Cloned to a temp dir, not committed.
+
+Files: `web/vendor/fly-brain/` (codec `rc.js`, `skel.js`, `neurons.js` verbatim;
+`decode.worker.js` and `data.js` minimally modified; `data.d.ts`; upstream `LICENSE`;
+`ATTRIBUTION.md` with commit, licenses, sha256 per file), `web/public/fly-brain/`
+(data, byte-identical to upstream), `tools/check_flybrain_map.py`,
+`data/flybrain_node_map.json`, `tests/test_flybrain_map.py`,
+`web/src/flyviz/connectome3d.ts`, `web/connectome.html` + `web/src/connectome-page.ts`,
+`tools/record_connectome_sample.py`, `web/public/recordings/connectome_disc.{json,f16}`.
+
+Asset sizes: `skeletons.flys` 11,588,816 B; `neurons.flyn` 1,006,198 B;
+`vision/flyvis_map.json` 1,051,795 B; `vision/flyvis.bin` **12,882,225 B** (per-node
+type/u/v are only the first 228 KB; the rest is model weights); `vision/flyvis.json`
+1,499 B (the type names flyvis.bin's ids index; needed, not in the README list).
+Recording 2,100,774 B. All are below GitHub's 50 MB warning. The browser does not load
+`flyvis.bin`; only the check script reads it. Drop it later if repo size matters.
+
+Node order (measured, `python -m tools.check_flybrain_map`): fly-brain's flyvis node
+order is **identical** to `data/flyvis_layout.json` when matched by (type name, u, v):
+45,669/45,669 nodes matched, remap = identity. **Coverage: 30,946/30,946 left-eye
+pairs resolve (100.000%)**: 30,946 distinct neurons, 15,640 distinct nodes,
+**609/721 columns** (the README's "about 410" is not what this map gives). Right eye:
+31,211/31,211, 625 columns (not used). A one-off check against fly-brain's
+`meta.json` (not vendored) found all 30,946 left pairs join neurons whose connectome
+type equals the node's flyvis type. The mapping itself is upstream's approximate
+retinotopic assignment (`scripts/prep_flyvis_map.py`).
+
+Renderer: separate `THREE.WebGLRenderer`; skeletons of the 30,946 mapped neurons only
+(346,118 vertices, 314,614 segments); mapped somas share the shader; all 134k other
+neurons are dim gray somas. Per-neuron Float32 activity texture (2048 × 81), as in
+fly-brain's viewer; `setActivity(Float32Array(45,669))` writes
+clip(deviation / 0.5, ±1) per pair. Warm = above rest, blue = below rest.
+Label and attribution are drawn in the view. Orbit controls.
+
+Dev page `web/connectome.html` replays a **recording**: pretrained `flow/0000/000` on
+CPU, a synthetic black disc approaching head-on at 3 m/s from 6 m
+(`tools.looming_stimuli.disc_clip`), 0.5 s still hold + 1.7 s approach, 23 frames at
+VIZ_HZ = 10, float16. It is labeled a recording on the page. Live stream = Step 7.1.
+
+Validation:
+- `python -m tools.check_flybrain_map` — PASS (stats above).
+- `pytest tests/test_flybrain_map.py` — 2 passed (saved map current, >95% coverage,
+  identical order, loader hash table and attribution match the files).
+- `pytest -m "not slow and not network"` — 49 passed, 12 errors, all in
+  `test_reflex_protocol.py::test_malformed_frames_are_rejected`: Windows rejects
+  pytest's `PYTEST_CURRENT_TEST` env var (binary test ids > 32,767 chars). Pre-existing,
+  unrelated to this step.
+- `npx tsc -p .` in web — exit 0.
+- Vite dev server + the desktop app's built-in Chromium (RTX 3050 Ti via ANGLE/D3D11):
+  page renders, no console errors, activity visibly spreads/brightens in the left
+  optic lobe as the disc grows. Load to first render with skeletons: 2.80 s (first
+  visit), 2.92 s (Cache Storage cleared), 2.98 s (warm); decode-bound, localhost.
+  Demo Mac load time is **unmeasured** (README target < 5 s).
+
+Deviations / open issues:
+- `web/connectome.html` is not a production build entry. To ship it in `npm run build`,
+  add `connectome: resolve(import.meta.dirname, 'connectome.html')` to
+  `web/vite.config.ts` (not edited here; shared file). Dev server serves it now.
+- Added `web/src/connectome-page.ts` (page script) and `tools/record_connectome_sample.py`.
+- The main-repo `.venv` has torch `2.14.0+cu126`; `FlyEye(device="cpu")` fails there
+  unless CUDA is hidden (flyvis builds its RNG on `flyvis.device`, chosen at import).
+  The recorder sets `CUDA_VISIBLE_DEVICES=-1` (empty string is dropped on Windows).
+- Not wired into the Fly tab or the live stream yet (needs Step 7.1 `stream.ts`).
 
 ## Carport scene and first calibration (2026-09-27) — reflex NOT yet reliable
 

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlyBy Connectome 3D</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#05070b; color:#e3e9f2; font:13px/1.45 Inter, "Segoe UI", Arial, sans-serif; }
+  header { padding:10px 16px; display:grid; gap:4px; border-bottom:1px solid #1c2330; }
+  h1 { font-size:16px; margin:0; }
+  .rec { display:inline-block; background:#6b2a1e; color:#ffd9cf; font-weight:700; border-radius:4px; padding:1px 6px; margin-right:6px; }
+  #info, #status { color:#9aa6b8; font-size:12px; }
+  #clock { font-variant-numeric: tabular-nums; }
+  button { background:#2a3446; color:#e3e9f2; border:1px solid #3a475e; border-radius:5px; padding:4px 12px; cursor:pointer; margin-right:8px; }
+  #stage { position:relative; height:calc(100vh - 118px); min-height:360px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>3D connectome view (dev page)</h1>
+  <div><span class="rec">RECORDING</span>Replays recorded pretrained flyvis output on a synthetic stimulus. This is not the live stream.</div>
+  <div><button id="play" type="button">Pause</button><span id="clock"></span></div>
+  <div id="info"></div>
+  <div id="status">loading…</div>
+</header>
+<div id="stage"></div>
+<script type="module" src="/src/connectome-page.ts"></script>
+</body>
+</html>

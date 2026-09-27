@@ -1,0 +1,37 @@
+{
+ "source": {
+  "repo": "https://github.com/Lulzx/fly-brain",
+  "commit": "08cf8666bd3cb405c803f95821ebe06d22b3e5ab",
+  "sha256": {
+   "vision/flyvis.bin": "5ddc6fda8f207ce60d372ca6a11eed727ee3179de83c47f5c2eea15317b59315",
+   "vision/flyvis.json": "80c58522dc782bc4378557ee64b2e0e7a1d09f6be451bc5aea8dbe6621360c75",
+   "vision/flyvis_map.json": "c0de881d3d57307e96efa3cdf7826efc3fb41f22d952b94c042de56e07576c01"
+  },
+  "layout_sha256": "dce83906bc48c3348695177f6441605e374e872fcb4f20fa09b03e39fea9d928"
+ },
+ "match_key": "(type name, u, v)",
+ "flybrain_nodes": 45669,
+ "our_nodes": 45669,
+ "matched_nodes": 45669,
+ "node_order": "identical",
+ "flybrain_to_ours": null,
+ "used_eye": "L",
+ "eyes": {
+  "L": {
+   "pairs": 30946,
+   "resolved": 30946,
+   "coverage": 1.0,
+   "distinct_neurons": 30946,
+   "distinct_nodes": 15640,
+   "distinct_columns": 609
+  },
+  "R": {
+   "pairs": 31211,
+   "resolved": 31211,
+   "coverage": 1.0,
+   "distinct_neurons": 31211,
+   "distinct_nodes": 16262,
+   "distinct_columns": 625
+  }
+ }
+}
