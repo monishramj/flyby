@@ -76,6 +76,8 @@ export class Connectome3D {
   private frame = 0;
   private resize: ResizeObserver;
   private overlay: HTMLDivElement;
+  private disposed = false;
+  private dirty = true; // redraw only when activity, camera or size changed
 
   /** Loads the vendored fly-brain assets and builds the view inside `container`. */
   static async create(container: HTMLElement, opts: ConnectomeOptions = {}): Promise<Connectome3D> {
@@ -215,14 +217,19 @@ export class Connectome3D {
       this.renderer.setSize(w, h);
       this.camera.aspect = w / h;
       this.camera.updateProjectionMatrix();
+      this.dirty = true;
     };
     this.resize = new ResizeObserver(fit);
     this.resize.observe(container);
     fit();
     const loop = () => {
+      // The host page may drop the view (e.g. the mission UI closes the panel): stop rendering.
+      if (!this.renderer.domElement.isConnected) { this.dispose(); return; }
       this.frame = requestAnimationFrame(loop);
-      this.controls.update();
-      this.renderer.render(this.scene, this.camera);
+      if (this.controls.update() || this.dirty) {
+        this.dirty = false;
+        this.renderer.render(this.scene, this.camera);
+      }
     };
     loop();
   }
@@ -236,9 +243,12 @@ export class Connectome3D {
       act[this.pairNeuron[i]] = x > 1 ? 1 : x < -1 ? -1 : x;
     }
     this.actTex.needsUpdate = true;
+    this.dirty = true;
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     cancelAnimationFrame(this.frame);
     this.resize.disconnect();
     this.controls.dispose();

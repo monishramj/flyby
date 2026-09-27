@@ -12,6 +12,72 @@ Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
+## Live connectome inset in the inspection flight (2026-09-27, Windows)
+
+Changed: `web/src/scene/inspect.ts`, `web/src/scene/flight.ts`, `web/src/flyviz/connectome3d.ts`.
+
+- `ReflexLink` now owns a `VizStream` (`link.viz`): every message goes to
+  `viz.handle()` first (binaryType arraybuffer) and is a reply only when handle()
+  returns false; a malformed viz packet is logged and dropped, never taken as a reply.
+  The optional side channel (dd67770) and `attachReflexStream()` (3171080) still work:
+  messages `viz` consumed are forwarded to it. Resolves Step 7.1 open issue 1.
+- `runInspection` panel: an inset (bottom-right of the chase view) with the Step 7.4
+  `Connectome3D`, loaded by dynamic import after the reflex connects. The flight loop
+  never awaits it; each tick it calls `setActivity(link.viz.latest)` only when a new viz
+  header arrived. Caption: "LIVE · flyvis model activity from this flight · frame k · S ·
+  cmd"; the view keeps its label and attribution. Load failure → "connectome view
+  unavailable" + short error, flight unaffected. No reflex → "no live flyvis activity",
+  assets not loaded. The previous flight's view is disposed on the next flight.
+- `Connectome3D`: renders only when activity, camera (OrbitControls.update() true) or
+  size changed, instead of every frame; stops and disposes itself if its canvas is
+  removed from the page; `dispose()` is idempotent.
+
+Checks:
+- `npx tsc --noEmit -p .` exit 0. `pytest -m "not slow"`: 71 passed, 7 deselected,
+  **0 errors** (the 12 Windows `test_malformed_frames_are_rejected` errors are gone
+  since dd67770).
+- Live, real pretrained model (`python -m reflex.server`, CPU torch 2.14.0+cpu), Vite dev.
+  (a) `bench.html?mode=record&n=2&fov=90` → `BENCH DONE 10`, 10 npz written, no errors
+  (frames deleted afterwards).
+  (b) `inspect.html`, scenario `clear`, seed 0, headless Edge 154 (Intel UHD, ANGLE D3D11,
+  1400×850, rAF not vsync-capped), flights alternating view on / assets blocked
+  (fetch+Worker rejected in-page, so the error path was exercised too):
+
+  | run | view | frames | replies in order from k=1 | reply Hz in flight | viz/s in flight | late_replies | rAF fps | rAF p95 / p99 / max ms | gaps > 50 ms |
+  | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+  | 1 | on | 336 | yes | 20.9 | 4.30 | 327 | 132.0 | 7.3 / 14.1 / 194 | 2 |
+  | 2 | blocked | 335 | yes | 23.7 | 4.80 | 331 | 143.1 | 7.1 / 7.3 / 21 | 0 |
+  | 3 | on | 335 | yes | 23.4 | 4.78 | 329 | 132.3 | 7.5 / 14.3 / 132 | 2 |
+  | 4 | blocked | 335 | yes | 25.1 | 5.10 | 332 | 142.4 | 7.1 / 7.4 / 14 | 0 |
+
+  One eye.layout per connection. Both "on" gaps coincide with one
+  126–176 ms long task ~2.7–2.9 s after Fly (geometry build when the assets finish);
+  first live update 3.1–3.6 s after Fly. Before render-on-demand the view cost more:
+  93 fps, p95 20.9 ms. An earlier run in the desktop app's built-in browser (vsync):
+  66.7 fps, p50 13.9 / p95 14.2 ms with the view, 33.9 Hz replies, 67 viz for 335 frames,
+  caption frame numbers advancing 31 → 241 during flight. Screenshots checked (view live;
+  error text when blocked).
+- After rebasing on 3171080 (`attachReflexStream`), restarted everything and re-ran:
+  bench record n=1 → `BENCH DONE 5`; one live flight with the view: replies in order
+  from k=1, 23.5 Hz, 58 viz, late_replies 327/335, caption live from frame 76.
+- The reflex did **not** crash: one process served 11 connects/disconnects until it was stopped.
+
+Open issues:
+1. **Reflex backlog in live flights (pre-existing, not caused by the view).** The page
+   sends 50 frames/s but the reflex answered only ~21–34/s here (browser rendering
+   competes for the CPU), so frames queue: 3 s after the last frame 43–103 replies were
+   still outstanding and late_replies ≈ all frames. Commands then act seconds late.
+   Needs client-side backpressure (send only when the previous reply arrived) or a faster eye.
+2. Building the view blocks the main thread once per flight when the assets arrive:
+   126–176 ms long tasks with warm caches, but **925 ms** on the first flight after
+   restarting Vite + browser (post-rebase smoke run) and a 1,007 ms rAF gap in the first
+   built-in-browser flight. The sim clamps a gap at 100 ms, so the drone visibly pauses
+   up to ~1 s then continues (outcome unaffected). Fix if it matters: build the geometry
+   in the decode worker or before the flight starts.
+3. `maxWallS` counts wall time while the tab is hidden: a flight started in a hidden
+   tab ends at the first visible frame with 0 frames (seen once). Pre-existing.
+4. Only measured on this laptop's iGPU/headless and the built-in browser; not on the demo Mac.
+
 ## Step 7.4 prep — 3D connectome view (2026-09-26, Windows, dev page only)
 
 Pinned fly-brain: https://github.com/Lulzx/fly-brain commit

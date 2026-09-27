@@ -3,6 +3,7 @@
 // Heading 0 faces −z; + yaw turns right (toward +x). Camera image: x right, y up,
 // sent with row 0 = top. Constants mirror reflex/config.py where they overlap.
 import * as THREE from 'three';
+import { VizStream } from '../flyviz/stream';
 
 export const FRAME_R = 96;
 // The camera renders at SUPERSAMPLE× resolution with MSAA, then is area-averaged to
@@ -276,15 +277,20 @@ export function encodeFrame(episode: number, k: number, reflexOn: boolean, mode:
   return buf;
 }
 
-/** Handles unsolicited reflex messages (eye.layout JSON, binary viz); true if consumed. */
+/** Receives unsolicited reflex messages (eye.layout JSON, binary viz). */
 export interface ReflexSideChannel { handle(data: string | ArrayBuffer): boolean }
 
 /** WebSocket to the reflex. The server answers every request in order; eye.layout
- *  (on connect) and binary viz packets are not replies and go to `side` instead. */
+ *  (on connect) and binary viz packets (live mode, Step 7.1) are not replies: every
+ *  message goes to `viz` first and only counts as a reply when viz.handle() declines it.
+ *  Messages `viz` consumed are also passed to the optional `side` listener.
+ *  Bench modes get the layout but no viz. */
 export class ReflexLink {
   private ws!: WebSocket;
   private pending: ((msg: any) => void)[] = [];
   latest: any = null;
+  /** Latest eye layout and live flyvis deviations streamed by the reflex. */
+  readonly viz = new VizStream();
   constructor(private side?: ReflexSideChannel) {}
 
   // Same origin by default: Vite proxies /ws/reflex to the reflex on :8001.
@@ -292,8 +298,17 @@ export class ReflexLink {
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
     this.ws.onmessage = (e) => {
-      if (this.side?.handle(e.data)) return;
-      if (typeof e.data !== 'string') return; // binary viz with no side channel
+      let consumed = false;
+      try {
+        consumed = this.viz.handle(e.data);
+      } catch (err) {
+        console.warn('reflex viz message dropped:', err);
+      }
+      if (consumed) {
+        try { this.side?.handle(e.data); } catch (err) { console.warn('reflex side channel failed:', err); }
+        return;
+      }
+      if (typeof e.data !== 'string') return; // unexpected binary: never a reply
       const msg = JSON.parse(e.data);
       if (msg.type === 'eye.layout') return;
       this.latest = msg;
