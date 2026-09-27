@@ -155,7 +155,7 @@ class MissionRun:
         if self.writer is None:
             return
         document = {key: value for key, value in deepcopy(lead).items() if key != "human_token"}
-        self.writer.put("leads", {"run_id": self.run_id, **document})
+        self.writer.put("leads", {"run_id": self.run_id, "seed": self.seed, **document})
 
     def _persist_incident(self, picture):
         if self.writer is not None:

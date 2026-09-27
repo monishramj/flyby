@@ -5,9 +5,48 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from pymongo import AsyncMongoClient
+from pymongo import AsyncMongoClient, InsertOne, ReplaceOne
 
 from server.config import settings
+
+COLLECTIONS = ("runs", "leads", "intel", "incidents", "qa")
+# Upsert keys: rewriting or replaying a document is harmless. qa has no natural key and is insert-only.
+KEYS = {"leads": ("run_id", "lead_id"), "incidents": ("run_id",), "runs": ("run_id",), "intel": ("run_id", "intel_id")}
+BATCH = 500
+VECTOR_INDEX = "lead_vectors"
+PRIORITY = ("low", "moderate", "high", "critical")
+
+
+def vector(state, cfg=settings):
+    """A lead's built (truth-free) state as numbers in [0, 1] for Atlas Vector Search."""
+    lead, context = state.get("lead", {}), state.get("context", {})
+    priority = context.get("sector_priority")
+    return [
+        float(lead.get("detector_conf", 0)),
+        min(float(lead.get("box_px", 0)) / cfg.LARGE_BOX_PX, 1.0),
+        float(bool(lead.get("near_structure"))),
+        float(lead.get("passes", 1) > 1),
+        (PRIORITY.index(priority) + 1) / len(PRIORITY) if priority in PRIORITY else 0.0,
+        float(bool(context.get("near_last_known_point"))),
+        min(len(context.get("hazards_nearby", [])), 3) / 3,
+        float(context.get("reported_subjects_in_sector", 0) > 0),
+    ]
+
+
+VECTOR_DIMS = len(vector({}))
+
+
+def ops(collection, documents):
+    """Bulk operations for one collection; leads with a built state carry their search vector."""
+    result = []
+    for document in documents:
+        if collection == "leads" and document.get("state"):
+            document = {**document, "vector": vector(document["state"])}
+        if collection in KEYS:
+            result.append(ReplaceOne({key: document.get(key) for key in KEYS[collection]}, document, upsert=True))
+        else:
+            result.append(InsertOne(document))
+    return result
 
 
 class Writer:
@@ -31,7 +70,7 @@ class Writer:
         self.task = asyncio.create_task(self._worker())
 
     def put(self, collection, document):
-        if collection not in {"runs", "leads", "intel", "incidents", "qa"}:
+        if collection not in COLLECTIONS:
             raise ValueError("Unknown collection")
         if not document.get("run_id"):
             raise ValueError("Every document requires run_id")
@@ -55,12 +94,14 @@ class Writer:
         if self._failure:
             raise RuntimeError("Local persistence failed; logs may be incomplete") from self._failure
 
-    def _append_jsonl(self, collection, document):
+    def _append_jsonl(self, collection, documents):
         self.cfg.LOG_DIR.mkdir(parents=True, exist_ok=True)
         with (self.cfg.LOG_DIR / f"{collection}.jsonl").open("a", encoding="utf-8") as file:
-            file.write(json.dumps(document, default=str, allow_nan=False) + "\n")
+            for document in documents:
+                file.write(json.dumps(document, default=str, allow_nan=False) + "\n")
 
-    async def _write(self, collection, document):
+    async def _write(self, collection, documents):
+        """One round trip per collection per batch; ordered, so the last incident picture wins."""
         if not self.cfg.MONGODB_URI or time.monotonic() < self._retry_at:
             raise ConnectionError("Using local spool")
         if self.client is None:
@@ -71,37 +112,40 @@ class Writer:
                 connectTimeoutMS=self.cfg.MONGO_TIMEOUT_MS,
             )
             self.db = self.client[self.cfg.MONGODB_DATABASE]
-        target = self.db[collection]
-        if collection in {"incidents", "leads"}:
-            key = {"run_id": document["run_id"]}
-            if collection == "leads":
-                key["lead_id"] = document["lead_id"]
-            await target.replace_one(key, document, upsert=True)
-        else:
-            await target.insert_one(document)
-        self.available = True
-        self.mongo_writes += 1
+        await self.db[collection].bulk_write(ops(collection, documents), ordered=True)
+
+    async def _flush(self, collection, documents):
+        try:
+            await self._write(collection, documents)
+            self.available = True
+            self.mongo_writes += len(documents)
+        except Exception:
+            self.available = False
+            if time.monotonic() >= self._retry_at:
+                self._retry_at = time.monotonic() + self.cfg.MONGO_RETRY_S
+            try:
+                await asyncio.to_thread(self._append_jsonl, collection, documents)
+                self.local_writes += len(documents)
+            except Exception as exc:
+                self._failure = exc
 
     async def _worker(self):
         while True:
-            item = await self.queue.get()
+            batch = [await self.queue.get()]
+            while batch[-1] is not None and len(batch) < BATCH and not self.queue.empty():
+                batch.append(self.queue.get_nowait())
             try:
-                if item is None:
-                    return
-                collection, document = item
-                try:
-                    await self._write(collection, document)
-                except Exception:
-                    self.available = False
-                    if time.monotonic() >= self._retry_at:
-                        self._retry_at = time.monotonic() + self.cfg.MONGO_RETRY_S
-                    try:
-                        await asyncio.to_thread(self._append_jsonl, collection, document)
-                        self.local_writes += 1
-                    except Exception as exc:
-                        self._failure = exc
+                groups = {}
+                for item in batch:
+                    if item is not None:
+                        groups.setdefault(item[0], []).append(item[1])
+                for collection, documents in groups.items():
+                    await self._flush(collection, documents)
             finally:
-                self.queue.task_done()
+                for _ in batch:
+                    self.queue.task_done()
+            if batch[-1] is None:
+                return
 
     async def decision_stats(self, run_id):
         if self.db is None or not self.available:
@@ -138,3 +182,21 @@ class Writer:
             }
         except Exception:
             return {"unavailable": True, "reason": "Atlas decision statistics are unavailable."}
+
+    async def similar(self, state, seed, limit=25):
+        """What the nearest past flags turned out to be, by Atlas Vector Search over every logged lead.
+        Other seeds only: the same seed replays the same leads, which would leak this mission's truth."""
+        if self.db is None or not self.available:
+            return {"unavailable": True, "reason": "Atlas is unavailable."}
+        pipeline = [
+            {"$vectorSearch": {"index": VECTOR_INDEX, "path": "vector", "queryVector": vector(state, self.cfg),
+                               "numCandidates": limit * 8, "limit": limit, "filter": {"seed": {"$ne": seed}}}},
+            {"$group": {"_id": "$truth.type", "count": {"$sum": 1}}},
+        ]
+        try:
+            cursor = await self.db["leads"].aggregate(pipeline)
+            types = {row["_id"]: row["count"] for row in await cursor.to_list()}
+        except Exception:
+            return {"unavailable": True, "reason": "Atlas vector search is unavailable."}
+        return {"unavailable": False, "n": sum(types.values()), "people": types.pop("subject", 0),
+                "not_people": dict(sorted(types.items(), key=lambda item: -item[1]))}

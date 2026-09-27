@@ -168,8 +168,8 @@ async def test_a_writer_whose_io_takes_a_second_does_not_slow_decisions(tmp_path
     writer = Writer(cfg)
     seen = []
 
-    async def slow_write(collection, document):
-        seen.append((collection, document))
+    async def slow_write(collection, documents):
+        seen.append((collection, documents))
         await asyncio.sleep(1)
 
     writer._write = slow_write
@@ -183,7 +183,7 @@ async def test_a_writer_whose_io_takes_a_second_does_not_slow_decisions(tmp_path
     assert latencies and max(latencies) < 1_000
     assert elapsed < 5, "the mission must not wait for queued writes"
     assert writer.queue.qsize() > 0, "writes are still draining behind the mission"
-    writer._write = lambda collection, document: asyncio.sleep(0)
+    writer._write = lambda collection, documents: asyncio.sleep(0)
     await writer.stop()
     assert {collection for collection, _ in seen} >= {"runs"}
 

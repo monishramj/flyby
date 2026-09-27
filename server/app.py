@@ -162,6 +162,16 @@ async def truth():
     return {"run_id": mission.run.run_id, "subjects": scene["subjects"], "decoys": scene["decoys"]}
 
 
+@app.get("/api/similar/{lead_id}")
+async def similar(lead_id: str):
+    """What the most similar past flags turned out to be (Atlas Vector Search; off the decision path)."""
+    mission: Mission = app.state.mission
+    lead = None if mission.run is None else mission.run.leads.get(lead_id)
+    if lead is None or not lead.get("state"):
+        raise HTTPException(404, "No decided lead with that id.")
+    return await mission.writer.similar(lead["state"], mission.run.seed)
+
+
 @app.get("/api/results/{name}")
 async def results(name: str):
     path = (settings.RESULTS_DIR / name).resolve()
