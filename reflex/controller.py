@@ -8,6 +8,8 @@ saccade: then a SACCADE_DEG yaw turn away from the looming side (dLR at brake
          Looming is ignored during the turn and for SACCADE_SUPPRESS_S after it,
          as flies suppress vision during saccades. Then cruise again.
 arrived: within GOAL_RADIUS_M of the goal.
+The first HOVER_S of an episode ignores looming: the scene's onset after the
+gray warm-up is not approach (the scene hovers during this time).
 These rules are an engineered control layer, not simulated fly neurons.
 reflex_on=0 cruises toward the goal with no brake or saccade.
 """
@@ -17,7 +19,7 @@ import math
 from pathlib import Path
 
 from reflex.config import (
-    BRAKE_LATCH_S, DT_S, GOAL_RADIUS_M, GOAL_TURN_DPS, NAV_CRUISE_MPS, SACCADE_DEG,
+    BRAKE_LATCH_S, DT_S, GOAL_RADIUS_M, GOAL_TURN_DPS, HOVER_S, NAV_CRUISE_MPS, SACCADE_DEG,
     SACCADE_RATE_DPS, SACCADE_SUPPRESS_S, THETA_UNCALIBRATED, THRESHOLDS_PATH,
 )
 
@@ -37,7 +39,7 @@ class Controller:
         self.suppress_frames = round(SACCADE_SUPPRESS_S / DT_S)
         self.state = "cruise"
         self.until_k = 0
-        self.suppress_until_k = 0
+        self.suppress_until_k = round(HOVER_S / DT_S)
         self.turn = 0.0  # +1 right, −1 left
 
     def _cmd(self, cmd: str, speed: float, yaw_dps: float) -> dict:

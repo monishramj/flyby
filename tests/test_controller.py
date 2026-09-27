@@ -50,7 +50,7 @@ def test_uniform_translation_is_rejected_by_both_pathways():
 def test_compact_expansion_drives_the_2d_pathway_and_brakes():
     ro, S, dLR = settle(radial_drive())
     assert ro.pathway == "2d" and S > THETA
-    assert Controller(THETA).step(0, S, dLR, True)["cmd"] == "brake"
+    assert Controller(THETA).step(HOVER, S, dLR, True)["cmd"] == "brake"
 
 
 def test_tall_bar_expansion_drives_the_horizontal_pathway():
@@ -69,8 +69,18 @@ SACCADE = round(cfg.SACCADE_DEG / cfg.SACCADE_RATE_DPS / cfg.DT_S)
 SUPPRESS = round(cfg.SACCADE_SUPPRESS_S / cfg.DT_S)
 
 
+HOVER = round(cfg.HOVER_S / cfg.DT_S)
+
+
 def run_ctl(ctl, S_of_k, dLR=0.0, n=100, bearing=0.0):
-    return [ctl.step(k, S_of_k(k), dLR, True, bearing) for k in range(n)]
+    """Steps after the hover window; S_of_k and the returned list are indexed from its end."""
+    return [ctl.step(HOVER + k, S_of_k(k), dLR, True, bearing) for k in range(n)]
+
+
+def test_looming_is_ignored_while_hovering():
+    ctl = Controller(THETA)
+    assert all(ctl.step(k, THETA + 1, THETA, True)["cmd"] == "none" for k in range(HOVER))
+    assert ctl.step(HOVER, THETA + 1, THETA, True)["cmd"] == "brake"
 
 
 def test_cruise_steers_toward_the_goal():
@@ -148,5 +158,5 @@ def test_brake_fires_before_expanding_disc_fills_frame():
     eye, ro, ctl = FlyEye("cpu"), Readout(COL_X, COL_Y), Controller(cfg.THETA_UNCALIBRATED)
     eye.reset()
     frames = approach()
-    cmds = [ctl.step(k, *ro.update(eye.step(f)[0]), True)["cmd"] for k, f in enumerate(frames)]
+    cmds = [ctl.step(HOVER + k, *ro.update(eye.step(f)[0]), True)["cmd"] for k, f in enumerate(frames)]
     assert "brake" in cmds, "no brake before the disc filled the frame"

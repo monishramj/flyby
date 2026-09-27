@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import reflex.server as reflex_server
-from reflex.config import FRAME_R
+from reflex.config import DT_S, FRAME_R, HOVER_S
 from reflex.frames import FRAME_BYTES, FrameError, Mode, decode_frame, encode_frame
 
 
@@ -91,13 +91,17 @@ def send_msg(ws, **msg):
 @pytest.mark.parametrize("reflex_on", [False, True])
 def test_live_frames_return_scores_and_commands(ws, eye, reflex_on):
     eye.q = 1.0  # S rises well above theta within a few frames
-    replies = [send_frame(ws, 5, k, reflex_on, Mode.LIVE) for k in range(3)]
-    for k, reply in enumerate(replies):
+    hover = round(HOVER_S / DT_S)  # looming is ignored while the scene hovers
+    ks = [0, hover, hover + 1, hover + 2]
+    replies = [send_frame(ws, 5, k, reflex_on, Mode.LIVE) for k in ks]
+    assert replies[0]["cmd"] == "none"
+    replies = replies[1:]
+    for k, reply in zip(ks[1:], replies):
         assert set(reply) == {"k", "cmd", "speed", "yaw_rate", "S", "dLR", "ms"} and reply["k"] == k
         assert reply["ms"] >= 0
     assert replies[-1]["S"] > reflex_server.THETA
     assert replies[-1]["cmd"] == ("brake" if reflex_on else "none")
-    assert eye.resets == 1 and eye.steps == 3
+    assert eye.resets == 1 and eye.steps == 4
 
 
 def test_each_episode_resets_the_eye(ws, eye):
