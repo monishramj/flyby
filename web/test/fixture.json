@@ -553,6 +553,125 @@
        "x": 290.0,
        "y": 10.0
       }
+     ],
+     "MISSION": [
+      {
+       "seq": 1,
+       "command": "DO_SET_CAM_TRIGG_DIST",
+       "param1": 40.0
+      },
+      {
+       "seq": 2,
+       "command": "NAV_WAYPOINT",
+       "x": 10.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 3,
+       "command": "NAV_WAYPOINT",
+       "x": 10.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 4,
+       "command": "NAV_WAYPOINT",
+       "x": 50.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 5,
+       "command": "NAV_WAYPOINT",
+       "x": 50.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 6,
+       "command": "NAV_WAYPOINT",
+       "x": 90.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 7,
+       "command": "NAV_WAYPOINT",
+       "x": 90.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 8,
+       "command": "NAV_WAYPOINT",
+       "x": 130.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 9,
+       "command": "NAV_WAYPOINT",
+       "x": 130.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 10,
+       "command": "NAV_WAYPOINT",
+       "x": 170.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 11,
+       "command": "NAV_WAYPOINT",
+       "x": 170.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 12,
+       "command": "NAV_WAYPOINT",
+       "x": 210.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 13,
+       "command": "NAV_WAYPOINT",
+       "x": 210.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 14,
+       "command": "NAV_WAYPOINT",
+       "x": 250.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 15,
+       "command": "NAV_WAYPOINT",
+       "x": 250.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 16,
+       "command": "NAV_WAYPOINT",
+       "x": 290.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 17,
+       "command": "NAV_WAYPOINT",
+       "x": 290.0,
+       "y": 10.0,
+       "alt": 40.0
+      }
      ]
     },
     "services": {
@@ -1114,6 +1233,125 @@
       {
        "x": 290.0,
        "y": 10.0
+      }
+     ],
+     "MISSION": [
+      {
+       "seq": 1,
+       "command": "DO_SET_CAM_TRIGG_DIST",
+       "param1": 40.0
+      },
+      {
+       "seq": 2,
+       "command": "NAV_WAYPOINT",
+       "x": 10.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 3,
+       "command": "NAV_WAYPOINT",
+       "x": 10.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 4,
+       "command": "NAV_WAYPOINT",
+       "x": 50.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 5,
+       "command": "NAV_WAYPOINT",
+       "x": 50.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 6,
+       "command": "NAV_WAYPOINT",
+       "x": 90.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 7,
+       "command": "NAV_WAYPOINT",
+       "x": 90.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 8,
+       "command": "NAV_WAYPOINT",
+       "x": 130.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 9,
+       "command": "NAV_WAYPOINT",
+       "x": 130.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 10,
+       "command": "NAV_WAYPOINT",
+       "x": 170.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 11,
+       "command": "NAV_WAYPOINT",
+       "x": 170.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 12,
+       "command": "NAV_WAYPOINT",
+       "x": 210.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 13,
+       "command": "NAV_WAYPOINT",
+       "x": 210.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 14,
+       "command": "NAV_WAYPOINT",
+       "x": 250.0,
+       "y": 10.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 15,
+       "command": "NAV_WAYPOINT",
+       "x": 250.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 16,
+       "command": "NAV_WAYPOINT",
+       "x": 290.0,
+       "y": 290.0,
+       "alt": 40.0
+      },
+      {
+       "seq": 17,
+       "command": "NAV_WAYPOINT",
+       "x": 290.0,
+       "y": 10.0,
+       "alt": 40.0
       }
      ]
     },
