@@ -12,6 +12,40 @@ Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
+## Windows laptop GPU/CPU benchmark (2026-09-26, measurement only, checkout `1e22904`)
+
+Machine: i7-11800H (8C/16T), 15.7 GB RAM, RTX 3050 Ti Laptop 4 GB (driver 566.07), AC
+power. Free RAM was only 0.1–3.1 GB during the runs (other apps open). torch
+`2.14.0+cu126` was installed into `.venv` for this and has since been **reverted to the
+locked CPU wheel** (with CUDA torch, `FlyEye(device="cpu")` fails unless
+`CUDA_VISIBLE_DEVICES=-1`; flyvis picks its RNG device at import). For GPU work use a
+separate venv.
+
+`tools.flyvis_smoke`, 200 timed frames, p50 / p95 ms (all checks passed, gray drift 0.000253):
+
+| device | preprocess | inference | output | total |
+| --- | --- | --- | --- | --- |
+| CPU (4 threads) | 4.05 / 6.60 | 16.14 / 22.02 | 0.13 / 0.24 | 20.77 / 28.19 |
+| CUDA | 1.07 / 2.05 | 1.26 / 1.71 | 0.13 / 0.34 | 2.58 / 3.67 |
+
+Batched stepping (random 96×96 frames, 30 warm-up + 200 timed steps, no host readback):
+
+| B | CUDA median ms/step | CUDA frames/s | CUDA peak alloc MiB | CPU median ms/step | CPU frames/s |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 2.63 | 263.5 | 150 | 17.47–21.61 | 43.7–54.5 |
+| 8 | 6.77 | 1,158 | 276 | 62.66–78.23 | 98.7–126.2 |
+| 32 | 20.87 | 1,520 | 705 | crashed | – |
+| 64 | 38.95 | 1,636 | 1,279 | crashed | – |
+| 128 | 76.06 | 1,678 | 2,420 | crashed | – |
+
+CUDA throughput plateaus at ~1.6–1.7k frames/s from B=32 (flyvis BoxEye filters each sample
+in a Python loop). CPU B≥32 died with native Windows access violations on both attempts
+(different faulting modules each time); not an out-of-memory error from Python.
+Bench record mode: 10 flights (3,704 frames) in ~14.6 s wall; record mode does not run the
+model, so this is render + transport + save only. The reflex process crashed natively
+after/at connect in 2 recording attempts with CUDA torch installed; no crashes were seen
+in later runs after reverting to CPU torch (13+ connections), cause unconfirmed.
+
 ## Steps 7.2 + 7.3 panels: eye, looming trace, circuit (2026-09-27, Windows)
 
 New, fly-lane files only: `web/src/flyviz/eye.ts`, `trace.ts`, `circuit.ts`, `page.ts`,

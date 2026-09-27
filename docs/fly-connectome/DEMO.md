@@ -12,7 +12,13 @@ Overhead triage → approve a close-in inspection → fly it with the fly reflex
   (96 × 96), HUD (state, t, speed, target, looming S), and the live 3D connectome view
   beside it. When the flight ends it prints the `inspect.result` it would send.
 - `web/connectome.html`: 3D view replaying a **recording** (fallback only).
-- There is no `flyviz.html`, eye-view or circuit-view panel yet. Do not mention them.
+- `web/flyviz.html` (dev page, `npm run dev` only, not in the build yet; `9b0c7d9`): flies its
+  own live flight and shows the fly eye (receptors / T4-T5 motion / looming layers), the S
+  trace with θ and command markers, and a circuit graph whose engineered readout box is
+  labelled "not flyvis cells" (cone and unit values are not streamed, so they stay unlit).
+  Optional second tab if you want to show the eye; `inspect.html` stays the main view.
+  Note: `debris` seed 0 there braked repeatedly and timed out at 25 s without collision
+  or arrival (2 runs), so rehearse the seed you plan to use.
 
 Numbers you may say are all in `STATUS.md`. Say them with their caveats.
 
