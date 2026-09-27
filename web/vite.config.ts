@@ -8,6 +8,7 @@ export default defineConfig({
         main: resolve(import.meta.dirname, 'index.html'),
         inspect: resolve(import.meta.dirname, 'inspect.html'),
         bench: resolve(import.meta.dirname, 'bench.html'),
+        capture: resolve(import.meta.dirname, 'capture.html'),
       },
     },
   },
