@@ -1,14 +1,30 @@
 # Implementation status
 
+**Start with `HANDOFF.md`** (run, integrate, timing, honest numbers, limits).
+
 Completed: 0.1, 0.4, 6.1, 6.3, 6.4, fly-inspired navigation (brake → 90° saccade →
-goal steering), carport scene + bench + calibration tools, Step 7.4 prep (3D connectome
-dev page), and a **fitted cone + learned-units readout** (live when
-`bench/readout_weights.json` exists).
-**Status:** on 100 held-out carport flights the reflex stops in time for 36/63
-collisions (debris 20/20, posts 12/20, beam 4/20) with 1/37 false brakes and 2 early
-brakes (honest scoring; an earlier 29/63 figure was inflated, see the correction).
-60° FOV was worse than 90°; a larger flyvis eye loads but is out of scope for now.
-Integration with the `triage` demo: see `INTEGRATION.md` (nothing pushed there).
+hold heading → goal steering; efference copy during own turns), waypoint routes in
+lockstep, carport scene + bench + calibration tools, fitted cone + learned-units
+readout with adaptation, live viz stream, eye/trace/circuit panels, live 3D connectome.
+**Status:** held-out detection: stopped in time for 36/63 collisions (debris 20/20,
+posts 12/20, beam 4/20), 1/37 false brakes + 2 early brakes. Route flights (entry →
+under the roof, 8 flights): 7/8 reached the target; the sagging beam collides.
+Integration with `triage`: `INTEGRATION.md` + `HANDOFF.md` (nothing pushed there).
+
+## Waypoint routes and efference copy (2026-09-27)
+
+`web/src/scene/inspect.ts`: ordered waypoints; each reached, skipped after
+`WAYPOINT_TIMEOUT_S` = 8 s, or collided. `web/src/scene/flight.ts`: lockstep (waits for
+every reply, never ahead of real time), default route entry (0, 1.5) → target (0, −2.5),
+result keeps `{lead_id, reached, collided, found}` and adds `waypoints`,
+`realtime_factor`. `reflex/controller.py`: a brake with the goal > 100° off-heading turns
+toward the goal (no circling); looming ignored while self-turning > 10°/s and 0.2 s after
+(goal-steering turns caused false brakes that chained into wandering).
+Route capture (`tools.capture_flights --route`, 90°, cloud CPU): post ×2, debris ×2,
+clear, near_post, post reflex-off: target reached; beam: collided. Before the efference
+copy: post ×2 skipped both waypoints and debris skipped the target.
+Headless `inspect.html` here runs at ~0.12× real time (software rendering of the 3D
+connectome); use the capture page for tests in this container.
 
 Read this folder's `README.md` and `MASTER_PLAN.md` first when resuming.
 
