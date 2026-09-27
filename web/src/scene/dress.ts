@@ -114,37 +114,50 @@ export const palette = (() => {
   return () => (p ??= build());
 })();
 
-/** Quadcopter (~0.5 m across, the collision radius) with spinning props and nav lights. */
+/** The rescue quadcopter (~8.9 units across at scale 1), shared by the scan map and the inspection viewer. */
+export function buildQuad() {
+  const g = new THREE.Group(), rotors: THREE.Object3D[] = [];
+  const shell = new THREE.MeshStandardMaterial({ color: '#d4d8d6', roughness: .5, metalness: .3 });
+  const carbon = new THREE.MeshStandardMaterial({ color: '#23272a', roughness: .5, metalness: .4 });
+  const blade = new THREE.MeshStandardMaterial({ color: '#15181a', transparent: true, opacity: .75 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 2.2, 6, 16), shell); body.rotation.x = Math.PI / 2; body.scale.set(1.25, 1, .55); g.add(body);
+  const battery = new THREE.Mesh(new THREE.BoxGeometry(1.3, .5, 1.8), carbon); battery.position.set(0, .55, .75); battery.scale.z = .75; g.add(battery);
+  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+    const tip = new THREE.Vector3(sx * 2.9, 0.1, sz * 2.9), arm = new THREE.Mesh(new THREE.CylinderGeometry(.14, .18, tip.length(), 8), carbon);
+    arm.position.copy(tip).multiplyScalar(.5); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().normalize()); g.add(arm);
+    const motor = new THREE.Mesh(new THREE.CylinderGeometry(.38, .42, .55, 16), carbon); motor.position.copy(tip).setY(.3); g.add(motor);
+    const guard = new THREE.Mesh(new THREE.TorusGeometry(1.55, .06, 6, 40), shell); guard.rotation.x = Math.PI / 2; guard.position.copy(tip).setY(.55); g.add(guard);
+    const rotor = new THREE.Group(); rotor.position.copy(tip).setY(.62);
+    for (const r of [0, Math.PI]) { const b = new THREE.Mesh(new THREE.BoxGeometry(1.45, .03, .22), blade); b.position.x = Math.cos(r) * .72; b.rotation.y = r; rotor.add(b); }
+    g.add(rotor); rotors.push(rotor);
+    const led = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), new THREE.MeshBasicMaterial({ color: sz < 0 ? '#39ff8e' : '#ff4b3a' }));
+    led.position.copy(tip).setY(-.1); g.add(led);
+  }
+  const gimbal = new THREE.Mesh(new THREE.SphereGeometry(.5, 16, 12), carbon); gimbal.position.set(0, -.55, -1); g.add(gimbal);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 16), new THREE.MeshStandardMaterial({ color: '#0a2340', metalness: .9, roughness: .1 }));
+  lens.position.set(0, -.85, -1); g.add(lens);
+  for (const sx of [-1, 1]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(.12, .9, 2.4), carbon); skid.position.set(sx * .8, -.7, 0); g.add(skid); }
+  // Rescue airframe: vented instrument deck, antenna, fasteners and a high-visibility stripe.
+  const orange = new THREE.MeshStandardMaterial({ color: '#b96d37', roughness: .6 });
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.8, .05, .3), orange); stripe.position.set(0, .58, -.5); g.add(stripe);
+  for (let i = 0; i < 6; i++) {
+    const vent = new THREE.Mesh(new THREE.BoxGeometry(.8, .04, .055), carbon); vent.position.set(0, .58, .1 + i * .14); g.add(vent);
+  }
+  for (const x of [-.7, .7]) for (const z of [-.8, .8]) {
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .04, 6), carbon); bolt.position.set(x, .56, z); g.add(bolt);
+  }
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.04, .06, .9, 8), carbon); antenna.position.set(.5, .9, .8); g.add(antenna);
+  g.traverse(o => { o.castShadow = true; });
+  return { g, rotors };
+}
+
+/** The scan map's quadcopter at real size (~0.5 m across, the collision radius): props spin, body tilts. */
 export function makeDrone(): THREE.Group {
   const g = new THREE.Group(); g.name = 'body';
-  const shell = new THREE.MeshStandardMaterial({ color: 0xe9ecef, roughness: 0.35, metalness: 0.2 });
-  const carbon = new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.5 });
-  const accent = new THREE.MeshStandardMaterial({ color: 0xd9480f, roughness: 0.4 });
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.22), shell); g.add(core);
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.162, 0.012, 0.1), accent); stripe.position.set(0, 0.031, -0.02); g.add(stripe);
-  const pod = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), carbon); pod.position.set(0, -0.035, -0.11); g.add(pod);
-  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.018, 16), new THREE.MeshBasicMaterial({ color: 0x3aa0ff })); lens.position.set(0, -0.035, -0.146); g.add(lens);
-  const blade = new THREE.MeshStandardMaterial({ color: 0x9aa4ad, transparent: true, opacity: 0.55, roughness: 0.3, side: THREE.DoubleSide });
-  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.015, 0.25), carbon);
-    arm.position.set(sx * 0.085, 0.0, sz * 0.085); arm.rotation.y = Math.atan2(sx, sz); g.add(arm);
-    const motor = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.03, 12), carbon);
-    motor.position.set(sx * 0.17, 0.015, sz * 0.17); g.add(motor);
-    const prop = new THREE.Group(); prop.name = 'prop'; prop.position.set(sx * 0.17, 0.034, sz * 0.17);
-    prop.userData.dir = sx * sz;
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24), new THREE.MeshBasicMaterial({ color: 0xbfc8cf, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
-    disc.rotation.x = -Math.PI / 2; prop.add(disc);
-    for (const a of [0, Math.PI]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.003, 0.018), blade); b.rotation.y = a; prop.add(b); }
-    g.add(prop);
-    const guard = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.004, 6, 32), carbon);
-    guard.rotation.x = Math.PI / 2; guard.position.copy(prop.position); g.add(guard);
-  }
-  const led = (color: number, x: number, z: number, name: string) => {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), new THREE.MeshBasicMaterial({ color }));
-    m.position.set(x, -0.005, z); m.name = name; g.add(m);
-  };
-  led(0xff3b30, -0.17, -0.17, 'led'); led(0x34c759, 0.17, -0.17, 'led'); led(0xffffff, 0, 0.115, 'strobe');
-  g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+  const { g: quad, rotors } = buildQuad();
+  quad.scale.setScalar(0.49 / 8.9);
+  rotors.forEach((r, i) => { r.name = 'prop'; r.userData.dir = i === 0 || i === 3 ? 1 : -1; });
+  g.add(quad);
   return onLayer(g, CHASE);
 }
 

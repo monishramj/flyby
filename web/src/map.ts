@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { dressScene, groundTexture, loadModels, model, truthVisual, type ModelName } from './models';
+import { buildQuad } from './scene/dress';
 import { notify, store } from './store';
 
 export const colors: Record<string, string> = { dispatch_ground_team: '#859966', reimage_zoom: '#dbbc7f', close_in_inspect: '#7fbbb3', ignore: '#859289', dispatched: '#56663f', awaiting_human: '#e69875' };
@@ -59,44 +60,6 @@ function declutter(root: HTMLElement) {
     el.style.visibility = hit ? 'hidden' : '';
     if (!hit) placed.push(r);
   }
-}
-
-// A quadcopter drawn ~3x real size so it stays readable from the orbit camera.
-function buildDrone() {
-  const g = new THREE.Group(), rotors: THREE.Object3D[] = [];
-  const shell = new THREE.MeshStandardMaterial({ color: '#d4d8d6', roughness: .5, metalness: .3 });
-  const carbon = new THREE.MeshStandardMaterial({ color: '#23272a', roughness: .5, metalness: .4 });
-  const blade = new THREE.MeshStandardMaterial({ color: '#15181a', transparent: true, opacity: .75 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, 2.2, 6, 16), shell); body.rotation.x = Math.PI / 2; body.scale.set(1.25, 1, .55); g.add(body);
-  const battery = new THREE.Mesh(new THREE.BoxGeometry(1.3, .5, 1.8), carbon); battery.position.set(0, .55, .75); battery.scale.z = .75; g.add(battery);
-  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
-    const tip = new THREE.Vector3(sx * 2.9, 0.1, sz * 2.9), arm = new THREE.Mesh(new THREE.CylinderGeometry(.14, .18, tip.length(), 8), carbon);
-    arm.position.copy(tip).multiplyScalar(.5); arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tip.clone().normalize()); g.add(arm);
-    const motor = new THREE.Mesh(new THREE.CylinderGeometry(.38, .42, .55, 16), carbon); motor.position.copy(tip).setY(.3); g.add(motor);
-    const guard = new THREE.Mesh(new THREE.TorusGeometry(1.55, .06, 6, 40), shell); guard.rotation.x = Math.PI / 2; guard.position.copy(tip).setY(.55); g.add(guard);
-    const rotor = new THREE.Group(); rotor.position.copy(tip).setY(.62);
-    for (const r of [0, Math.PI]) { const b = new THREE.Mesh(new THREE.BoxGeometry(1.45, .03, .22), blade); b.position.x = Math.cos(r) * .72; b.rotation.y = r; rotor.add(b); }
-    g.add(rotor); rotors.push(rotor);
-    const led = new THREE.Mesh(new THREE.SphereGeometry(.16, 8, 6), new THREE.MeshBasicMaterial({ color: sz < 0 ? '#39ff8e' : '#ff4b3a' }));
-    led.position.copy(tip).setY(-.1); g.add(led);
-  }
-  const gimbal = new THREE.Mesh(new THREE.SphereGeometry(.5, 16, 12), carbon); gimbal.position.set(0, -.55, -1); g.add(gimbal);
-  const lens = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 16), new THREE.MeshStandardMaterial({ color: '#0a2340', metalness: .9, roughness: .1 }));
-  lens.position.set(0, -.85, -1); g.add(lens);
-  for (const sx of [-1, 1]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(.12, .9, 2.4), carbon); skid.position.set(sx * .8, -.7, 0); g.add(skid); }
-  // Rescue airframe: vented instrument deck, antenna, fasteners and a high-visibility stripe.
-  const orange = new THREE.MeshStandardMaterial({ color: '#b96d37', roughness: .6 });
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.8, .05, .3), orange); stripe.position.set(0, .58, -.5); g.add(stripe);
-  for (let i = 0; i < 6; i++) {
-    const vent = new THREE.Mesh(new THREE.BoxGeometry(.8, .04, .055), carbon); vent.position.set(0, .58, .1 + i * .14); g.add(vent);
-  }
-  for (const x of [-.7, .7]) for (const z of [-.8, .8]) {
-    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(.06, .06, .04, 6), carbon); bolt.position.set(x, .56, z); g.add(bolt);
-  }
-  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(.04, .06, .9, 8), carbon); antenna.position.set(.5, .9, .8); g.add(antenna);
-  g.traverse(o => { o.castShadow = true; });
-  g.scale.setScalar(1.3);
-  return { g, rotors };
 }
 
 /** A drifting high cloud deck: soft blobs painted once, tiled, scrolled slowly. */
@@ -180,7 +143,7 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   scene.add(sun, sun.target);
   const camera = new THREE.PerspectiveCamera(50, 1, 2, 24000);
   const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2 - 0.02;
-  const { g: drone, rotors } = buildDrone(); scene.add(drone);
+  const { g: drone, rotors } = buildQuad(); drone.scale.setScalar(1.3); scene.add(drone);  // ~3x real size so it reads from the orbit camera
   const [world, leadGroup, truthGroup, hazardGroup] = [1, 2, 3, 4].map(() => new THREE.Group());
   scene.add(world, leadGroup, truthGroup, hazardGroup);
   const lkp = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: '#c96b43', dashSize: 3, gapSize: 2 })); lkp.visible = false; scene.add(lkp);
