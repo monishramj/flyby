@@ -99,6 +99,8 @@ const check = (name, condition, detail = '') => {
 check('header renders', text('status').includes('live'), text('status'));
 check('mission meta renders', /t\+\d+s/.test(text('mission-meta')), text('mission-meta'));
 check('queue meta renders', /dispatched/.test(text('queue-meta')), text('queue-meta'));
+check('overview has simulation time and measured coverage', /\d+:\d\d/.test(text('metric-time')) && /\d+%/.test(text('metric-coverage')));
+check('review count agrees between overview and queue', text('metric-pending') === text('pending-badge'));
 check('queue has lead cards', count('#queue .card') > 0, `${count('#queue .card')} cards`);
 check('cards show an action', count('#queue .card .action') > 0,
   window.document.querySelector('#queue .card .action')?.textContent);
@@ -119,6 +121,11 @@ const selectedId = firstCard.dataset.lead;
 firstCard.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await tick();
 check('clicking a card selects it', Boolean(window.document.querySelector('#queue .card.selected')), selectedId);
+const keyboardCard = window.document.querySelector('#queue .card');
+keyboardCard.focus();
+keyboardCard.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await tick();
+check('keyboard can toggle selection and retains focus', !window.document.querySelector('#queue .card.selected') && window.document.activeElement?.matches('.card'));
 
 // Approve goes over the websocket as a lead.approve command.
 check('approve sends lead.approve', approveSent?.type === 'lead.approve', JSON.stringify(approveSent));

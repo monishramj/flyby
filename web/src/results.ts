@@ -1,6 +1,11 @@
-import { Chart, BarController, BarElement, CategoryScale, Legend, LineController, LineElement, LinearScale, PointElement, Title, Tooltip } from 'chart.js';
+import { Chart, BarController, BarElement, CategoryScale, Legend, LineController, LineElement, LinearScale, LogarithmicScale, PointElement, Title, Tooltip } from 'chart.js';
 
-Chart.register(BarController, BarElement, LineController, LineElement, PointElement, CategoryScale, LinearScale, Legend, Title, Tooltip);
+Chart.register(BarController, BarElement, LineController, LineElement, PointElement, CategoryScale, LinearScale, LogarithmicScale, Legend, Title, Tooltip);
+Chart.defaults.color = '#abb8b1';
+Chart.defaults.borderColor = '#35413e';
+Chart.defaults.font.family = "'Segoe UI', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.animation = false;
 
 type Summary = {
   seeds: number[]; generated_at: string;
@@ -26,12 +31,13 @@ export async function renderResults(root: HTMLElement) {
   charts.splice(0).forEach(chart => chart.destroy());
   const arms = Object.keys(summary.arms);
   root.innerHTML = `
+    <header><span class="eyebrow">MISSION ANALYSIS</span><h2>Evaluation results</h2><p class="muted">Measured in simulation, using the assumptions below.</p></header>
     <section class="cards">
       ${arms.map(arm => armCard(arm, summary)).join('')}
     </section>
     <section class="charts">
       <figure><figcaption>Time from first capture to dispatch (visible and partial subjects)</figcaption><canvas id="chart-dispatch"></canvas></figure>
-      <figure><figcaption>Reliability of Laya P(person) vs detector confidence</figcaption><canvas id="chart-calibration"></canvas></figure>
+      <figure><figcaption>Reliability of Laya P(person)</figcaption><canvas id="chart-calibration"></canvas></figure>
     </section>
     <section class="assumptions">
       <h3>Declared assumptions</h3>
@@ -46,8 +52,8 @@ export async function renderResults(root: HTMLElement) {
     data: {
       labels,
       datasets: [
-        { label: 'FlyBy median (s)', data: summary.comparison.map(row => row.flyby_median_s), backgroundColor: '#3f8f74' },
-        { label: 'Manual review median (s)', data: summary.comparison.map(row => row.manual_median_s), backgroundColor: '#c2703f' },
+        { label: 'FlyBy median (s)', data: summary.comparison.map(row => row.flyby_median_s), backgroundColor: '#a5c3ac', borderRadius: 3 },
+        { label: 'Manual review median (s)', data: summary.comparison.map(row => row.manual_median_s), backgroundColor: '#c8a577', borderRadius: 3 },
       ],
     },
     options: { responsive: true, scales: { y: { type: 'logarithmic', title: { display: true, text: 'seconds from t0 (log)' } } } },
@@ -60,7 +66,7 @@ export async function renderResults(root: HTMLElement) {
     data: {
       labels: bins.map(bin => bin.bin),
       datasets: [
-        { label: `observed share that were people (ECE ${arm.calibration.laya_p_person.ece ?? '—'})`, data: bins.map(bin => bin.accuracy), borderColor: '#3f8f74', spanGaps: true },
+        { label: `observed share that were people (ECE ${arm.calibration.laya_p_person.ece ?? '—'})`, data: bins.map(bin => bin.accuracy), borderColor: '#a5c3ac', backgroundColor: '#a5c3ac', spanGaps: true },
         { label: 'perfect calibration', data: bins.map((_, index) => (index + 0.5) / bins.length), borderColor: '#7b8a82', borderDash: [5, 5], pointRadius: 0 },
       ],
     },

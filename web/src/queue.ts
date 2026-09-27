@@ -3,6 +3,7 @@ import { store, type Action, type Lead } from './store';
 import { send } from './ws';
 
 const ACTIONS: Action[] = ['dispatch_ground_team', 'reimage_zoom', 'close_in_inspect', 'ignore'];
+const SHORT: Record<Action, string> = { dispatch_ground_team: 'Dispatch', reimage_zoom: 'Reimage', close_in_inspect: 'Inspect', ignore: 'Ignore' };
 export const LABELS: Record<string, string> = { dispatch_ground_team: 'Dispatch crew', reimage_zoom: 'Reimage (zoom)', close_in_inspect: 'Close-in inspect', ignore: 'Ignore' };
 const URGENCY = ['low', 'moderate', 'high', 'critical'];
 export const PENDING = ['awaiting_human', 'awaiting_approval'];
@@ -31,18 +32,18 @@ function probabilityBar(lead: Lead) {
   if (decision?.source !== 'laya') return ''; // the rule policy's probabilities are one-hot, not evidence
   return `<div class="bars">${ACTIONS.map(action => {
     const share = Math.round((decision.probs[action] ?? 0) * 100);
-    return `<div class="bar" title="${LABELS[action]} ${share}%"><span style="width:${share}%;background:${colors[action]}"></span><em>${share}</em></div>`;
+    return `<div class="bar" title="${LABELS[action]} ${share}%"><span>${SHORT[action]}</span><div class="track"><span style="width:${share}%;background:${colors[action]}"></span></div><em>${share}%</em></div>`;
   }).join('')}</div>`;
 }
 
 function card(lead: Lead): string {
   const decision = lead.decision;
-  const action = decision?.action ?? 'ignore';
+  const action = lead.status === 'dispatched' ? 'dispatch_ground_team' : decision?.action ?? 'ignore';
   const needsHuman = lead.status === 'awaiting_human';
   const settled = !PENDING.includes(lead.status);
-  return `<article class="card ${settled ? 'settled' : ''} ${store.selected === lead.lead_id ? 'selected' : ''} ${store.highlight.includes(lead.lead_id) ? 'highlight' : ''}" data-lead="${lead.lead_id}">
+  return `<article class="card ${settled ? 'settled' : ''} ${store.selected === lead.lead_id ? 'selected' : ''} ${store.highlight.includes(lead.lead_id) ? 'highlight' : ''}" data-lead="${lead.lead_id}" tabindex="0" aria-label="${lead.lead_id}, ${lead.sector}. Select to locate on map.">
     <header>
-      <span class="thumb" style="--tone:${colors[action]}" aria-hidden="true">
+      <span class="thumb" style="--tone:${colors[action]}" title="Detection size indicator, not a camera image" aria-hidden="true">
         <span class="box" style="width:${Math.min(38, Math.max(8, lead.box_px / 2))}px;height:${Math.min(38, Math.max(8, lead.box_px / 2))}px"></span>
       </span>
       <div>
@@ -57,7 +58,7 @@ function card(lead: Lead): string {
         ${decision?.used_fallback ? '<span class="tag warn">fallback</span>' : ''}
       </div>
     </header>
-    <p class="action" style="--tone:${colors[action]}">${LABELS[action]}</p>
+    <p class="action" style="--tone:${colors[action]}">${lead.status === 'dispatched' ? 'Crew dispatched' : LABELS[action]}</p>
     ${probabilityBar(lead)}
     <dl>
       <div><dt>P(person)</dt><dd>${pct(decision?.p_person)}</dd></div>
@@ -101,19 +102,28 @@ function closedRow(lead: Lead): string {
 }
 
 export function renderQueue(root: HTMLElement) {
+  const focused = document.activeElement as HTMLElement | null;
+  const focusId = focused?.matches('.card') && root.contains(focused) ? focused.dataset.lead : null;
   const leads = store.snapshot ? rank(store.snapshot.leads) : [];
   const closed = (store.snapshot?.leads ?? []).filter(lead => lead.status === 'auto_closed')
     .sort((a, b) => closedRisk(b).length - closedRisk(a).length || b.detector_conf - a.detector_conf);
   root.innerHTML = (leads.length
     ? leads.map(card).join('')
-    : '<p class="empty">No leads are waiting on a decision.</p>')
+    : '<p class="empty"><strong>No pending decisions</strong>Start a search to collect leads. Detections needing review will appear here.</p>')
     + (closed.length ? `<details class="closed-bin" ${binOpen ? 'open' : ''}>
       <summary>Auto-closed (${closed.length})${closed.some(lead => closedRisk(lead).length) ? ' · <span class="warn">review flagged</span>' : ''}</summary>
       <ul>${closed.map(closedRow).join('')}</ul></details>` : '');
   root.querySelector('.closed-bin')?.addEventListener('toggle', event => { binOpen = (event.target as HTMLDetailsElement).open; });
+  if (focusId) Array.from(root.querySelectorAll<HTMLElement>('.card')).find(card => card.dataset.lead === focusId)?.focus({ preventScroll: true });
 }
 
 export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void, onBrief: (lead: Lead) => void) {
+  root.addEventListener('keydown', event => {
+    const target = event.target as HTMLElement;
+    if (target.matches('.card') && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault(); onSelect(target.dataset.lead!);
+    }
+  });
   root.addEventListener('click', event => {
     const target = event.target as HTMLElement;
     const approve = target.closest('[data-approve]') as HTMLElement | null;
@@ -125,7 +135,7 @@ export function bindQueue(root: HTMLElement, onSelect: (leadId: string) => void,
       if (lead) onBrief(lead);
       return;
     }
-    if (card) onSelect(card.dataset.lead!);
+    if (card && !target.closest('select, option')) onSelect(card.dataset.lead!);
   });
   root.addEventListener('change', event => {
     const select = event.target as HTMLSelectElement;

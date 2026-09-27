@@ -62,12 +62,15 @@ export function groundTexture(scene: Scene, seed: number, margin: number, beach:
   const g = canvas.getContext('2d');
   if (!g) return null;
   const X = (x: number) => (x + margin) * px, Y = (y: number) => size - (y + margin) * px;
-  g.fillStyle = '#56603f'; g.fillRect(0, 0, size, size);
-  for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${60 + rand() * 40},${70 + rand() * 40},${40 + rand() * 25},.35)`; g.beginPath(); g.arc(rand() * size, rand() * size, 4 + rand() * 22, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#626b58'; g.fillRect(0, 0, size, size);
+  for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${65 + rand() * 40},${74 + rand() * 35},${50 + rand() * 30},.12)`; g.beginPath(); g.ellipse(rand() * size, rand() * size, 2 + rand() * 14, 1 + rand() * 5, rand() * 3, 0, Math.PI * 2); g.fill(); }
   g.strokeStyle = '#5d5c55'; g.lineWidth = 7 * px;
   const roads = [[105, -margin, 105, scene.area_m + margin], [190, -margin, 190, scene.area_m + margin], [275, -margin, 275, scene.area_m + margin],
     [-margin, 100, 300, 100], [-margin, 200, 300, 200]];
   roads.forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(X(x1), Y(y1)); g.lineTo(X(x2), Y(y2)); g.stroke(); });
+  g.strokeStyle = '#a49f84'; g.lineWidth = .15 * px; g.setLineDash([2.5 * px, 3.5 * px]);
+  roads.forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(X(x1), Y(y1)); g.lineTo(X(x2), Y(y2)); g.stroke(); });
+  g.setLineDash([]);
   // Inundation: wet sediment thickens toward the sea; the wrack line is where the surge stopped.
   const limit = (y: number) => 70 + 18 * Math.sin(y / 37 + seed) + 10 * Math.sin(y / 13 + seed * 2);
   for (let row = 0; row < size; row += 2) {
@@ -86,6 +89,17 @@ export function groundTexture(scene: Scene, seed: number, margin: number, beach:
   sand.addColorStop(0, 'rgba(160,146,110,0)'); sand.addColorStop(.25, '#a8997a'); sand.addColorStop(1, '#c8b98f');
   g.fillStyle = sand; g.fillRect(X(scene.area_m - 12), 0, size, size);
   g.fillStyle = '#8f8467'; g.fillRect(X(scene.area_m + beach - 5), 0, 5 * px, size);
+  // Small baked surface detail stays inexpensive at runtime, without repeated polka-dot patches.
+  for (let i = 0; i < 16000; i++) {
+    g.fillStyle = rand() > .5 ? 'rgba(221,213,184,.06)' : 'rgba(24,31,27,.07)';
+    g.fillRect(rand() * size, rand() * size, 1 + rand() * 2, 1);
+  }
+  // A dry response staging pad; these marks are decorative, never mission intel.
+  g.fillStyle = '#656963'; g.fillRect(X(-34), Y(180), 29 * px, 48 * px);
+  g.strokeStyle = '#d3c6a0'; g.lineWidth = .25 * px;
+  g.strokeRect(X(-32), Y(178), 25 * px, 44 * px);
+  g.font = `600 ${3 * px}px sans-serif`; g.fillStyle = '#d9d2bb';
+  g.fillText('SAR', X(-28), Y(169));
   g.clearRect(X(scene.area_m + beach), 0, size, size); // east of the shoreline is sea
   const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   return { tex, limit };
@@ -131,6 +145,7 @@ export function dressScene(scene: Scene, seed: number, root: THREE.Group, limit:
       const own = [mesh.material].flat().map(m => { const copy = m.clone(); copy.transparent = true; houseMats.push(copy); return copy; });
       mesh.material = Array.isArray(mesh.material) ? own : own[0];
       mesh.userData.shared = false;
+      mesh.userData.sharedGeometry = true;
     });
     add(house, h.x, h.y, (i % 4) * Math.PI / 2, -damage * 1.2);
     // Stronger surge leaves the house racked and sinking into the sediment.
@@ -194,5 +209,65 @@ export function dressScene(scene: Scene, seed: number, root: THREE.Group, limit:
   // Responders staging on dry ground off the west edge.
   ([['ambulance', -14, 60], ['firetruck', -16, 150], ['police', -12, 160], ['ambulance', -15, 230]] as [ModelName, number, number][])
     .forEach(([name, x, y]) => add(model(name, name === 'firetruck' ? 7.5 : 5), x, y, Math.PI / 2));
+  // Broken fences, detached roofing and supply stacks make the damage legible at inspection scale.
+  scene.houses.slice(0, 10).forEach((h, i) => {
+    const x = h.x + h.width / 2 + 4, y = h.y - h.height / 2 - 2;
+    const fence = add(model('fence', 7), x, y, i % 2 ? 0 : Math.PI / 2);
+    if (fence) fence.rotation.z = .45 + surge(h.x, h.y) * .8;
+    if (surge(h.x, h.y) > .35) {
+      const roof = add(model('metalRoof', 6 + rand() * 3), h.x - h.width / 2 - 6, h.y + 5);
+      if (roof) roof.rotation.z = .22;
+    }
+  });
+  for (let i = 0; i < 7; i++) {
+    add(model('crate', 1.3), -30 + i % 3 * 1.5, 143 + Math.floor(i / 3) * 1.6, 0);
+    if (i < 4) add(model('barrier', 2.5), -7, 138 + i * 6, Math.PI / 2);
+  }
+  // Two low-poly field shelters and a single instanced sandbag perimeter (one draw call).
+  const canvasMat = new THREE.MeshStandardMaterial({ color: '#cec5a6', roughness: 1 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: '#7d8876', roughness: 1 });
+  for (const y of [151, 163]) {
+    const shelter = new THREE.Group();
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(7, 2.2, 6), canvasMat); walls.position.y = 1.1;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(1, 2.5, 4), roofMat);
+    roof.rotation.y = Math.PI / 4; roof.scale.set(5.8, 1, 5); roof.position.y = 3.4;
+    walls.castShadow = roof.castShadow = true; shelter.add(walls, roof); add(shelter, -26, y, 0);
+  }
+  const bags = new THREE.InstancedMesh(new THREE.BoxGeometry(.95, .38, .52), new THREE.MeshStandardMaterial({ color: '#b5aa89', roughness: 1 }), 80);
+  const transform = new THREE.Object3D();
+  for (let i = 0; i < 80; i++) {
+    const level = Math.floor(i / 40), k = i % 40;
+    transform.position.copy(at(-34 + (level ? .45 : 0) + k * .98, 134, .2 + level * .38));
+    transform.rotation.set(0, (rand() - .5) * .14, 0); transform.updateMatrix(); bags.setMatrixAt(i, transform.matrix);
+  }
+  bags.castShadow = true; bags.receiveShadow = true; root.add(bags);
   return houseMats;
+}
+
+/** Instance repeated, rigid scenery by geometry + material, preserving its exact world placement.
+ * Houses keep independent materials for the truth overlay; characters/skinned meshes stay unbatched.
+ * All cached geometry/materials remain cache-owned when a mission is reset. */
+export function batchScenery(root: THREE.Group) {
+  root.updateMatrixWorld(true);
+  const inverse = root.matrixWorld.clone().invert();
+  const groups = new Map<string, THREE.Mesh[]>();
+  root.traverse(o => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.userData.shared || (mesh as THREE.SkinnedMesh).isSkinnedMesh || Array.isArray(mesh.material)) return;
+    const key = `${mesh.geometry.uuid}:${mesh.material.uuid}`;
+    const list = groups.get(key) ?? []; list.push(mesh); groups.set(key, list);
+  });
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) continue;
+    const source = meshes[0], batch = new THREE.InstancedMesh(source.geometry, source.material, meshes.length);
+    batch.userData.shared = true;
+    batch.castShadow = source.castShadow; batch.receiveShadow = source.receiveShadow;
+    const matrix = new THREE.Matrix4();
+    meshes.forEach((mesh, i) => { batch.setMatrixAt(i, matrix.multiplyMatrices(inverse, mesh.matrixWorld)); mesh.removeFromParent(); });
+    batch.computeBoundingSphere(); root.add(batch);
+  }
+  const prune = (node: THREE.Object3D) => {
+    [...node.children].forEach(child => { prune(child); if (child instanceof THREE.Group && !child.children.length) child.removeFromParent(); });
+  };
+  prune(root);
 }

@@ -22,7 +22,7 @@ export function renderIntel(root: HTMLElement) {
   root.innerHTML = rows.length
     ? rows.map(row => `<li><header><b>${row.intel_id}</b><time>t+${Math.round(row.t)}s</time></header>
         <p>${clean(row.raw)}</p><div class="chips">${chips(row)}</div></li>`).join('')
-    : '<li class="empty">No radio traffic yet.</li>';
+    : '<li class="empty"><strong>Listening for field reports</strong>Radio messages and location updates appear here as the search progresses.</li>';
 }
 
 export function renderIncident(root: HTMLElement) {
@@ -92,5 +92,5 @@ export function renderAssistant(root: HTMLElement) {
         <footer><button class="primary" data-accept="${p.proposal_id}">Show leads</button><button class="ghost" data-dismiss="${p.proposal_id}">Dismiss</button></footer>
       </li>`;
     }).join('')
-    : `<li class="empty">${store.snapshot?.config.PARSE_MODE === 'grok' ? 'Watching intel. Suggestions appear here; they never act on their own.' : 'The assistant runs when intel is parsed by Grok (PARSE_MODE=grok).'}</li>`;
+    : `<li class="empty"><strong>${store.snapshot?.config.PARSE_MODE === 'grok' ? 'Watching the incident' : 'Assistant on standby'}</strong>${store.snapshot?.config.PARSE_MODE === 'grok' ? 'Relevant reports and related leads will appear here. You approve every action.' : 'Suggestions become available when Grok intel is connected.'}</li>`;
 }

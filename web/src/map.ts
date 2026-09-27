@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { dressScene, groundTexture, loadModels, model, type ModelName } from './models';
+import { batchScenery, dressScene, groundTexture, loadModels, model, type ModelName } from './models';
 import { notify, store } from './store';
 
-export const colors: Record<string, string> = { dispatch_ground_team: '#327c65', reimage_zoom: '#bb913f', close_in_inspect: '#5f76b0', ignore: '#79847f', dispatched: '#195846', awaiting_human: '#cf653c' };
+export const colors: Record<string, string> = { dispatch_ground_team: '#a5c3ac', reimage_zoom: '#e3b77a', close_in_inspect: '#91adc5', ignore: '#a3aaa3', dispatched: '#78a18d', awaiting_human: '#dd9975' };
 export type CameraMode = 'orbit' | 'follow' | 'top';
 
 // World (x east, y north, metres) -> three (x, up, -y): origin SW, north is -z.
@@ -21,15 +21,22 @@ interface Ctx {
   sectorLabels: Record<string, HTMLElement>; houseMats: THREE.Material[];
   runId: string; hazardKey: string; truthKey: string; mode: CameraMode; droneTarget: THREE.Vector3; last: THREE.Vector3;
   pins: Map<string, THREE.Group>; fetching: string; ocean: THREE.Mesh | null;
+  truthVisible: boolean;
 }
 let ctx: Ctx | null = null;
 
 function dispose(root: THREE.Object3D) {
   root.traverse(o => {
     const mesh = o as THREE.Mesh;
+    if (o instanceof CSS2DObject) o.element.remove();
+    if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
     if (mesh.userData.shared) return; // geometry/materials belong to the model cache
-    mesh.geometry?.dispose();
-    [mesh.material].flat().forEach(m => m?.dispose());
+    if (!mesh.userData.sharedGeometry) mesh.geometry?.dispose();
+    [mesh.material].flat().forEach(m => {
+      if (m?.userData.ownedMap) (m as THREE.MeshBasicMaterial).map?.dispose();
+      if (m?.userData.ownedNormal) (m as THREE.MeshStandardMaterial).normalMap?.dispose();
+      m?.dispose();
+    });
   });
   root.clear();
 }
@@ -63,7 +70,8 @@ function buildDrone() {
   const lens = new THREE.Mesh(new THREE.CylinderGeometry(.22, .22, .2, 16), new THREE.MeshStandardMaterial({ color: '#0a2340', metalness: .9, roughness: .1 }));
   lens.position.set(0, -.85, -1); g.add(lens);
   for (const sx of [-1, 1]) { const skid = new THREE.Mesh(new THREE.BoxGeometry(.12, .9, 2.4), carbon); skid.position.set(sx * .8, -.7, 0); g.add(skid); }
-  g.traverse(o => { o.castShadow = true; });
+  // Keep the shadow map static: the drone is already visible above its camera footprint.
+  g.traverse(o => { o.castShadow = false; });
   g.scale.setScalar(1.3);
   return { g, rotors };
 }
@@ -83,14 +91,17 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   let renderer: THREE.WebGLRenderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true }); }
   catch { labelRoot.innerHTML = '<p class="nogl">3D view unavailable: this browser has no WebGL.</p>'; return false; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   const labels = new CSS2DRenderer();
   labels.domElement.className = 'labels'; labelRoot.appendChild(labels.domElement);
   // Overcast morning after the surge: low sun from the sea, haze toward the horizon.
-  const scene = new THREE.Scene(); scene.background = new THREE.Color('#9fb0b8'); scene.fog = new THREE.Fog('#9fb0b8', 380, 1100);
-  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.28;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#9baaa7'); scene.fog = new THREE.Fog('#9baaa7', 500, 1500);
+  const pmrem = new THREE.PMREMGenerator(renderer), environment = new RoomEnvironment();
+  scene.environment = pmrem.fromScene(environment, 0.04).texture; scene.environmentIntensity = 0.28;
+  environment.dispose(); pmrem.dispose();
   scene.add(new THREE.HemisphereLight('#dbe6ec', '#4a4436', 0.8));
   const sun = new THREE.DirectionalLight('#fff1dc', 2.6); sun.position.set(420, 260, -60); sun.target.position.set(150, 0, -150);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.4;
@@ -104,17 +115,26 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
   const lkp = new THREE.LineLoop(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: '#c96b43', dashSize: 3, gapSize: 2 })); lkp.visible = false; scene.add(lkp);
   ctx = { renderer, labels, scene, camera, controls, world, leadGroup, truthGroup, hazardGroup, drone, rotors, cam: new THREE.Group(), lkp,
     coverage: null, sectorLabels: {}, houseMats: [], runId: '', hazardKey: '', truthKey: '', mode: 'orbit',
-    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null };
+    droneTarget: new THREE.Vector3(), last: new THREE.Vector3(), pins: new Map(), fetching: '', ocean: null, truthVisible: false };
   // Models stream in after first paint; the scene is rebuilt with them once they arrive.
-  loadModels().then(count => { if (count && ctx) { ctx.runId = ''; renderMap(); } });
+  loadModels().then(count => {
+    if (!count || !ctx) return;
+    const position = ctx.camera.position.clone(), target = ctx.controls.target.clone();
+    ctx.runId = ''; renderMap();
+    ctx.camera.position.copy(position); ctx.controls.target.copy(target);
+  });
   scene.add(ctx.cam);
 
   const resize = () => {
     const w = labelRoot.clientWidth, h = labelRoot.clientHeight;
     if (!w || !h) return;
+    const previousFit = Math.max(1, 1.45 / camera.aspect), nextFit = Math.max(1, 1.45 / (w / h));
+    if (ctx?.mode !== 'follow') camera.position.sub(controls.target).multiplyScalar(nextFit / previousFit).add(controls.target);
     renderer.setSize(w, h, false); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
   };
   new ResizeObserver(resize).observe(labelRoot); resize();
+  let inView = true;
+  new IntersectionObserver(entries => { inView = entries[0].isIntersecting; }).observe(canvas);
 
   let down = { x: 0, y: 0 };
   canvas.addEventListener('pointerdown', e => { down = { x: e.clientX, y: e.clientY }; });
@@ -129,25 +149,41 @@ export function mountMap(canvas: HTMLCanvasElement, labelRoot: HTMLElement, onPi
     if (node) onPick(node.userData.leadId);
   });
 
-  const clock = new THREE.Clock();
-  const loop = () => {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const direction = new THREE.Vector3(), shift = new THREE.Vector3();
+  let previous = performance.now(), lastLabels = 0, lastDeclutter = 0;
+  const loop = (now = performance.now()) => {
     requestAnimationFrame(loop);
-    if (!ctx || !labelRoot.clientWidth) return;
-    const dt = clock.getDelta();
+    const dt = Math.min((now - previous) / 1000, .05); previous = now;
+    if (!ctx || document.hidden || !inView || !labelRoot.clientWidth || !labelRoot.clientHeight) return;
     ctx.drone.position.lerp(ctx.droneTarget, Math.min(1, dt * 12));
     ctx.cam.position.copy(ctx.drone.position);
-    const v = ctx.droneTarget.clone().sub(ctx.last);
+    const v = direction.copy(ctx.droneTarget).sub(ctx.last);
     if (v.lengthSq() > 0.01) { ctx.drone.rotation.y = Math.atan2(-v.x, -v.z); ctx.last.copy(ctx.droneTarget); }
-    ctx.rotors.forEach(r => { r.rotation.y += dt * 40; });
+    if (!reducedMotion.matches && store.snapshot?.state.running) ctx.rotors.forEach(r => { r.rotation.y += dt * 40; });
     const ocean = ctx.ocean;
     if (ocean) {
-      const pos = ocean.geometry.attributes.position as THREE.BufferAttribute, t = clock.elapsedTime;
-      for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); pos.setZ(i, Math.sin(x * .05 + t * 1.1) * .22 + Math.sin(y * .08 - t * .7) * .15); }
-      pos.needsUpdate = true; ocean.geometry.computeVertexNormals();
+      // The broad water surface uses a tiny tiled normal map. No vertex uploads or normal rebuilds.
+      const normal = (ocean.material as THREE.MeshStandardMaterial).normalMap;
+      if (normal && !reducedMotion.matches) normal.offset.set(now * .000002, now * .000001);
     }
-    if (ctx.mode === 'follow') { const shift = ctx.drone.position.clone().sub(ctx.controls.target); ctx.controls.target.add(shift); ctx.camera.position.add(shift); }
+    if (ctx.mode === 'follow') { shift.copy(ctx.drone.position).sub(ctx.controls.target); ctx.controls.target.add(shift); ctx.camera.position.add(shift); }
     ctx.controls.update();
-    ctx.renderer.render(ctx.scene, ctx.camera); ctx.labels.render(ctx.scene, ctx.camera);
+    ctx.renderer.render(ctx.scene, ctx.camera);
+    if (now - lastLabels > 33) { ctx.labels.render(ctx.scene, ctx.camera); lastLabels = now; }
+    if (now - lastDeclutter > 120) {
+      // Resolve label overlap in screen space. Selected leads and reported hazards take priority.
+      const occupied: DOMRect[] = [];
+      for (const selector of ['.pin', '.hazard', '.sector', '.truth', '.landmark']) {
+        ctx.labels.domElement.querySelectorAll<HTMLElement>(selector).forEach(el => {
+          const box = el.getBoundingClientRect();
+          const overlap = occupied.some(b => box.left < b.right + 6 && box.right > b.left - 6 && box.top < b.bottom + 3 && box.bottom > b.top - 3);
+          el.style.visibility = overlap ? 'hidden' : '';
+          if (!overlap && box.width && box.height) occupied.push(box);
+        });
+      }
+      lastDeclutter = now;
+    }
   };
   loop();
   return true;
@@ -157,13 +193,39 @@ export function setCameraMode(mode: CameraMode) {
   if (!ctx) return;
   const s = store.snapshot, area = s?.scene.area_m ?? 300, centre = at(area / 2, area / 2);
   ctx.mode = mode;
-  if (mode === 'top') { ctx.controls.target.copy(centre); ctx.camera.position.set(centre.x, area * 1.15, centre.z + 0.01); }
+  if (mode === 'top') { ctx.controls.target.copy(centre); ctx.camera.position.set(centre.x, area * 1.4, centre.z + 0.01); }
   else if (mode === 'follow') { ctx.controls.target.copy(ctx.drone.position); ctx.camera.position.copy(ctx.drone.position).add(new THREE.Vector3(0, 35, 65)); }
-  else { ctx.controls.target.copy(centre); ctx.camera.position.set(-area * 0.3, area * 0.62, centre.z + area * 0.95); }
+  else { ctx.controls.target.copy(centre); ctx.camera.position.set(-area * 0.2, area * 0.76, centre.z + area * 0.73); }
+  if (mode !== 'follow') ctx.camera.position.sub(centre).multiplyScalar(Math.max(1, 1.45 / ctx.camera.aspect)).add(centre);
+}
+
+/** Read-only renderer counters for local performance checks. */
+export function getRenderStats() {
+  if (!ctx) return null;
+  return { calls: ctx.renderer.info.render.calls, triangles: ctx.renderer.info.render.triangles,
+    geometries: ctx.renderer.info.memory.geometries, textures: ctx.renderer.info.memory.textures,
+    pixelRatio: ctx.renderer.getPixelRatio() };
+}
+
+function waterNormal() {
+  const n = 64, pixels = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = (y * n + x) * 4;
+    pixels[i] = 128 + Math.sin(x / n * Math.PI * 8 + Math.sin(y / n * Math.PI * 4)) * 26;
+    pixels[i + 1] = 128 + Math.cos(y / n * Math.PI * 12 + x / n * Math.PI * 4) * 20;
+    pixels[i + 2] = 250; pixels[i + 3] = 255;
+  }
+  const texture = new THREE.DataTexture(pixels, n, n);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter; texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.repeat.set(16, 16); texture.needsUpdate = true;
+  return texture;
 }
 
 function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   dispose(c.world); dispose(c.leadGroup); dispose(c.truthGroup); dispose(c.hazardGroup);
+  c.renderer.shadowMap.needsUpdate = true;
   c.pins.clear(); c.sectorLabels = {}; c.houseMats = []; c.truthKey = ''; c.hazardKey = ''; c.coverage = null;
   const { scene, config } = s, area = scene.area_m, cell = config.COVERAGE_CELL_M;
   const margin = 80, painted = groundTexture(scene, s.seed, margin, BEACH_M);
@@ -174,11 +236,13 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   outer.rotation.x = -Math.PI / 2; outer.position.set(shore - 1200 - margin, -0.08, -area / 2); outer.receiveShadow = true; c.world.add(outer);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(area + margin * 2, area + margin * 2), new THREE.MeshStandardMaterial({ map: painted?.tex ?? null, color: painted ? '#ffffff' : '#56603f', roughness: .95, alphaTest: .5 }));
   land.rotation.x = -Math.PI / 2; land.position.set(area / 2, 0, -area / 2); land.receiveShadow = true; c.world.add(land);
+  land.material.userData.ownedMap = true;
 
   const n = Math.ceil(area / cell), data = new Uint8Array(n * n * 4);
   const tex = new THREE.DataTexture(data, n, n, THREE.RGBAFormat); tex.magFilter = tex.minFilter = THREE.NearestFilter; tex.needsUpdate = true;
   const cov = new THREE.Mesh(new THREE.PlaneGeometry(area, area), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
   cov.rotation.x = -Math.PI / 2; cov.position.set(area / 2, 0.1, -area / 2); cov.renderOrder = 1; c.world.add(cov);
+  cov.material.userData.ownedMap = true;
   c.coverage = { tex, n, count: -1 };
 
   const size = area / scene.sector_grid, grid: THREE.Vector3[] = [];
@@ -192,8 +256,9 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
   scene.water.forEach(w => {
     if (w.kind === 'ocean') {
       // The sea runs off to the horizon; the server rectangle only marks where it starts.
-      const width = w.width + 900, height = w.height + 1200, sea = new THREE.Mesh(new THREE.PlaneGeometry(width, height, 90, 90),
-        new THREE.MeshStandardMaterial({ color: '#164656', roughness: .2, metalness: .3 }));
+      const width = w.width + 900, height = w.height + 1200, sea = new THREE.Mesh(new THREE.PlaneGeometry(width, height),
+        new THREE.MeshStandardMaterial({ color: '#42636a', roughness: .55, metalness: .15, normalMap: waterNormal(), normalScale: new THREE.Vector2(.16, .16) }));
+      sea.material.userData.ownedNormal = true;
       sea.rotation.x = -Math.PI / 2; sea.position.copy(at(shore - 20 + width / 2, w.y + w.height / 2, -0.45)); sea.receiveShadow = true;
       c.world.add(sea); c.ocean = sea;
       const foam = new THREE.Mesh(new THREE.PlaneGeometry(4, w.height + 400), new THREE.MeshBasicMaterial({ color: '#e8efe9', transparent: true, opacity: .6, depthWrite: false }));
@@ -204,7 +269,9 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
     const pool = new THREE.Mesh(new THREE.PlaneGeometry(w.width, w.height), new THREE.MeshStandardMaterial({ color: '#55625a', roughness: .06, metalness: .6, transparent: true, opacity: .85 }));
     pool.rotation.x = -Math.PI / 2; pool.position.copy(at(w.x + w.width / 2, w.y + w.height / 2, 0.45)); pool.receiveShadow = true; c.world.add(pool);
   });
-  const dressed = dressScene(scene, s.seed, c.world, limit);
+  const scenery = new THREE.Group(); c.world.add(scenery);
+  const dressed = dressScene(scene, s.seed, scenery, limit);
+  if (dressed) batchScenery(scenery);
   const wall = new THREE.MeshStandardMaterial({ color: '#c4c1aa' }), roof = new THREE.MeshStandardMaterial({ color: '#8f5a48' }), post = new THREE.MeshStandardMaterial({ color: '#aeab95' });
   [wall, roof, post].forEach(m => { m.transparent = true; }); c.houseMats = dressed ?? [wall, roof, post];
   if (!dressed) scene.houses.forEach(h => {
@@ -239,6 +306,10 @@ function buildWorld(c: Ctx, s: NonNullable<typeof store.snapshot>) {
 }
 
 function syncTruth(c: Ctx, s: NonNullable<typeof store.snapshot>) {
+  if (c.truthVisible !== store.showTruth) {
+    c.truthVisible = store.showTruth;
+    c.renderer.shadowMap.needsUpdate = true;
+  }
   c.houseMats.forEach(m => { m.opacity = store.showTruth ? 0.3 : 1; });
   const want = store.showTruth && store.truth?.run_id === s.run_id ? s.run_id : '';
   if (store.showTruth && !want && c.fetching !== s.run_id) {
@@ -287,7 +358,7 @@ export function renderMap() {
     data.fill(0);
     state.coverage_cells.forEach(k => {
       const col = Math.min(n - 1, Math.floor(k.x / cell)), row = Math.min(n - 1, Math.floor(k.y / cell)), i = (row * n + col) * 4;
-      data[i] = 84; data[i + 1] = 200; data[i + 2] = 140; data[i + 3] = 90;
+      data[i] = 127; data[i + 1] = 174; data[i + 2] = 156; data[i + 3] = 43;
     });
     tex.needsUpdate = true; c.coverage.count = state.coverage_cells.length;
   }
@@ -295,7 +366,7 @@ export function renderMap() {
   Object.entries(c.sectorLabels).forEach(([id, el]) => el.classList.toggle('crit', incident.sector_priority[id] === 'critical'));
 
   const ids = new Set(leads.map(l => l.lead_id));
-  c.pins.forEach((pin, id) => { if (!ids.has(id)) { c.leadGroup.remove(pin); c.pins.delete(id); } });
+  c.pins.forEach((pin, id) => { if (!ids.has(id)) { c.leadGroup.remove(pin); dispose(pin); c.pins.delete(id); } });
   leads.forEach(lead => {
     let pin = c.pins.get(lead.lead_id);
     if (!pin) { pin = makePin(lead.lead_id); c.pins.set(lead.lead_id, pin); c.leadGroup.add(pin); }
