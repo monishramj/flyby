@@ -75,6 +75,30 @@ Deviations / open issues:
   unless CUDA is hidden (flyvis builds its RNG on `flyvis.device`, chosen at import).
   The recorder sets `CUDA_VISIBLE_DEVICES=-1` (empty string is dropped on Windows).
 - Not wired into the Fly tab or the live stream yet (needs Step 7.1 `stream.ts`).
+## Fitted readout: collision cone + learned units (2026-09-27) — partial
+
+Camera now renders 384² with MSAA and is area-averaged to 96² (realistic camera,
+no aliasing); fine concrete ground. 90° FOV, 1.5 m/s. Data: 200 train flights
+(seeds 100–139) + 100 held-out test flights (seeds 500–519), replayed through the
+pretrained eye (`tools/record_drive.py`); fit with `tools/fit_readout.py`.
+Diagnostic finding: a sagging beam only shows its lower edge (moving down near the
+image centre); wide all-sides-expanding units miss it. Edges that will hit the drone
+sit near the centre of view, so a centre-weighted radial-motion "cone" pathway was
+added (Gaussian σ = 0.1 in col_x/col_y units) alongside learned weights over the 7
+units × 3 pathways. Either pathway brakes; each θ is the 97.5% quantile of train
+safe peaks. Scored with the runtime `Readout` (identical to the fit prototype).
+
+Held-out TEST (63 colliding, 37 safe; `measurements/readout-fit-fov90.json`):
+
+| readout | caught | in time (≥ 0.415 s) | false brakes |
+| --- | --- | --- | --- |
+| previous 2-pathway rule | 8 | 1 | 0/37 |
+| learned units only | 10 | 7 | 3/37 |
+| **cone + learned units (live now)** | **34** | **29** | **3/37** |
+
+In time by obstacle: debris 18/20, beam 5/20, post 6/20. Posts are at the eye's
+resolution limit at 90° (0.1 m post < 2 facets until inside ~1 m). A 60° batch is
+being recorded to test that. Not yet good enough to claim reliable avoidance.
 
 ## Carport scene and first calibration (2026-09-27) — reflex NOT yet reliable
 

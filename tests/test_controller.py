@@ -162,12 +162,29 @@ def test_brake_fires_before_expanding_disc_fills_frame():
     assert "brake" in cmds, "no brake before the disc filled the frame"
 
 
-def test_learned_weights_score_and_side():
+def fitted(theta_units=1.0, theta_cone=1.0, sigma=0.1):
     n = len(Readout(COL_X, COL_Y).units.centers)
     w = np.zeros((3, n)); w[1] = 1.0  # horizontal pathway only
-    ro = Readout(COL_X, COL_Y, weights={"w": w.ravel().tolist(), "scale": [1.0] * (3 * n), "b": -0.1})
-    S0, _ = ro.update(np.zeros((4, len(COL_X))))
-    assert S0 == -0.1
+    return {"units": {"w": w.ravel().tolist(), "scale": [1.0] * (3 * n), "b": 0.0, "theta": theta_units},
+            "cone": {"sigma": sigma, "theta": theta_cone}}
+
+
+def test_fitted_readout_is_quiet_without_motion_and_ignores_translation():
+    ro = Readout(COL_X, COL_Y, weights=fitted())
+    S, _ = ro.update(np.zeros((4, len(COL_X))))
+    assert S == 0.0  # 1 + 0 − θ_units(1) and cone 0
+    drive = np.zeros((4, len(COL_X))); drive[DIRECTIONS.index("right")] = 1.0
+    for _ in range(20):
+        S, _ = ro.update(drive)
+    assert S < 1.0
+
+
+def test_centred_expansion_fires_the_cone_and_off_centre_left_expansion_turns_right():
+    ro = Readout(COL_X, COL_Y, weights=fitted(theta_cone=0.05))
+    for _ in range(20):
+        S, dLR = ro.update(radial_drive(radius=0.3))
+    assert ro.pathway == "cone" and S > 1.0
+    ro = Readout(COL_X, COL_Y, weights=fitted(theta_units=0.05, theta_cone=1e9))
     for _ in range(20):
         S, dLR = ro.update(radial_drive(cx=-0.55, vertical=False, radius=0.5))
-    assert ro.pathway == "learned" and S > 0 and dLR > 0
+    assert ro.pathway == "units" and S > 1.0 and dLR > 0

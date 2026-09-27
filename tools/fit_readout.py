@@ -1,14 +1,17 @@
-"""Fit the looming readout weights on recorded carport flights (engineered layer).
+"""Fit the looming readout on recorded carport flights (engineered layer; reflex/looming.py).
 
-Features per frame: the 7 LPLC2-style units × 3 pathways (2d, horiz, vert), each
-smoothed with the readout EMA — 21 inputs, like the giant fiber weighting its
-looming inputs. A logistic model separates "contact within DANGER window" from
-safe flight; θ keeps false brakes on TRAIN non-colliding flights ≤ 5%.
-Everything is then evaluated on held-out TEST flights (different seeds).
+Two pathways, either of which can trigger a brake:
+  cone:  Gaussian-weighted radial motion about the image centre (sigma fixed by --sigma);
+  units: logistic weights over the EMA'd 7 LPLC2-style units × 3 pathways (21 inputs),
+         trained on "contact within DANGER seconds" versus safe flight.
+Each pathway's threshold is the --quantile of its peak score over TRAIN non-colliding
+flights, so false brakes on train stay near 1 − quantile per pathway.
+Scoring uses the runtime reflex.looming.Readout frame by frame, so reported numbers are
+exactly what the server does. TEST flights (different seeds) are held out.
 
 Run: uv run python -m tools.fit_readout <train_drive_dir> <test_drive_dir> [--write]
-Drive dirs come from tools.record_drive. --write saves bench/readout_weights.json
-and bench/thresholds.json for the server.
+Drive dirs come from tools.record_drive. --write saves bench/readout_weights.json and
+bench/thresholds.json (θ = 1 on the combined scale).
 """
 
 import argparse
@@ -21,13 +24,11 @@ import numpy as np
 
 from reflex import config as cfg
 from reflex.hexeye import load_layout
-from reflex.looming import LoomingUnits
+from reflex.looming import Cone, LoomingUnits, Readout
 
 DANGER = (0.2, 1.2)      # seconds before contact labelled "brake now"
 FAR_S = 2.0              # colliding-flight frames earlier than this before contact are safe
-TARGET_FALSE_BRAKE = 0.05
 L2 = 1e-2
-PATHWAYS = ("2d", "horiz", "vert")
 
 
 def ema(x, a=cfg.EMA_ALPHA):
@@ -38,20 +39,19 @@ def ema(x, a=cfg.EMA_ALPHA):
     return out
 
 
-def load(dirpath, units):
+def load(dirpath):
     eps = []
     for path in sorted(glob.glob(os.path.join(dirpath, "*.npz"))):
         with np.load(path) as d:
-            p, r, drive = json.loads(str(d["params"])), json.loads(str(d["result"])), d["drive"]
-        feats = ema(np.stack([units.pathways(dr).reshape(-1) for dr in drive]))  # (T, 3*units)
-        eps.append({"params": p, "result": r, "feats": feats})
+            eps.append({"params": json.loads(str(d["params"])), "result": json.loads(str(d["result"])),
+                        "drive": d["drive"]})
     return eps
 
 
-def labelled(eps, hover):
+def labelled(eps, hover, key="feats"):
     X, y = [], []
     for e in eps:
-        f, r = e["feats"], e["result"]
+        f, r = e[key], e["result"]
         k = np.arange(len(f))
         if r["collided"]:
             before = (r["contact_k"] - k) * cfg.DT_S
@@ -81,18 +81,19 @@ def fit_logistic(X, y, l2=L2, iters=50):
     return w[:-1], w[-1]
 
 
-def evaluate(eps, score_fn, theta, hover):
+def evaluate(eps, weights, col_x, col_y, hover):
+    """Replays each flight through the runtime Readout; brake = S > 1 after the hover."""
     need = cfg.NAV_CRUISE_MPS / cfg.A_BRAKE_MPS2 + 0.04
     safe, hits = [], []
     for e in eps:
-        s = score_fn(e["feats"])
-        above = np.flatnonzero(s[hover:] > theta) + hover
+        ro = Readout(col_x, col_y, weights=weights)
+        S = np.array([ro.update(dr)[0] for dr in e["drive"]])
+        above = np.flatnonzero(S[hover:] > 1.0) + hover
         if not e["result"]["collided"]:
             safe.append(len(above) > 0)
-        else:
-            first = int(above[0]) if len(above) else None
-            warn = None if first is None else (e["result"]["contact_k"] - first) * cfg.DT_S
-            hits.append((e["params"]["scenario"], warn))
+            continue
+        first = int(above[0]) if len(above) else None
+        hits.append((e["params"]["scenario"], None if first is None else (e["result"]["contact_k"] - first) * cfg.DT_S))
     by = {}
     for sc in sorted({s for s, _ in hits}):
         ws = [w for s, w in hits if s == sc]
@@ -105,74 +106,55 @@ def evaluate(eps, score_fn, theta, hover):
             "required_warning_s": need, "by_scenario": by}
 
 
-def pick_theta(eps, score_fn, hover):
-    peaks = np.sort([score_fn(e["feats"])[hover:].max() for e in eps if not e["result"]["collided"]])
-    allowed = int(np.floor(TARGET_FALSE_BRAKE * len(peaks)))
-    top = peaks[len(peaks) - 1 - allowed]
-    return float(top + 1e-3 * max(1.0, abs(top)))
-
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("train")
     parser.add_argument("test")
+    parser.add_argument("--sigma", type=float, default=0.1)
+    parser.add_argument("--quantile", type=float, default=0.975)
     parser.add_argument("--write", action="store_true")
     args = parser.parse_args()
     layout = load_layout()
-    units = LoomingUnits(np.array(layout["col_x"]), np.array(layout["col_y"]))
+    col_x, col_y = np.array(layout["col_x"]), np.array(layout["col_y"])
+    units, cone = LoomingUnits(col_x, col_y), Cone(col_x, col_y, args.sigma)
     hover = round(cfg.HOVER_S / cfg.DT_S)
-    train, test = load(args.train, units), load(args.test, units)
-    n_units = len(units.centers)
+    train, test = load(args.train), load(args.test)
+    for e in train:
+        e["feats"] = ema(np.stack([units.pathways(dr).reshape(-1) for dr in e["drive"]]))
+        e["cone"] = ema(np.array([cone.score(dr)[0] for dr in e["drive"]]))
 
-    # Feature scaling: log1p of each feature relative to its 95th percentile on train safe frames.
     X, y = labelled(train, hover)
     scale = np.maximum(np.percentile(X[y == 0], 95, axis=0), 1e-9)
-    transform = lambda f: np.log1p(f / scale)
-    w, b = fit_logistic(transform(X), y)
-    learned = lambda f: transform(f) @ w + b
-
-    # Baselines: the current 2-pathway rule, and the same with the vertical pathway added.
-    safe_feats = np.concatenate([e["feats"][hover:] for e in train if not e["result"]["collided"]])
-    per_path = safe_feats.reshape(len(safe_feats), 3, n_units).sum(2).max(0)
-    def rule(f, paths):
-        s = f.reshape(len(f), 3, n_units).sum(2) / per_path
-        return s[:, paths].max(1)
-    candidates = {"current 2 pathways (sum, max)": lambda f: rule(f, [0, 1]),
-                  "3 pathways (sum, max)": lambda f: rule(f, [0, 1, 2]),
-                  "learned weights (21 inputs)": learned}
-    report = {"date": str(date.today()), "danger_window_s": DANGER, "train_flights": len(train),
-              "test_flights": len(test), "results": {}}
-    for name, fn in candidates.items():
-        theta = pick_theta(train, fn, hover)
-        report["results"][name] = {"theta": theta, "train": evaluate(train, fn, theta, hover),
-                                   "test": evaluate(test, fn, theta, hover)}
-    W = w.reshape(3, n_units)
-    report["weights"] = {p: W[i].round(3).tolist() for i, p in enumerate(PATHWAYS)}
-    report["unit_centers"] = units.centers.round(3).tolist()
+    w, b = fit_logistic(np.log1p(X / scale), y)
+    safe = [e for e in train if not e["result"]["collided"]]
+    unit_peaks = [(np.log1p(e["feats"][hover:] / scale) @ w + b).max() for e in safe]
+    cone_peaks = [e["cone"][hover:].max() for e in safe]
+    weights = {
+        "date": str(date.today()),
+        "features": "EMA of 7 units x [2d, horiz, vert] (LoomingUnits.pathways) + Gaussian cone",
+        "units": {"w": w.tolist(), "scale": scale.tolist(), "b": float(b),
+                  "theta": float(np.quantile(unit_peaks, args.quantile) + 1e-3)},
+        "cone": {"sigma": args.sigma, "theta": float(np.quantile(cone_peaks, args.quantile) * 1.001)},
+        "quantile": args.quantile, "train_flights": len(train), "test_flights": len(test),
+    }
+    report = {**weights, "train": evaluate(train, weights, col_x, col_y, hover),
+              "test": evaluate(test, weights, col_x, col_y, hover)}
     out = cfg.ROOT / "results" / "readout_fit.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-
-    for name, res in report["results"].items():
-        for split in ("train", "test"):
-            r = res[split]
-            per = "  ".join(f"{sc} {v['detected']}/{v['n']} (in time {v['in_time']})" for sc, v in r["by_scenario"].items())
-            print(f"{name:32s} {split:5s} θ={res['theta']:7.3f}  false brakes {r['false_brakes']}/{r['n_safe']}  "
-                  f"caught {r['detected']}/{r['n_colliding']}, in time {r['in_time']}  | {per}")
-    print("weights (rows 2d/horiz/vert, units in hex order):")
-    for p, row in report["weights"].items():
-        print(f"  {p:5s} {row}")
-
+    for split in ("train", "test"):
+        r = report[split]
+        per = "  ".join(f"{sc} {v['detected']}/{v['n']} (in time {v['in_time']})" for sc, v in r["by_scenario"].items())
+        print(f"{split:5s} false brakes {r['false_brakes']}/{r['n_safe']}  caught {r['detected']}/{r['n_colliding']}, "
+              f"in time {r['in_time']}  | {per}")
+    print(f"θ_units {weights['units']['theta']:.3f}  θ_cone {weights['cone']['theta']:.3f}  (sigma {args.sigma})")
     if args.write:
-        best = report["results"]["learned weights (21 inputs)"]
-        cfg.ROOT.joinpath("bench").mkdir(exist_ok=True)
-        (cfg.ROOT / "bench" / "readout_weights.json").write_text(json.dumps({
-            "features": "EMA of 7 units x [2d, horiz, vert] (reflex.looming.LoomingUnits.pathways)",
-            "scale": scale.tolist(), "w": w.tolist(), "b": float(b), "date": report["date"],
-        }, indent=2) + "\n", encoding="utf-8")
+        (cfg.ROOT / "bench").mkdir(exist_ok=True)
+        cfg.READOUT_WEIGHTS_PATH.write_text(json.dumps(weights, indent=2) + "\n", encoding="utf-8")
         cfg.THRESHOLDS_PATH.write_text(json.dumps({
-            "theta": best["theta"], "readout": "learned", "train": best["train"], "test": best["test"],
-            "date": report["date"], "source": "tools/fit_readout.py",
+            "theta": 1.0, "readout": "cone + units (bench/readout_weights.json)",
+            "train": report["train"], "test": report["test"], "date": weights["date"],
+            "source": "tools/fit_readout.py",
         }, indent=2) + "\n", encoding="utf-8")
         print("wrote bench/readout_weights.json and bench/thresholds.json")
 

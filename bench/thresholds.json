@@ -1,0 +1,74 @@
+{
+  "theta": 1.0,
+  "readout": "cone + units (bench/readout_weights.json)",
+  "train": {
+    "false_brakes": 4,
+    "n_safe": 75,
+    "n_colliding": 125,
+    "detected": 59,
+    "in_time": 47,
+    "required_warning_s": 0.415,
+    "by_scenario": {
+      "beam": {
+        "n": 40,
+        "detected": 9,
+        "in_time": 8,
+        "warning_median_s": 3.7800000000000002
+      },
+      "debris": {
+        "n": 40,
+        "detected": 36,
+        "in_time": 30,
+        "warning_median_s": 4.53
+      },
+      "near_post": {
+        "n": 7,
+        "detected": 0,
+        "in_time": 0,
+        "warning_median_s": null
+      },
+      "post": {
+        "n": 38,
+        "detected": 14,
+        "in_time": 9,
+        "warning_median_s": 1.26
+      }
+    }
+  },
+  "test": {
+    "false_brakes": 3,
+    "n_safe": 37,
+    "n_colliding": 63,
+    "detected": 34,
+    "in_time": 29,
+    "required_warning_s": 0.415,
+    "by_scenario": {
+      "beam": {
+        "n": 20,
+        "detected": 7,
+        "in_time": 5,
+        "warning_median_s": 3.74
+      },
+      "debris": {
+        "n": 20,
+        "detected": 19,
+        "in_time": 18,
+        "warning_median_s": 4.5600000000000005
+      },
+      "near_post": {
+        "n": 3,
+        "detected": 0,
+        "in_time": 0,
+        "warning_median_s": null
+      },
+      "post": {
+        "n": 20,
+        "detected": 8,
+        "in_time": 6,
+        "warning_median_s": 1.3
+      }
+    }
+  },
+  "date": "2026-09-27",
+  "source": "tools/fit_readout.py"
+}
