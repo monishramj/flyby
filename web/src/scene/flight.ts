@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { ChaseView } from './dress';
 import { askVision } from './vision';
-import { FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, defaultRoute, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
+import { CRUISE_MPS, DRONE_Y, FRAME_R, HOVER_S, Inspection, MODE, ReflexLink, SCENARIOS, defaultRoute, encodeFrame, makeSpec, type Command, type ReflexSideChannel, type Scenario, type Waypoint, type WaypointStatus } from './inspect';
 
 export interface InspectRequest {
   lead_id: string;
@@ -31,6 +31,7 @@ export interface InspectOutcome {
   reflex_ok: boolean;    // false if the reflex was unreachable (flown without it)
   waypoints: { id: string; status: WaypointStatus }[]; // pending = not attempted before the flight ended
   vision_requested: boolean; // a photo went to Grok vision; its report never changes this outcome
+  operator_takeover: boolean; // reflex failed; a labelled scripted replay flew the rest (reached/collided stay the reflex's)
 }
 
 const CSS = `
@@ -50,7 +51,7 @@ const CSS = `
 .flyby-insp .vision .vd{font-size:12px;margin:0;color:#e8eee7}.flyby-insp .vision .vm{font-size:10px;margin:0;color:#7f907c}
 @media (max-width:640px){.flyby-insp{grid-template-columns:1fr}}`;
 
-function hashSeed(s: string): number {
+export function hashSeed(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return (h >>> 0) % 100000;
@@ -134,6 +135,7 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   const episode = ++episodeCounter;
   const maxWall = (req.maxWallS ?? 40) * 1000;
   let command: Command | null = null;
+  let takeover = false, takeoverReached = false;
 
   const resize = () => {
     const w = view.clientWidth || 640, h = view.clientHeight || 360;
@@ -148,8 +150,8 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   };
   const drawHud = () => {
     const c = command;
-    const state = insp.collided ? 'collided' : insp.arrived ? 'reached target' : !link ? 'no reflex' : insp.t < HOVER_S ? 'hover' : (c?.cmd ?? '—').replace('_', ' ');
-    const cls = insp.collided ? 'bad' : insp.arrived ? 'good' : c?.cmd && c.cmd !== 'none' ? 'act' : '';
+    const state = takeover ? 'operator takeover (scripted)' : insp.collided ? 'collided' : insp.arrived ? 'reached target' : !link ? 'no reflex' : insp.t < HOVER_S ? 'hover' : (c?.cmd ?? '—').replace('_', ' ');
+    const cls = takeover ? 'act' : insp.collided ? 'bad' : insp.arrived ? 'good' : c?.cmd && c.cmd !== 'none' ? 'act' : '';
     hud.innerHTML = `<div class="state ${cls}">${state}</div>
       <div class="row"><span>t</span><b>${insp.t.toFixed(1)} s</b></div>
       <div class="row"><span>speed</span><b>${insp.speed.toFixed(2)} m/s</b></div>
@@ -179,15 +181,41 @@ export async function runInspection(host: HTMLElement, req: InspectRequest): Pro
   }
   drawHud();
   const r = insp.result();
-  const visionRequested = (req.vision ?? true) && insp.arrived;
-  if (visionRequested) visionCard(host.querySelector<HTMLElement>('aside')!, req.lead_id, insp.photo(renderer));
   const wallS = (performance.now() - started) / 1000;
+  // Reflex failed: a scripted "operator takes over" replay flies the drone on, labelled on the HUD.
+  // The outcome above stays the reflex's own, so the lead still goes to a human.
+  if (!insp.arrived) {
+    takeover = true;
+    // ponytail: back off 0.6 m, then straight lines through the remaining waypoints; no obstacle avoidance (fine on the carport route).
+    const path = [{ x: insp.x - Math.sin(insp.yaw) * 0.6, z: insp.z + Math.cos(insp.yaw) * 0.6 },
+                  ...spec.waypoints.slice(Math.min(insp.wp, spec.waypoints.length - 1))];
+    const len = path.reduce((sum, p, i) => sum + Math.hypot(p.x - (i ? path[i - 1].x : insp.x), p.z - (i ? path[i - 1].z : insp.z)), 0);
+    const budgetS = maxWall / 1000 - wallS - 1.5; // leave the mission's result deadline intact
+    if (budgetS > 1) {
+      const speed = Math.max(CRUISE_MPS, len / budgetS);
+      for (const p of path) {
+        const back = p === path[0];
+        while (Math.hypot(p.x - insp.x, p.z - insp.z) > 0.02) {
+          const dx = p.x - insp.x, dz = p.z - insp.z, d = Math.hypot(dx, dz), stepM = Math.min(d, speed * 0.02);
+          if (!back) insp.yaw = Math.atan2(dx, -dz);
+          insp.x += dx / d * stepM; insp.z += dz / d * stepM; insp.t += 0.02;
+          insp.drone.position.set(insp.x, DRONE_Y, insp.z); insp.drone.rotation.set(0, -insp.yaw, 0);
+          chase.update({ x: insp.x, z: insp.z, yaw: insp.yaw, speed, t: insp.t, drone: insp.drone, collided: false, arrived: false });
+          chase.render(renderer); drawHud();
+          await nextPaint();
+        }
+      }
+      takeoverReached = true;
+    }
+  }
+  const visionRequested = (req.vision ?? true) && (insp.arrived || takeoverReached);
+  if (visionRequested) visionCard(host.querySelector<HTMLElement>('aside')!, req.lead_id, insp.photo(renderer));
   return {
     lead_id: req.lead_id, reached: r.arrived, collided: r.collided,
     found: req.person === undefined ? null : r.arrived && req.person,
     t: r.t, frames: r.frames, min_clearance_m: r.min_clearance_m,
     late_replies: 0, reflex_ok: link !== null, waypoints: r.waypoints,
     realtime_factor: +(r.t / Math.max(wallS, 1e-3)).toFixed(2),
-    vision_requested: visionRequested,
+    vision_requested: visionRequested, operator_takeover: takeover,
   };
 }

@@ -1,9 +1,9 @@
 // Seeded bench runs against the reflex, in lockstep (one reply per frame).
 // URL params: mode=record|closed, n=seeds per scenario, seed0, fov, scenarios=a,b,
-// reflex=on|off|both (closed only), ws=<reflex url>. Outputs are written by the
+// reflex=on|off|both (closed only), route=mission (entry → target, as in the mission), ws=<reflex url>. Outputs are written by the
 // reflex server: bench/frames/<episode>.npz (record) or bench/closed_loop.jsonl (closed).
 import * as THREE from 'three';
-import { Inspection, ReflexLink, SCENARIOS, MODE, encodeFrame, makeSpec, type Scenario } from './scene/inspect';
+import { Inspection, ReflexLink, SCENARIOS, MODE, defaultRoute, encodeFrame, makeSpec, type Scenario } from './scene/inspect';
 
 const q = new URLSearchParams(location.search);
 const mode = q.get('mode') === 'closed' ? 'closed' : 'record';
@@ -36,7 +36,8 @@ async function run() {
   let count = 0;
   for (const scenario of scenarios) for (let seed = seed0; seed < seed0 + n; seed++) for (const reflexOn of reflexModes) {
     episode += 1;
-    const spec = makeSpec(seed, scenario, fov);
+    const route = q.get('route') === 'mission' ? defaultRoute(scenario) : undefined;
+    const spec = makeSpec(seed, scenario, fov, route && { goalZ: route[route.length - 1].z, person: true, waypoints: route });
     const insp = new Inspection(spec);
     const begin = await link.request({ type: 'episode.begin', episode, params: { ...spec, mode, reflex_on: reflexOn } });
     if (begin.error) throw new Error(begin.error);

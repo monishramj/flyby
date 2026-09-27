@@ -1,9 +1,11 @@
 import { mountLiveConnectome } from './flyviz/live';
-import { runInspection, whenVisionSettled, type InspectOutcome } from './scene/flight';
+import { hashSeed, runInspection, whenVisionSettled, type InspectOutcome } from './scene/flight';
 import { store, subscribe } from './store';
 import { onInspectionRequest, send, type InspectionRequest } from './ws';
 
 const AUTO_CLOSE_MS = 2500;
+// Live demo rotation, picked per lead: debris 20/20 and post 12/20 held out; clear is the no-obstacle baseline. Beam (4/20) stays in the recorded clips.
+const DEMO_SCENARIOS = ['debris', 'post', 'clear'] as const;
 
 /** One visible flight per browser; busy requests retain the mission's timer. */
 export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
@@ -59,11 +61,11 @@ export function mountInspectionPanel(options: { maxWallS?: number } = {}) {
     // Also bounds socket connection / render failure; runInspection's wall cap starts later.
     const deadline = window.setTimeout(() => finish({ reached: false, collided: false, found: null }, 'deadline reached'), (maxWallS + 0.5) * 1000);
     try {
-      // Always debris for the demo: the reflex's strongest case (20/20 held out); the lead's seed still varies the drop.
-      const outcome = await runInspection(host, { ...request, scenario: 'debris', maxWallS });
+      const scenario = DEMO_SCENARIOS[hashSeed(request.lead_id) % DEMO_SCENARIOS.length];
+      const outcome = await runInspection(host, { ...request, scenario, maxWallS });
       const route = outcome.waypoints.map(({ id, status }) => `${id}: ${status}`).join(' → ');
       finish({ reached: outcome.reached, collided: outcome.collided, found: outcome.found },
-        `${outcome.reflex_ok ? 'reflex connected' : 'reflex unavailable'} · ${route} · ${outcome.frames} flight frames · ${outcome.realtime_factor.toFixed(2)}× real time`);
+        `${outcome.reflex_ok ? 'reflex connected' : 'reflex unavailable'}${outcome.operator_takeover ? ' · reflex failed, scripted operator takeover shown' : ''} · ${route} · ${outcome.frames} flight frames · ${outcome.realtime_factor.toFixed(2)}× real time`);
     } catch (error) {
       finish({ reached: false, collided: false, found: null }, `flight error: ${String(error)}`);
     } finally {
